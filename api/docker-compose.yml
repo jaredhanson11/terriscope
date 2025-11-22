@@ -25,6 +25,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      migrations:
+        condition: service_completed_successfully
     deploy:
       resources:
         limits:
@@ -52,5 +54,20 @@ services:
         limits:
           cpus: ".5"
           memory: 512M
+  migrations:
+    image: carbon-signal/migrations-local:latest
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+      target: migrations-local
+    env_file:
+      - .env.docker-compose
+      - .env.local
+    volumes:
+      - ./src:/app/src
+      - ./src/migrations/versions:/app/src/migrations/versions
+    depends_on:
+      db:
+        condition: service_healthy
 volumes:
   minio_data:

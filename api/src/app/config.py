@@ -19,7 +19,7 @@ class DatabaseSettings(BaseSettings, env_prefix="DB_"):
     @property
     def db_url(self) -> str:
         """Database string based on inputs."""
-        return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}
+        return f"postgresql://{self.user}:{self.password}@{self.host}:{self.port}/{self.name}"
 
 
 class JWTSettings(BaseSettings, env_prefix="JWT_"):

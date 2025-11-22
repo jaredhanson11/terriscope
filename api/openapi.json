@@ -1,0 +1,113 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Terriscope API",
+    "version": "0.1.0"
+  },
+  "paths": {
+    "/v1.0/heartbeat": {
+      "get": {
+        "tags": [
+          "Common"
+        ],
+        "summary": "Heartbeat",
+        "description": "This route is used to check the server is up and running.",
+        "operationId": "heartbeat_v1_0_heartbeat_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HeartbeatResponseDTO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1.0/db-heartbeat": {
+      "get": {
+        "tags": [
+          "Common"
+        ],
+        "summary": "Db Heartbeat",
+        "description": "This route is used to check the connection to the database is working.",
+        "operationId": "db_heartbeat_v1_0_db_heartbeat_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1.0/versions": {
+      "get": {
+        "tags": [
+          "Common"
+        ],
+        "summary": "Versions",
+        "description": "This route returns the version of the current running API.",
+        "operationId": "versions_v1_0_versions_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VersionResponseDTO"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "HeartbeatResponseDTO": {
+        "properties": {
+          "timenow": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Timenow"
+          }
+        },
+        "type": "object",
+        "required": [
+          "timenow"
+        ],
+        "title": "HeartbeatResponseDTO",
+        "description": "Heartbeat response DTO."
+      },
+      "VersionResponseDTO": {
+        "properties": {
+          "api": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api"
+          }
+        },
+        "type": "object",
+        "required": [
+          "api"
+        ],
+        "title": "VersionResponseDTO",
+        "description": "Version response DTO."
+      }
+    }
+  }
+}
