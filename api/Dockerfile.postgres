@@ -1,0 +1,21 @@
+# This is essentally the same thing as: https://hub.docker.com/r/postgis/postgis/, except it doesn't enable postgis (and other related extensions) by default.
+# This is useful because it more closely matches the behavior of AWS RDS, which does not enable postgis by default.
+FROM postgres:17-bookworm
+
+ENV PG_MAJOR=17
+ENV POSTGIS_MAJOR=3
+
+# Add the PostgreSQL APT repo (PGDG) so we can install postgis from there
+RUN apt-get update && apt-get install -y wget gnupg lsb-release && \
+    echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list && \
+    wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
+
+# Install the latest PostGIS 3.x for Postgres 17 (don't pin minor version)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    # ca-certificates: for accessing remote raster files;
+    #   fix: https://github.com/postgis/docker-postgis/issues/307
+    postgresql-$PG_MAJOR-postgis-$POSTGIS_MAJOR \
+    postgresql-$PG_MAJOR-postgis-$POSTGIS_MAJOR-scripts \
+    && rm -rf /var/lib/apt/lists/*

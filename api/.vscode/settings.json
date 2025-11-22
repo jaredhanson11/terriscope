@@ -1,0 +1,16 @@
+{
+  "editor.formatOnSave": true,
+  "[python]": {
+    "editor.defaultFormatter": "charliermarsh.ruff",
+    "editor.codeActionsOnSave": {
+      "source.organizeImports": "explicit"
+    }
+  },
+  "ruff.path": ["./.venv/bin/ruff"],
+  "python.poetryPath": "./.venv/bin/poetry",
+  "python.defaultInterpreterPath": "./.venv/bin/python",
+  "python.analysis.autoImportCompletions": true,
+  "python.testing.pytestArgs": ["tests"],
+  "python.testing.unittestEnabled": false,
+  "python.testing.pytestEnabled": true
+}

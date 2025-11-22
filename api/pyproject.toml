@@ -1,0 +1,130 @@
+[tool.poetry]
+name = "terriscope-api"
+version = "0.0.1"
+description = "Terriscope API"
+authors = ["Jared Hanson <jred0011@gmail.com>"]
+repository = "https://github.com/jaredhanson11/terriscope"
+packages = [
+  {include = "src"}
+]
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = {extras = ["all"], version = "^0.121.3"}
+pydantic = "^2.12.4"
+sqlalchemy = "^2.0.44"
+pydantic-settings = "^2.12.0"
+passlib = {extras = ["bcrypt"], version = "^1.7.4"}
+pyjwt = {extras = ["crypto"], version = "^2.10.1"}
+psycopg2 = "^2.9.11"
+scalar-fastapi = "^1.4.4"
+geoalchemy2 = "^0.18.1"
+shapely = "^2.1.2"
+asgi-correlation-id = "^4.3.4"
+
+[tool.poetry.group.dev.dependencies]
+deptry = "^0.24.0"
+pyright = "^1.1.407"
+pre-commit = "^4.4.0"
+ruff = "^0.14.6"
+watchdog = {extras = ["watchmedo"], version = "^6.0.0"}
+typing-extensions = "^4.15.0"
+
+[tool.poetry.group.migrations.dependencies]
+alembic = "^1.17.2"
+
+[tool.poetry.group.debugger.dependencies]
+debugpy = "^1.8.17"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.pyright]
+include = ["src", "tests"]
+ignore = [
+    "src/packages/engine_client/**"
+]
+typeCheckingMode = "strict"
+venvPath = "."
+venv = ".venv"
+reportDeprecated = "warning"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+fix = true
+exclude = [
+    "src/packages/engine_client/**"
+]
+
+[tool.ruff.lint]
+preview = true
+select = [
+    # flake8-2020
+    "YTT",
+    # flake8-bandit
+    "S",
+    # flake8-bugbear
+    "B",
+    # flake8-builtins
+    "A",
+    # flake8-comprehensions
+    "C4",
+    # flake8-debugger
+    "T10",
+    # flake8-simplify
+    "SIM",
+    # isort
+    "I",
+    # mccabe
+    "C90",
+    # pycodestyle
+    "E", "W",
+    # pyflakes
+    "F",
+    # pygrep-hooks
+    "PGH",
+    # pyupgrade
+    "UP",
+    # ruff
+    "RUF",
+    # tryceratops
+    "TRY",
+    # Docstring rules
+    "D"
+]
+ignore = [
+    # LineTooLong
+    "E501",
+    # DoNotAssignLambda
+    "E731",
+    # unused-async
+    "RUF029"
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "D"]
+"test_*.py" = ["S101", "D"]
+"**/tests/*" = ["S101", "D"]
+
+[tool.ruff.format]
+preview = true
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+
+
+[tool.deptry]
+extend_exclude = [
+    ".*/tests/.*",
+    "src/migrations/*"
+]
+
+[tool.deptry.per_rule_ignores]
+DEP002 = ["psycopg2", "python-dateutil"]

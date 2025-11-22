@@ -1,0 +1,38 @@
+{
+  "folders": [
+    {
+      "path": ".",
+      "name": "root"
+    },
+    {
+      "path": "app"
+    },
+    {
+      "path": "api"
+    }
+  ],
+  "settings": {
+    "editor.formatOnSave": true,
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "eslint.runtime": "node",
+    "files.associations": {
+      "*.code-workspace": "json",
+      "*.json": "json"
+    },
+    "typescript.tsdk": "app/node_modules/typescript/lib",
+    "html-css-class-completion.includeGlobPattern": "**/assets/scss/*.{scss,css,sass}",
+    "html-css-class-completion.enableEmmetSupport": true,
+    "[dockerfile]": {
+      "editor.defaultFormatter": "ms-azuretools.vscode-containers"
+    }
+  },
+  "extensions": {
+    "recommendations": [
+      "charliermarsh.ruff",
+      "ms-python.vscode-pylance",
+      "esbenp.prettier-vscode",
+      "dbaeumer.vscode-eslint",
+      "gencer.html-slim-scss-css-class-completion"
+    ]
+  }
+}

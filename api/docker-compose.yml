@@ -1,0 +1,56 @@
+services:
+  api:
+    image: terriscope/api:latest
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+      target: api
+    env_file:
+      - .env.docker-compose
+      - .env.local
+    command: --reload
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./src:/app/src
+      - type: bind
+        source: ./openapi.json
+        target: /app/openapi.json
+    healthcheck:
+      test:
+        ["CMD", "/app/.venv/bin/httpx", "http://localhost:8000/v1.0/heartbeat"]
+      interval: 10s
+      timeout: 10s
+      retries: 6
+    depends_on:
+      db:
+        condition: service_healthy
+    deploy:
+      resources:
+        limits:
+          cpus: ".5"
+          memory: 512M
+  db:
+    image: terriscope/postgres:latest
+    build:
+      dockerfile: Dockerfile.postgres
+    hostname: postgres
+    environment:
+      POSTGRES_USER: terriscope
+      POSTGRES_PASSWORD: terriscope
+      POSTGRES_DB: app
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD", "pg_isready", "-d", "app", "-U", "carbonsignal"]
+      interval: 30s
+      timeout: 60s
+      retries: 5
+      start_period: 10s
+    deploy:
+      resources:
+        limits:
+          cpus: ".5"
+          memory: 512M
+volumes:
+  minio_data:

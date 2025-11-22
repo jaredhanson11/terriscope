@@ -1,0 +1,10 @@
+services:
+  api:
+    image: terriscope/api-debug:latest
+    command: !reset []
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+      target: api-debug
+    ports:
+      - "5678:5678"
