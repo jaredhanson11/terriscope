@@ -4,10 +4,9 @@ This file is responsible for importing the configured FastAPI object and adding 
 """
 
 from .app import app
-from .routers import (
-    common_router,
-    docs_router,
-)
+from .routers import common_router, docs_router, graph_router, mvt_router
 
 app.include_router(common_router)
 app.include_router(docs_router)
+app.include_router(graph_router)
+app.include_router(mvt_router)

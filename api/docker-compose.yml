@@ -27,11 +27,6 @@ services:
         condition: service_healthy
       migrations:
         condition: service_completed_successfully
-    deploy:
-      resources:
-        limits:
-          cpus: ".5"
-          memory: 512M
   db:
     image: terriscope/postgres:latest
     build:
@@ -49,11 +44,6 @@ services:
       timeout: 60s
       retries: 5
       start_period: 10s
-    deploy:
-      resources:
-        limits:
-          cpus: ".5"
-          memory: 512M
   migrations:
     image: carbon-signal/migrations-local:latest
     build:

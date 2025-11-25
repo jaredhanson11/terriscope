@@ -68,10 +68,882 @@
           }
         }
       }
+    },
+    "/layers": {
+      "get": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "List Layers",
+        "description": "List layers.",
+        "operationId": "list_layers_layers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "Create Layer",
+        "description": "Create layer.",
+        "operationId": "create_layer_layers_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLayer"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "example": {
+                  "message": "Invalid request",
+                  "details": [
+                    {
+                      "loc": [
+                        "body",
+                        "field"
+                      ],
+                      "msg": "field required",
+                      "type": "missing"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/layers/{layer_id}": {
+      "get": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "Get Layer",
+        "description": "Get a layer by id.",
+        "operationId": "get_layer_layers__layer_id__get",
+        "parameters": [
+          {
+            "name": "layer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Layer Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "example": {
+                  "message": "Invalid request",
+                  "details": [
+                    {
+                      "loc": [
+                        "body",
+                        "field"
+                      ],
+                      "msg": "field required",
+                      "type": "missing"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes": {
+      "post": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "Create Node",
+        "description": "Get node by id.",
+        "operationId": "create_node_nodes_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNode"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "example": {
+                  "message": "Invalid request",
+                  "details": [
+                    {
+                      "loc": [
+                        "body",
+                        "field"
+                      ],
+                      "msg": "field required",
+                      "type": "missing"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "List Nodes",
+        "description": "List nodes for a layer.",
+        "operationId": "list_nodes_nodes_get",
+        "parameters": [
+          {
+            "name": "layer_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Layer Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "example": {
+                  "message": "Invalid request",
+                  "details": [
+                    {
+                      "loc": [
+                        "body",
+                        "field"
+                      ],
+                      "msg": "field required",
+                      "type": "missing"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/{node_id}": {
+      "get": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "Get Node",
+        "description": "Get node by id.",
+        "operationId": "get_node_nodes__node_id__get",
+        "parameters": [
+          {
+            "name": "node_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Node Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "example": {
+                  "message": "Invalid request",
+                  "details": [
+                    {
+                      "loc": [
+                        "body",
+                        "field"
+                      ],
+                      "msg": "field required",
+                      "type": "missing"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "Update Node",
+        "description": "Update node.",
+        "operationId": "update_node_nodes__node_id__put",
+        "parameters": [
+          {
+            "name": "node_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Node Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "example": {
+                  "message": "Invalid request",
+                  "details": [
+                    {
+                      "loc": [
+                        "body",
+                        "field"
+                      ],
+                      "msg": "field required",
+                      "type": "missing"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "Delete Node",
+        "description": "Delete node.",
+        "operationId": "delete_node_nodes__node_id__delete",
+        "parameters": [
+          {
+            "name": "node_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Node Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "example": {
+                  "message": "Invalid request",
+                  "details": [
+                    {
+                      "loc": [
+                        "body",
+                        "field"
+                      ],
+                      "msg": "field required",
+                      "type": "missing"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tiles/{layer_id}/{z}/{x}/{y}.pbf": {
+      "get": {
+        "tags": [
+          "MVT"
+        ],
+        "summary": "Get Tile",
+        "description": "Get a vector tile for a specific layer at the given tile coordinates.\n\nArgs:\n    layer_id: The layer ID to render nodes from\n    z: Zoom level\n    x: Tile X coordinate\n    y: Tile Y coordinate\n    db: Database session\n\nReturns:\n    Mapbox Vector Tile (MVT) in protobuf format",
+        "operationId": "get_tile_tiles__layer_id___z___x___y__pbf_get",
+        "parameters": [
+          {
+            "name": "layer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Layer Id"
+            }
+          },
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Z"
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "X"
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Y"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "example": {
+                  "message": "Invalid request",
+                  "details": [
+                    {
+                      "loc": [
+                        "body",
+                        "field"
+                      ],
+                      "msg": "field required",
+                      "type": "missing"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tiles/debug/colors/{layer_id}": {
+      "get": {
+        "tags": [
+          "MVT"
+        ],
+        "summary": "Debug Layer Colors",
+        "description": "Debug endpoint to check if color values exist in the database.",
+        "operationId": "debug_layer_colors_tiles_debug_colors__layer_id__get",
+        "parameters": [
+          {
+            "name": "layer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Layer Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "example": {
+                  "message": "Invalid request",
+                  "details": [
+                    {
+                      "loc": [
+                        "body",
+                        "field"
+                      ],
+                      "msg": "field required",
+                      "type": "missing"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tiles/debug/tile/{layer_id}/{z}/{x}/{y}": {
+      "get": {
+        "tags": [
+          "MVT"
+        ],
+        "summary": "Debug Tile Data",
+        "description": "Debug endpoint to see what data would be in a tile (as JSON instead of MVT).",
+        "operationId": "debug_tile_data_tiles_debug_tile__layer_id___z___x___y__get",
+        "parameters": [
+          {
+            "name": "layer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Layer Id"
+            }
+          },
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Z"
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "X"
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Y"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "example": {
+                  "message": "Invalid request",
+                  "details": [
+                    {
+                      "loc": [
+                        "body",
+                        "field"
+                      ],
+                      "msg": "field required",
+                      "type": "missing"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tiles/layers": {
+      "get": {
+        "tags": [
+          "MVT"
+        ],
+        "summary": "List Tile Layers",
+        "description": "List all available layers that can be rendered as tiles.\n\nReturns a list of layers with their IDs and names, which can be used\nto construct tile URLs.",
+        "operationId": "list_tile_layers_tiles_layers_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tiles/diagnostics/geometry-stats": {
+      "get": {
+        "tags": [
+          "MVT"
+        ],
+        "summary": "Get Geometry Stats",
+        "description": "Get detailed statistics about polygon complexity to diagnose performance issues.\n\nThis endpoint helps identify problematic geometries that might be causing\ndatabase crashes or slow queries.",
+        "operationId": "get_geometry_stats_tiles_diagnostics_geometry_stats_get",
+        "parameters": [
+          {
+            "name": "layer_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Layer Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "example": {
+                  "message": "Invalid request",
+                  "details": [
+                    {
+                      "loc": [
+                        "body",
+                        "field"
+                      ],
+                      "msg": "field required",
+                      "type": "missing"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tiles/diagnostics/problematic-nodes": {
+      "get": {
+        "tags": [
+          "MVT"
+        ],
+        "summary": "Get Problematic Nodes",
+        "description": "List nodes with overly complex geometries that might cause performance issues.\n\nArgs:\n    db: Database session\n    layer_id: Optional layer to filter by\n    min_points: Minimum number of points to be considered problematic (default: 10000)",
+        "operationId": "get_problematic_nodes_tiles_diagnostics_problematic_nodes_get",
+        "parameters": [
+          {
+            "name": "layer_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Layer Id"
+            }
+          },
+          {
+            "name": "min_points",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 10000,
+              "title": "Min Points"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "example": {
+                  "message": "Invalid request",
+                  "details": [
+                    {
+                      "loc": [
+                        "body",
+                        "field"
+                      ],
+                      "msg": "field required",
+                      "type": "missing"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/tiles/diagnostics/node-stats/{node_id}": {
+      "get": {
+        "tags": [
+          "MVT"
+        ],
+        "summary": "Get Node Stats",
+        "description": "Get detailed statistics about a specific node's geometry.\n\nArgs:\n    node_id: The node ID to analyze\n    db: Database session\n\nReturns:\n    Dictionary with detailed geometry statistics including:\n    - size_bytes: Raw geometry size in bytes\n    - size_kb: Geometry size in kilobytes\n    - num_vertices: Total number of vertices across all polygons\n    - num_polygons: Number of polygons in the multipolygon\n    - num_rings: Total number of rings (exterior + interior/holes)\n    - avg_vertices_per_polygon: Average vertices per polygon\n    - min_distance: Minimum distance between consecutive points (meters)\n    - max_distance: Maximum distance between consecutive points (meters)\n    - avg_distance: Average distance between consecutive points (meters)\n    - median_distance: Median distance between consecutive points (meters)\n    - coordinate_precision: Estimated decimal places in coordinates\n    - is_valid: Whether geometry is topologically valid\n    - invalid_reason: Reason if geometry is invalid",
+        "operationId": "get_node_stats_tiles_diagnostics_node_stats__node_id__get",
+        "parameters": [
+          {
+            "name": "node_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Node Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "example": {
+                  "message": "Invalid request",
+                  "details": [
+                    {
+                      "loc": [
+                        "body",
+                        "field"
+                      ],
+                      "msg": "field required",
+                      "type": "missing"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
     "schemas": {
+      "CreateLayer": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "order": {
+            "type": "integer",
+            "exclusiveMinimum": 0.0,
+            "title": "Order"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "order"
+        ],
+        "title": "CreateLayer",
+        "description": "CreateLayer."
+      },
+      "CreateNode": {
+        "properties": {
+          "layer_id": {
+            "type": "integer",
+            "title": "Layer Id"
+          },
+          "parent_node_id": {
+            "type": "integer",
+            "title": "Parent Node Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "color": {
+            "type": "string",
+            "title": "Color"
+          }
+        },
+        "type": "object",
+        "required": [
+          "layer_id",
+          "parent_node_id",
+          "name",
+          "color"
+        ],
+        "title": "CreateNode",
+        "description": "CreateNode."
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
       "HeartbeatResponseDTO": {
         "properties": {
           "timenow": {
@@ -86,6 +958,39 @@
         ],
         "title": "HeartbeatResponseDTO",
         "description": "Heartbeat response DTO."
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
       },
       "VersionResponseDTO": {
         "properties": {

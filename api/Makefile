@@ -37,8 +37,6 @@ debug: ## Run the api in docker compose with a debugger exposed
 down: ## Stop the api in docker compose
 	@echo "🚀 Stopping api: running docker compose down"
 	@docker compose down
-	@echo "🚀 Stopping any test containers: running docker compose down"
-	@docker compose -p testing -f docker-compose.yml -f docker-compose.test.yml down --remove-orphans
 
 .PHONY: openapi
 openapi: ## Create openapi.json file from the FastAPI app

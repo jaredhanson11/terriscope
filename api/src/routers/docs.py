@@ -46,6 +46,5 @@ def public_docs():
         title="Terriscope - API Docs",
         default_open_all_tags=False,
         hide_download_button=True,
-        scalar_favicon_url="https://cdn.prod.website-files.com/647a19154f4939dde05695a5/664f89c398f9a4fb042dec3f_logo_favicons_32px_ivory_on_ink.png",
         hide_models=True,
     )
