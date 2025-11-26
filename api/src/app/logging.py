@@ -32,7 +32,7 @@ LOGGING_CONFIG = {
         },
     },
     "loggers": {
-        "": {"level": "WARNING", "handlers": ["celery" if any("celery" in i for i in sys.argv) else "default"]},
+        "": {"level": "WARNING", "handlers": ["default"]},
         "src": {"level": app_settings.log_level},
         "uvicorn": {"handlers": ["default"]},
     },
@@ -42,8 +42,7 @@ LOGGING_CONFIG = {
 def configure_logging(app: FastAPI) -> None:
     """Sets up logging configuration for FastAPI or Celery application."""
     logging.config.dictConfig(LOGGING_CONFIG)
-    if type(app) is FastAPI:
-        app.add_middleware(
-            CorrelationIdMiddleware,
-            header_name="X-Request-ID",
-        )
+    app.add_middleware(
+        CorrelationIdMiddleware,
+        header_name="X-Request-ID",
+    )

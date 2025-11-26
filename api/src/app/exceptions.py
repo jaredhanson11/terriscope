@@ -22,7 +22,7 @@ def configure_exceptions(app: FastAPI) -> None:
 
     def handle_general_error(request: Request, exc: Exception) -> JSONResponse:
         """Handle all exceptions."""
-        logger.debug(f"Unhandled Exception: {exc!s}")
+        logger.exception(f"Unhandled Exception: {exc!s}")
         return JSONResponse(status_code=500, content={"message": f"Unhandled Exception: {exc!s}"})
 
     def handle_http_exception(request: Request, exc: HTTPException) -> JSONResponse:
@@ -42,7 +42,7 @@ def configure_exceptions(app: FastAPI) -> None:
 
         error_msg = "Invalid request."
         if len(exc.errors()) > 0 and exc.errors()[0].get("ctx") and exc.errors()[0]["ctx"].get("reason"):
-            error_msg += f" {exc.errors()[0]["ctx"]["reason"]}"
+            error_msg += f" {exc.errors()[0]['ctx']['reason']}"
 
         try:
             return JSONResponse(

@@ -19,11 +19,9 @@ def create_layer(
     """Create layer."""
     # Get the highest order layer (the current top layer)
     child_layer = db.execute(select(LayerModel).order_by(LayerModel.order.desc())).scalars().first()
-    if not child_layer:
-        raise HTTPException(500)
 
     # Create new layer one level above
-    new_layer = LayerModel(name=layer_data.name, order=child_layer.order + 1)
+    new_layer = LayerModel(name=layer_data.name, order=child_layer.order + 1 if child_layer else 0)
     db.add(new_layer)
     db.flush()
 
@@ -40,7 +38,11 @@ def create_layer(
     db.flush()
 
     # Update all nodes in the child layer to point to this new default node as parent
-    child_nodes = db.execute(select(NodeModel).filter(NodeModel.layer_id == child_layer.id)).scalars().all()
+    child_nodes = (
+        db.execute(select(NodeModel).filter(NodeModel.layer_id == child_layer.id)).scalars().all()
+        if child_layer
+        else list[NodeModel]([])
+    )
     for child_node in child_nodes:
         child_node.parent_node_id = default_node.id
 
