@@ -6,7 +6,8 @@ from geoalchemy2 import Geometry
 from geoalchemy2.elements import WKBElement
 from sqlalchemy import ForeignKey, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.ext.orderinglist import ordering_list
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from src.models.base import Base, intpk
 
@@ -21,8 +22,6 @@ class LayerModel(Base):
     order: Mapped[int]
     """Order of the layer (aka 0 will always be zip, 1 will usually be territory, etc.)"""
 
-    parent_layer_id: Mapped[int | None] = mapped_column(ForeignKey("layers.id"))
-
     __table_args__ = (UniqueConstraint("order"),)
 
 
@@ -34,18 +33,24 @@ class NodeModel(Base):
     id: Mapped[intpk] = mapped_column(init=False)
     layer_id: Mapped[int] = mapped_column(ForeignKey("layers.id"))
     name: Mapped[str]
-    geom: Mapped[WKBElement] = mapped_column(Geometry(srid=4326), nullable=True)
     color: Mapped[str]
-    data: Mapped[dict[Any, Any]] = mapped_column(JSONB, server_default="{}")
-    is_default: Mapped[bool] = mapped_column(server_default="FALSE")
 
+    data: Mapped[dict[Any, Any] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        deferred=True,
+    )
+    geom: Mapped[WKBElement | None] = mapped_column(
+        Geometry(srid=4326),
+        nullable=True,
+        deferred=True,
+    )
 
-class DependencyModel(Base):
-    """Dependency between entities."""
+    parent_node_id: Mapped[int | None] = mapped_column(ForeignKey("nodes.id"), nullable=True)
 
-    __tablename__ = "layer_entity_dependencies"
-
-    id: Mapped[intpk] = mapped_column(init=False)
-    parent_id: Mapped[int] = mapped_column(ForeignKey("nodes.id"))
-    child_id: Mapped[int] = mapped_column(ForeignKey("nodes.id"))
-    # order: Mapped[int]
+    # Child nodes (one level down in hierarchy)
+    children: Mapped[list["NodeModel"]] = relationship(
+        "NodeModel",
+        foreign_keys="NodeModel.parent_node_id",
+        init=False,
+    )

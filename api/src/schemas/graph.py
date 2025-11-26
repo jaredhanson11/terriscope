@@ -1,6 +1,6 @@
 """Graph schemas."""
 
-from typing import Any
+from collections.abc import Sequence
 
 from pydantic import BaseModel
 
@@ -11,7 +11,6 @@ class Layer(BaseModel):
     id: int
     name: str
     order: int
-    parent_layer_id: int | None
 
 
 class Node(BaseModel):
@@ -19,7 +18,11 @@ class Node(BaseModel):
 
     id: int
     layer_id: int
-    parent_node_id: int | None
     name: str
     color: str
-    data: dict[Any, Any]
+
+
+class NodeWithChildren(Node):
+    """NodeWithChildren."""
+
+    children: "Sequence[Node]"

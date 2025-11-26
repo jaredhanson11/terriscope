@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Hierarchy Manager</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        font-family: system-ui, -apple-system, sans-serif;
+        background: #f5f5f5;
+      }
+      .container {
+        max-width: 1200px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      .header {
+        background: #fff;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        margin-bottom: 20px;
+      }
+      .header h1 {
+        margin: 0 0 10px 0;
+        font-size: 24px;
+        color: #333;
+      }
+      .header p {
+        margin: 0;
+        color: #666;
+        font-size: 14px;
+      }
+      .actions {
+        display: flex;
+        gap: 12px;
+        margin-bottom: 20px;
+      }
+      .btn {
+        padding: 10px 16px;
+        border: 1px solid #007bff;
+        background: #007bff;
+        color: #fff;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+      }
+      .btn:hover {
+        background: #0056b3;
+        border-color: #0056b3;
+      }
+      .btn-secondary {
+        background: #6c757d;
+        border-color: #6c757d;
+      }
+      .btn-secondary:hover {
+        background: #5a6268;
+        border-color: #5a6268;
+      }
+      .hierarchy-view {
+        background: #fff;
+        border-radius: 8px;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        padding: 20px;
+      }
+      .layer-section {
+        margin-bottom: 30px;
+        border: 2px solid #e9ecef;
+        border-radius: 6px;
+        overflow: hidden;
+      }
+      .layer-header {
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        color: #fff;
+        padding: 16px 20px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+      .layer-title {
+        font-size: 18px;
+        font-weight: 600;
+      }
+      .layer-order {
+        background: rgba(255, 255, 255, 0.2);
+        padding: 4px 12px;
+        border-radius: 20px;
+        font-size: 12px;
+        font-weight: 500;
+      }
+      .nodes-grid {
+        padding: 20px;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 12px;
+      }
+      .node-card {
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        padding: 12px;
+        background: #fff;
+        transition: all 0.2s;
+      }
+      .node-card:hover {
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        transform: translateY(-2px);
+      }
+      .node-header {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        margin-bottom: 8px;
+      }
+      .node-color {
+        width: 20px;
+        height: 20px;
+        border-radius: 4px;
+        border: 1px solid #ccc;
+        flex-shrink: 0;
+      }
+      .node-name {
+        font-weight: 500;
+        color: #333;
+        flex: 1;
+      }
+      .node-children {
+        font-size: 12px;
+        color: #666;
+        margin-top: 4px;
+      }
+      .add-node-btn {
+        width: 100%;
+        padding: 12px;
+        border: 2px dashed #dee2e6;
+        background: #f8f9fa;
+        color: #6c757d;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+        transition: all 0.2s;
+      }
+      .add-node-btn:hover {
+        border-color: #007bff;
+        color: #007bff;
+        background: #e7f3ff;
+      }
+      .modal {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 1000;
+        justify-content: center;
+        align-items: center;
+      }
+      .modal.show {
+        display: flex;
+      }
+      .modal-content {
+        background: #fff;
+        border-radius: 8px;
+        padding: 24px;
+        width: 90%;
+        max-width: 500px;
+        box-shadow: 0 8px 16px rgba(0, 0, 0, 0.2);
+      }
+      .modal-header {
+        font-size: 20px;
+        font-weight: 600;
+        margin-bottom: 20px;
+        color: #333;
+      }
+      .form-group {
+        margin-bottom: 16px;
+      }
+      .form-label {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #333;
+      }
+      .form-input {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        font-size: 14px;
+      }
+      .form-input:focus {
+        outline: none;
+        border-color: #007bff;
+        box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+      }
+      .form-actions {
+        display: flex;
+        gap: 8px;
+        justify-content: flex-end;
+        margin-top: 20px;
+      }
+      .empty-state {
+        text-align: center;
+        padding: 40px;
+        color: #666;
+      }
+      .status-message {
+        position: fixed;
+        bottom: 20px;
+        right: 20px;
+        background: #333;
+        color: #fff;
+        padding: 12px 20px;
+        border-radius: 6px;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        display: none;
+        z-index: 2000;
+      }
+      .status-message.show {
+        display: block;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>Hierarchy Manager</h1>
+        <p>Manage layers and nodes in your territorial hierarchy</p>
+      </div>
+
+      <div class="actions">
+        <button class="btn" onclick="openAddLayerModal()">+ Add Layer</button>
+        <button class="btn btn-secondary" onclick="window.location.href='/'">
+          View Map
+        </button>
+      </div>
+
+      <div class="hierarchy-view" id="hierarchy-container">
+        <div class="empty-state">Loading...</div>
+      </div>
+    </div>
+
+    <!-- Add Layer Modal -->
+    <div class="modal" id="add-layer-modal">
+      <div class="modal-content">
+        <div class="modal-header">Create New Layer</div>
+        <form onsubmit="createLayer(event)">
+          <div class="form-group">
+            <label class="form-label">Layer Name</label>
+            <input
+              type="text"
+              class="form-input"
+              id="layer-name"
+              placeholder="e.g., Territories, Regions"
+              required
+            />
+          </div>
+          <div class="form-actions">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              onclick="closeModal('add-layer-modal')"
+            >
+              Cancel
+            </button>
+            <button type="submit" class="btn">Create Layer</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Add Node Modal -->
+    <div class="modal" id="add-node-modal">
+      <div class="modal-content">
+        <div class="modal-header">Create New Node</div>
+        <form onsubmit="createNode(event)">
+          <input type="hidden" id="node-layer-id" />
+          <div class="form-group">
+            <label class="form-label">Node Name</label>
+            <input
+              type="text"
+              class="form-input"
+              id="node-name"
+              placeholder="e.g., North Territory"
+              required
+            />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Parent Node</label>
+            <select class="form-input" id="node-parent-id" required>
+              <option value="">Select parent node...</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Color</label>
+            <input
+              type="color"
+              class="form-input"
+              id="node-color"
+              value="#3388ff"
+            />
+          </div>
+          <div class="form-actions">
+            <button
+              type="button"
+              class="btn btn-secondary"
+              onclick="closeModal('add-node-modal')"
+            >
+              Cancel
+            </button>
+            <button type="submit" class="btn">Create Node</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <div class="status-message" id="status-message"></div>
+
+    <script>
+      let layers = [];
+      let allNodes = {};
+
+      // Initialize
+      async function init() {
+        await loadHierarchy();
+      }
+
+      async function loadHierarchy() {
+        try {
+          const layersResponse = await fetch("/layers");
+          layers = await layersResponse.json();
+
+          // Sort by order descending (highest layer first)
+          layers.sort((a, b) => b.order - a.order);
+
+          // Load all nodes for each layer
+          allNodes = {};
+          for (const layer of layers) {
+            const nodesResponse = await fetch(`/nodes?layer_id=${layer.id}`);
+            allNodes[layer.id] = await nodesResponse.json();
+          }
+
+          renderHierarchy();
+        } catch (error) {
+          console.error("Error loading hierarchy:", error);
+          showStatus("Error loading hierarchy", "error");
+        }
+      }
+
+      function renderHierarchy() {
+        const container = document.getElementById("hierarchy-container");
+
+        if (layers.length === 0) {
+          container.innerHTML =
+            '<div class="empty-state">No layers yet. Create your first layer to get started.</div>';
+          return;
+        }
+
+        container.innerHTML = layers
+          .map((layer) => {
+            const nodes = allNodes[layer.id] || [];
+            const isBaseLayer = layer.order === 0;
+
+            return `
+            <div class="layer-section">
+              <div class="layer-header">
+                <div class="layer-title">${layer.name}</div>
+                <div class="layer-order">Layer ${layer.order}</div>
+              </div>
+              <div class="nodes-grid">
+                ${nodes
+                  .map(
+                    (node) => `
+                  <div class="node-card">
+                    <div class="node-header">
+                      <div class="node-color" style="background-color: ${
+                        node.color
+                      }"></div>
+                      <div class="node-name">${node.name}</div>
+                    </div>
+                    <div class="node-children">
+                      ${node.children?.length || 0} child node${
+                      node.children?.length === 1 ? "" : "s"
+                    }
+                    </div>
+                  </div>
+                `
+                  )
+                  .join("")}
+                ${
+                  !isBaseLayer
+                    ? `
+                  <button class="add-node-btn" onclick="openAddNodeModal(${layer.id})">
+                    + Add Node
+                  </button>
+                `
+                    : ""
+                }
+              </div>
+            </div>
+          `;
+          })
+          .join("");
+      }
+
+      function openAddLayerModal() {
+        document.getElementById("layer-name").value = "";
+        openModal("add-layer-modal");
+      }
+
+      async function createLayer(event) {
+        event.preventDefault();
+        const name = document.getElementById("layer-name").value.trim();
+
+        try {
+          const response = await fetch("/layers", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name }),
+          });
+
+          if (response.ok) {
+            closeModal("add-layer-modal");
+            showStatus(`Layer "${name}" created successfully`);
+            await loadHierarchy();
+          } else {
+            const error = await response.json();
+            showStatus(error.detail || "Failed to create layer", "error");
+          }
+        } catch (error) {
+          console.error("Error creating layer:", error);
+          showStatus("Error creating layer", "error");
+        }
+      }
+
+      async function openAddNodeModal(layerId) {
+        document.getElementById("node-layer-id").value = layerId;
+        document.getElementById("node-name").value = "";
+        document.getElementById("node-color").value = "#3388ff";
+
+        // Get parent layer (one order below)
+        const currentLayer = layers.find((l) => l.id === layerId);
+        const parentLayer = layers.find(
+          (l) => l.order === currentLayer.order - 1
+        );
+
+        const parentSelect = document.getElementById("node-parent-id");
+        parentSelect.innerHTML =
+          '<option value="">Select parent node...</option>';
+
+        if (parentLayer) {
+          const parentNodes = allNodes[parentLayer.id] || [];
+          parentNodes.forEach((node) => {
+            parentSelect.innerHTML += `<option value="${node.id}">${node.name}</option>`;
+          });
+        }
+
+        openModal("add-node-modal");
+      }
+
+      async function createNode(event) {
+        event.preventDefault();
+        const layerId = parseInt(
+          document.getElementById("node-layer-id").value
+        );
+        const name = document.getElementById("node-name").value.trim();
+        const parentNodeId = parseInt(
+          document.getElementById("node-parent-id").value
+        );
+        const color = document.getElementById("node-color").value;
+
+        try {
+          const response = await fetch("/nodes", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              layer_id: layerId,
+              parent_node_id: parentNodeId,
+              name,
+              color,
+            }),
+          });
+
+          if (response.ok) {
+            closeModal("add-node-modal");
+            showStatus(`Node "${name}" created successfully`);
+            await loadHierarchy();
+          } else {
+            const error = await response.json();
+            showStatus(error.detail || "Failed to create node", "error");
+          }
+        } catch (error) {
+          console.error("Error creating node:", error);
+          showStatus("Error creating node", "error");
+        }
+      }
+
+      function openModal(modalId) {
+        document.getElementById(modalId).classList.add("show");
+      }
+
+      function closeModal(modalId) {
+        document.getElementById(modalId).classList.remove("show");
+      }
+
+      function showStatus(message, type = "success") {
+        const statusEl = document.getElementById("status-message");
+        statusEl.textContent = message;
+        statusEl.style.background = type === "error" ? "#dc3545" : "#333";
+        statusEl.classList.add("show");
+
+        setTimeout(() => {
+          statusEl.classList.remove("show");
+        }, 3000);
+      }
+
+      // Close modals on background click
+      document.querySelectorAll(".modal").forEach((modal) => {
+        modal.addEventListener("click", (e) => {
+          if (e.target === modal) {
+            closeModal(modal.id);
+          }
+        });
+      });
+
+      // Initialize on load
+      init();
+    </script>
+  </body>
+</html>

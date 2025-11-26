@@ -200,7 +200,7 @@
           "Graph"
         ],
         "summary": "Create Node",
-        "description": "Get node by id.",
+        "description": "Create node.",
         "operationId": "create_node_nodes_post",
         "requestBody": {
           "required": true,
@@ -887,17 +887,11 @@
           "name": {
             "type": "string",
             "title": "Name"
-          },
-          "order": {
-            "type": "integer",
-            "exclusiveMinimum": 0.0,
-            "title": "Order"
           }
         },
         "type": "object",
         "required": [
-          "name",
-          "order"
+          "name"
         ],
         "title": "CreateLayer",
         "description": "CreateLayer."
@@ -909,7 +903,14 @@
             "title": "Layer Id"
           },
           "parent_node_id": {
-            "type": "integer",
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Parent Node Id"
           },
           "name": {

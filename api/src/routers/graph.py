@@ -1,15 +1,13 @@
 """Layers router."""
 
 from fastapi import APIRouter, HTTPException
-from geoalchemy2.shape import from_shape
-from shapely.geometry import MultiPolygon
-from sqlalchemy import insert, select
-from sqlalchemy.orm import defer
+from sqlalchemy import select
+from sqlalchemy.orm import lazyload
 
 from src.app.database import DatabaseSession
-from src.models.graph import DependencyModel, LayerModel, NodeModel
+from src.models.graph import LayerModel, NodeModel
 from src.schemas.dtos.graph import CreateLayer, CreateNode
-from src.schemas.graph import Layer, Node
+from src.schemas.graph import Layer, Node, NodeWithChildren
 
 graph_router = APIRouter(prefix="", tags=["Graph"])
 
@@ -20,60 +18,33 @@ def create_layer(
     db: DatabaseSession,
 ):
     """Create layer."""
-    # create order as -1 to avoid unique constraint
-    new_layer = LayerModel(name=layer_data.name, order=-1, parent_layer_id=None)
+    # Get the highest order layer (the current top layer)
+    child_layer = db.execute(select(LayerModel).order_by(LayerModel.order.desc())).scalar_one()
+
+    # Create new layer one level above
+    new_layer = LayerModel(name=layer_data.name, order=child_layer.order + 1)
     db.add(new_layer)
     db.flush()
 
-    parent_layer = db.query(LayerModel).filter(LayerModel.order == layer_data.order - 1).one()
-    parent_node_ids = db.execute(select(NodeModel.id).filter(NodeModel.layer_id == parent_layer.id)).scalars().all()
-
+    # Create default node for new layer
     default_node = NodeModel(
         layer_id=new_layer.id,
         name="__default__",
-        is_default=True,
-        data={},
-        geom=from_shape(MultiPolygon(), srid=4326),
         color="#fff",
+        data=None,
+        geom=None,
+        parent_node_id=None,
     )
     db.add(default_node)
     db.flush()
 
-    existing_layers = (
-        db.query(LayerModel).filter(LayerModel.order >= layer_data.order).order_by(LayerModel.order.asc()).all()
-    )
-    next_layer = None
-    for idx, existing_layer in enumerate(existing_layers):
-        if idx == 0:
-            next_layer = existing_layer
-        existing_layer.order += 1
+    # Update all nodes in the child layer to point to this new default node as parent
+    child_nodes = db.execute(select(NodeModel).filter(NodeModel.layer_id == child_layer.id)).scalars().all()
+    for child_node in child_nodes:
+        child_node.parent_node_id = default_node.id
 
-    if next_layer:
-        next_layer.parent_layer_id = new_layer.id
-        next_layer_node_ids = (
-            db.execute(select(NodeModel.id).filter(NodeModel.layer_id == next_layer.id)).scalars().all()
-        )
-        db.query(DependencyModel).filter(DependencyModel.parent_id.in_(parent_node_ids)).delete()
-        db.execute(
-            insert(DependencyModel).values([
-                {"parent_id": parent_id, "child_id": default_node.id} for parent_id in parent_node_ids
-            ])
-        )
-        # Update all dependencies pointing to nodes in the next layer to point to new default node
-        db.execute(
-            insert(DependencyModel).values([
-                {"parent_id": default_node.id, "child_id": child_id} for child_id in next_layer_node_ids
-            ])
-        )
-    new_layer.parent_layer_id = parent_layer.id
-    new_layer.order = layer_data.order
     db.commit()
-    return Layer(
-        id=new_layer.id,
-        name=new_layer.name,
-        order=new_layer.order,
-        parent_layer_id=new_layer.parent_layer_id,
-    )
+    return Layer(id=new_layer.id, name=new_layer.name, order=new_layer.order)
 
 
 @graph_router.get("/layers")
@@ -84,7 +55,6 @@ def list_layers(db: DatabaseSession):
             id=layer.id,
             name=layer.name,
             order=layer.order,
-            parent_layer_id=layer.parent_layer_id,
         )
         for layer in db.query(LayerModel).all()
     ]
@@ -99,85 +69,91 @@ def get_layer(layer_id: int, db: DatabaseSession):
             id=layer.id,
             name=layer.name,
             order=layer.order,
-            parent_layer_id=layer.parent_layer_id,
         )
     raise HTTPException(404)
 
 
 @graph_router.post("/nodes")
 def create_node(node_data: CreateNode, db: DatabaseSession):
-    """Get node by id."""
-    if not db.query(LayerModel.order).filter(LayerModel.id == node_data.layer_id).one().tuple()[0] > 0:
-        raise HTTPException(400)
+    """Create node."""
+    layer = db.get(LayerModel, node_data.layer_id)
+    if not layer or layer.order == 0:
+        raise HTTPException(400, "Cannot create nodes in layer 0")
+
     new_node = NodeModel(
         name=node_data.name,
         layer_id=node_data.layer_id,
         color=node_data.color,
-        data={},
-        geom=from_shape(MultiPolygon(), srid=4236),
-        is_default=False,
+        parent_node_id=node_data.parent_node_id,
+        geom=None,
+        data=None,
     )
     db.add(new_node)
-    db.flush()
-
-    new_dependency = DependencyModel(parent_id=node_data.parent_node_id, child_id=new_node.id)
-    db.add(new_dependency)
     db.commit()
-    return Node(
+
+    return NodeWithChildren(
         id=new_node.id,
         layer_id=new_node.layer_id,
         color=new_node.color,
-        parent_node_id=new_dependency.parent_id,
-        data=new_node.data,
         name=new_node.name,
+        children=[
+            Node(
+                id=child.id,
+                layer_id=child.layer_id,
+                name=child.name,
+                color=child.color,
+            )
+            for child in new_node.children
+        ],
     )
 
 
 @graph_router.get("/nodes")
 def list_nodes(layer_id: int, db: DatabaseSession):
     """List nodes for a layer."""
-    nodes = (
-        db.query(NodeModel, DependencyModel.parent_id)
-        .options(defer(NodeModel.geom))
-        .outerjoin(target=DependencyModel, onclause=DependencyModel.child_id == NodeModel.id)
-        .filter(NodeModel.layer_id == layer_id)
-        .tuples()
-        .all()
-    )
+    nodes_query = select(NodeModel).filter(NodeModel.layer_id == layer_id)
+    if layer_id == 1:
+        nodes_query = nodes_query.options(lazyload(NodeModel.children))
+    nodes = db.execute(nodes_query).scalars().all()
     return [
-        Node(
+        NodeWithChildren(
             id=node.id,
-            name=node.name,
             layer_id=node.layer_id,
-            data=node.data,
-            parent_node_id=parent_id,
             color=node.color,
+            name=node.name,
+            children=[
+                Node(
+                    id=child.id,
+                    layer_id=child.layer_id,
+                    name=child.name,
+                    color=child.color,
+                )
+                for child in list[NodeModel]([])
+            ],
         )
-        for node, parent_id in nodes
+        for node in nodes
     ]
 
 
 @graph_router.get("/nodes/{node_id}")
 def get_node(node_id: int, db: DatabaseSession):
     """Get node by id."""
-    row = (
-        db.query(NodeModel, DependencyModel.parent_id)
-        .options(defer(NodeModel.geom))
-        .filter(NodeModel.id == node_id)
-        .outerjoin(target=DependencyModel, onclause=DependencyModel.child_id == NodeModel.id)
-        .tuples()
-        .one_or_none()
-    )
-    if row:
-        node = row[0]
-        parent_node_id = row[1]
-        return Node(
+    node = db.get(NodeModel, node_id)
+    if node:
+        return NodeWithChildren(
             id=node.id,
-            name=node.name,
             layer_id=node.layer_id,
-            data=node.data,
-            parent_node_id=parent_node_id,
             color=node.color,
+            name=node.name,
+            children=[
+                Node(
+                    id=child.id,
+                    layer_id=child.layer_id,
+                    name=child.name,
+                    color=child.color,
+                )
+                for child in node.children
+            ],
         )
     raise HTTPException(404)
 
