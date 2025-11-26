@@ -26,11 +26,11 @@ def get_tile(layer_id: int, z: int, x: int, y: int, db: DatabaseSession):
     if z < 0 or z > 20:
         raise HTTPException(status_code=400, detail="Invalid zoom level")
 
-    # Simple query to generate MVT using PostGIS
-    # Transform geometries to Web Mercator and clip to tile bounds
-    # Use expanded bounds for intersection check to catch geometries that span tiles
+    # Query to generate MVT using PostGIS
+    # For nodes with geometry: use their geometry directly (leaf nodes)
+    # For nodes without geometry: compute ST_Union of all descendant leaf geometries
     query = text("""
-        WITH tile_bounds AS (
+        WITH RECURSIVE tile_bounds AS (
             SELECT ST_TileEnvelope(:z, :x, :y) AS geom
         ),
         expanded_bounds AS (
@@ -40,23 +40,63 @@ def get_tile(layer_id: int, z: int, x: int, y: int, db: DatabaseSession):
             ) * 0.1) AS geom
             FROM tile_bounds
         ),
+        descendants AS (
+            -- Base case: nodes in the target layer
+            SELECT 
+                id,
+                id as root_id,
+                name,
+                color,
+                geom,
+                parent_node_id
+            FROM nodes
+            WHERE layer_id = :layer_id
+            
+            UNION ALL
+            
+            -- Recursive case: find all descendants
+            SELECT 
+                n.id,
+                d.root_id,
+                n.name,
+                n.color,
+                n.geom,
+                n.parent_node_id
+            FROM nodes n
+            INNER JOIN descendants d ON n.parent_node_id = d.id
+        ),
+        node_geometries AS (
+            SELECT 
+                d.root_id,
+                n.name,
+                n.color,
+                -- If the root node has geometry, use it; otherwise union all leaf descendants
+                CASE 
+                    WHEN n.geom IS NOT NULL 
+                    THEN n.geom
+                    ELSE ST_Union(ST_MakeValid(d.geom))
+                END as geom
+            FROM descendants d
+            INNER JOIN nodes n ON n.id = d.root_id
+            WHERE d.geom IS NOT NULL  -- Only include descendants with actual geometry
+            GROUP BY d.root_id, n.name, n.color, n.geom
+        ),
         tile_data AS (
             SELECT
-                nodes.id,
-                nodes.name,
-                nodes.color,
+                ng.root_id as id,
+                ng.name,
+                ng.color,
                 ST_AsMVTGeom(
-                    ST_Transform(nodes.geom, 3857),
+                    ST_Transform(ng.geom, 3857),
                     (SELECT geom FROM tile_bounds),
                     4096,
                     256,
                     true
                 ) AS geom
-            FROM nodes, expanded_bounds
-            WHERE nodes.layer_id = :layer_id
-                AND nodes.geom IS NOT NULL
+            FROM node_geometries ng, expanded_bounds
+            WHERE ng.geom IS NOT NULL
                 AND ST_Intersects(
-                    ST_Transform(nodes.geom, 3857),
+                    ST_Transform(ng.geom, 3857),
                     expanded_bounds.geom
                 )
         )

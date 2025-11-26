@@ -47,10 +47,3 @@ class NodeModel(Base):
     )
 
     parent_node_id: Mapped[int | None] = mapped_column(ForeignKey("nodes.id"), nullable=True)
-
-    # Child nodes (one level down in hierarchy)
-    children: Mapped[list["NodeModel"]] = relationship(
-        "NodeModel",
-        foreign_keys="NodeModel.parent_node_id",
-        init=False,
-    )

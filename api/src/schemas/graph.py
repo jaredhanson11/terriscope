@@ -20,9 +20,15 @@ class Node(BaseModel):
     layer_id: int
     name: str
     color: str
+    parent_node_id: int | None = None
+    child_count: int = 0
 
 
-class NodeWithChildren(Node):
-    """NodeWithChildren."""
+class PaginatedNodes(BaseModel):
+    """Paginated nodes response."""
 
-    children: "Sequence[Node]"
+    nodes: list[Node]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int

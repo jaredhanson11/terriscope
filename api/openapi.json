@@ -251,16 +251,59 @@
           "Graph"
         ],
         "summary": "List Nodes",
-        "description": "List nodes for a layer.",
+        "description": "List nodes filtered by layer_id OR parent_node_id (not both) with pagination.",
         "operationId": "list_nodes_nodes_get",
         "parameters": [
           {
             "name": "layer_id",
             "in": "query",
-            "required": true,
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Layer Id"
+            }
+          },
+          {
+            "name": "parent_node_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parent Node Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "integer",
-              "title": "Layer Id"
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Page Size"
             }
           }
         ],
@@ -370,6 +413,16 @@
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNode"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",

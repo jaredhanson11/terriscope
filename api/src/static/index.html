@@ -36,6 +36,35 @@
         display: block;
         margin-bottom: 4px;
       }
+      .nav-links {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        display: flex;
+        gap: 8px;
+        z-index: 10;
+      }
+      .nav-link {
+        background: #fff;
+        padding: 8px 12px;
+        font-family: system-ui;
+        font-size: 13px;
+        border-radius: 4px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.2);
+        text-decoration: none;
+        color: #007bff;
+        font-weight: 500;
+        transition: all 0.15s;
+      }
+      .nav-link:hover {
+        background: #007bff;
+        color: #fff;
+      }
+      .nav-link.active {
+        background: #e9ecef;
+        color: #333;
+        cursor: default;
+      }
       .controls {
         position: absolute;
         top: 10px;
@@ -203,6 +232,11 @@
     </style>
   </head>
   <body>
+    <div class="nav-links">
+      <a href="/static/index.html" class="nav-link active">Map</a>
+      <a href="/static/hierarchy.html" class="nav-link">Hierarchy</a>
+      <a href="/static/explorer.html" class="nav-link">Explorer</a>
+    </div>
     <div id="map"></div>
     <div class="info">
       <b>Atom Layers Demo</b>
@@ -225,20 +259,41 @@
       <div class="section">
         <b>Base Map</b>
         <label>
-          <input type="radio" name="basemap" value="osm" checked />
+          <input
+            type="radio"
+            name="basemap"
+            value="osm"
+            onchange="switchBasemap('osm')"
+            checked
+          />
           OpenStreetMap
         </label>
         <label>
-          <input type="radio" name="basemap" value="satellite" />
+          <input
+            type="radio"
+            name="basemap"
+            value="positron"
+            onchange="switchBasemap('positron')"
+          />
+          Light (Positron)
+        </label>
+        <label>
+          <input
+            type="radio"
+            name="basemap"
+            value="satellite"
+            onchange="switchBasemap('satellite')"
+          />
           Satellite
         </label>
         <label>
-          <input type="radio" name="basemap" value="terrain" />
+          <input
+            type="radio"
+            name="basemap"
+            value="terrain"
+            onchange="switchBasemap('terrain')"
+          />
           Terrain
-        </label>
-        <label>
-          <input type="radio" name="basemap" value="none" />
-          None (Plain)
         </label>
       </div>
     </div>
@@ -444,9 +499,30 @@
                 <button class="btn-sm" onclick="toggleNodes(${
                   layer.id
                 })">▼</button>
-                <button class="btn-sm" onclick="viewLayerOnMap(${
-                  layer.id
-                })">Map</button>
+                <label style="margin: 0 4px; display: inline-flex; align-items: center; cursor: pointer; font-size: 11px;" title="Show as colored fill">
+                  <input type="radio" name="fill-layer" value="${
+                    layer.id
+                  }" onchange="setFillLayer(${
+              layer.id
+            })" style="margin: 0 3px 0 0;" />
+                  Fill
+                </label>
+                <label style="margin: 0 4px; display: inline-flex; align-items: center; cursor: pointer; font-size: 11px;" title="Show outline">
+                  <input type="checkbox" class="outline-checkbox" data-layer-id="${
+                    layer.id
+                  }" onchange="toggleOutline(${
+              layer.id
+            }, this.checked)" style="margin: 0 3px 0 0;" />
+                  Border
+                </label>
+                <label style="margin: 0; display: inline-flex; align-items: center; cursor: pointer; font-size: 11px;" title="Show labels">
+                  <input type="radio" name="label-layer" value="${
+                    layer.id
+                  }" onchange="setLabelLayer(${
+              layer.id
+            })" style="margin: 0 3px 0 0;" />
+                  Labels
+                </label>
               </div>
             </div>
             ${
@@ -477,37 +553,74 @@
         currentLayerId = layerId;
       }
 
-      function viewLayerOnMap(layerId) {
-        // Remove all existing layer visibility
+      function setFillLayer(layerId) {
+        // Hide all fill layers
         layerSources.forEach((_, id) => {
           if (map.getLayer(`layer${id}-fill`)) {
             map.setLayoutProperty(`layer${id}-fill`, "visibility", "none");
           }
-          if (map.getLayer(`layer${id}-outline`)) {
-            map.setLayoutProperty(`layer${id}-outline`, "visibility", "none");
-          }
         });
 
-        // Show selected layer
+        // Add layer to map if not already added
         if (!layerSources.has(layerId)) {
           addLayerToMap(layerId);
         }
 
+        // Show selected fill layer
         if (map.getLayer(`layer${layerId}-fill`)) {
           map.setLayoutProperty(
             `layer${layerId}-fill`,
             "visibility",
             "visible"
           );
+        }
+
+        selectLayer(layerId);
+        statusEl.textContent = `Fill: Layer ${layerId}`;
+      }
+
+      function toggleOutline(layerId, show) {
+        // Add layer to map if not already added
+        if (!layerSources.has(layerId)) {
+          addLayerToMap(layerId);
+        }
+
+        // Toggle outline visibility
+        if (map.getLayer(`layer${layerId}-outline`)) {
           map.setLayoutProperty(
             `layer${layerId}-outline`,
+            "visibility",
+            show ? "visible" : "none"
+          );
+        }
+
+        const action = show ? "shown" : "hidden";
+        statusEl.textContent = `Border for Layer ${layerId} ${action}`;
+      }
+
+      function setLabelLayer(layerId) {
+        // Hide all label layers
+        layerSources.forEach((_, id) => {
+          if (map.getLayer(`layer${id}-label`)) {
+            map.setLayoutProperty(`layer${id}-label`, "visibility", "none");
+          }
+        });
+
+        // Add layer to map if not already added
+        if (!layerSources.has(layerId)) {
+          addLayerToMap(layerId);
+        }
+
+        // Show selected label layer
+        if (map.getLayer(`layer${layerId}-label`)) {
+          map.setLayoutProperty(
+            `layer${layerId}-label`,
             "visibility",
             "visible"
           );
         }
 
-        selectLayer(layerId);
-        statusEl.textContent = `Viewing Layer ${layerId}`;
+        statusEl.textContent = `Labels: Layer ${layerId}`;
       }
 
       function addLayerToMap(layerId) {
@@ -545,6 +658,24 @@
           },
           layout: {
             visibility: "none",
+          },
+        });
+
+        map.addLayer({
+          id: `layer${layerId}-label`,
+          type: "symbol",
+          source: `layer${layerId}`,
+          "source-layer": "nodes",
+          layout: {
+            "text-field": ["get", "name"],
+            "text-size": 12,
+            "text-anchor": "center",
+            visibility: "none",
+          },
+          paint: {
+            "text-color": "#000",
+            "text-halo-color": "#fff",
+            "text-halo-width": 2,
           },
         });
 
@@ -586,14 +717,73 @@
       map.on("zoom", updateZoom);
       map.on("zoomend", updateZoom);
 
-      map.on("load", async () => {
-        updateZoom();
-        map.addSource("osm", {
+      // Basemap sources configuration
+      const basemaps = {
+        osm: {
           type: "raster",
           tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
           tileSize: 256,
+          attribution: "© OpenStreetMap",
+        },
+        positron: {
+          type: "raster",
+          tiles: ["https://basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png"],
+          tileSize: 256,
+          attribution: "© CARTO",
+        },
+        satellite: {
+          type: "raster",
+          tiles: [
+            "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+          ],
+          tileSize: 256,
+          attribution: "© Esri",
+        },
+        terrain: {
+          type: "raster",
+          tiles: ["https://tile.opentopomap.org/{z}/{x}/{y}.png"],
+          tileSize: 256,
+          attribution: "© OpenTopoMap",
+        },
+      };
+
+      function switchBasemap(basemapId) {
+        // Hide all basemap layers
+        Object.keys(basemaps).forEach((id) => {
+          if (map.getLayer(`basemap-${id}`)) {
+            map.setLayoutProperty(`basemap-${id}`, "visibility", "none");
+          }
         });
-        map.addLayer({ id: "osm", type: "raster", source: "osm" });
+
+        // Show selected basemap
+        if (map.getLayer(`basemap-${basemapId}`)) {
+          map.setLayoutProperty(
+            `basemap-${basemapId}`,
+            "visibility",
+            "visible"
+          );
+        }
+
+        statusEl.textContent = `Basemap: ${basemapId}`;
+      }
+
+      map.on("load", async () => {
+        updateZoom();
+
+        // Add all basemap sources and layers
+        Object.entries(basemaps).forEach(([id, config]) => {
+          map.addSource(`basemap-${id}`, config);
+
+          map.addLayer({
+            id: `basemap-${id}`,
+            type: "raster",
+            source: `basemap-${id}`,
+            layout: {
+              visibility: id === "osm" ? "visible" : "none",
+            },
+          });
+        });
+
         statusEl.textContent = "Loading tiles...";
 
         // Load layers from API
@@ -602,23 +792,42 @@
 
         // Simple feature inspect on click
         map.on("click", (e) => {
+          // Build list of all fill layers that are visible
+          const fillLayers = layers
+            .filter((layer) => {
+              const layerObj = map.getLayer(`layer${layer.id}-fill`);
+              return (
+                layerObj &&
+                map.getLayoutProperty(`layer${layer.id}-fill`, "visibility") ===
+                  "visible"
+              );
+            })
+            .map((layer) => `layer${layer.id}-fill`);
+
+          if (!fillLayers.length) return;
+
           const features = map.queryRenderedFeatures(e.point, {
-            layers: ["layer1-fill", "layer2-fill", "layer3-fill"],
+            layers: fillLayers,
           });
           if (!features.length) return;
           const f = features[0];
-          let layerName = "Layer 3 - Region";
-          if (f.layer.id.includes("layer1")) {
-            layerName = "Layer 1 - Zip Code";
-          } else if (f.layer.id.includes("layer2")) {
-            layerName = "Layer 2 - Territory";
-          }
+
+          // Extract layer ID from the layer name (e.g., "layer1-fill" -> 1)
+          const layerIdMatch = f.layer.id.match(/layer(\d+)-fill/);
+          const clickedLayerId = layerIdMatch
+            ? parseInt(layerIdMatch[1])
+            : null;
+          const clickedLayer = layers.find((l) => l.id === clickedLayerId);
+          const layerName = clickedLayer
+            ? `${clickedLayer.name} (Layer ${clickedLayer.order})`
+            : "Unknown Layer";
+
           new maplibregl.Popup()
             .setLngLat(e.lngLat)
             .setHTML(
-              `<strong>${layerName} ${f.properties.id}</strong><br>${
-                f.properties.name || ""
-              }`
+              `<strong>${layerName}</strong><br><span style="color: ${
+                f.properties.color || "#333"
+              };">●</span> ${f.properties.name || "Unnamed"}`
             )
             .addTo(map);
         });
