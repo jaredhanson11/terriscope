@@ -418,7 +418,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateNode"
+                "$ref": "#/components/schemas/UpdateNode"
               }
             }
           }
@@ -475,6 +475,63 @@
             }
           }
         ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "example": {
+                  "message": "Invalid request",
+                  "details": [
+                    {
+                      "loc": [
+                        "body",
+                        "field"
+                      ],
+                      "msg": "field required",
+                      "type": "missing"
+                    }
+                  ]
+                },
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/bulk": {
+      "put": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "Bulk Update Node",
+        "description": "Update node.",
+        "operationId": "bulk_update_node_nodes_bulk_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "items": {
+                  "$ref": "#/components/schemas/BulkUpdateNode"
+                },
+                "type": "array",
+                "title": "Node Data"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -935,26 +992,8 @@
   },
   "components": {
     "schemas": {
-      "CreateLayer": {
+      "BulkUpdateNode": {
         "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name"
-        ],
-        "title": "CreateLayer",
-        "description": "CreateLayer."
-      },
-      "CreateNode": {
-        "properties": {
-          "layer_id": {
-            "type": "integer",
-            "title": "Layer Id"
-          },
           "parent_node_id": {
             "anyOf": [
               {
@@ -973,14 +1012,68 @@
           "color": {
             "type": "string",
             "title": "Color"
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id"
           }
         },
         "type": "object",
         "required": [
-          "layer_id",
           "parent_node_id",
           "name",
-          "color"
+          "color",
+          "id"
+        ],
+        "title": "BulkUpdateNode",
+        "description": "BulkUpdateNode."
+      },
+      "CreateLayer": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "CreateLayer",
+        "description": "CreateLayer."
+      },
+      "CreateNode": {
+        "properties": {
+          "parent_node_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Node Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "color": {
+            "type": "string",
+            "title": "Color"
+          },
+          "layer_id": {
+            "type": "integer",
+            "title": "Layer Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "parent_node_id",
+          "name",
+          "color",
+          "layer_id"
         ],
         "title": "CreateNode",
         "description": "CreateNode."
@@ -1012,6 +1105,37 @@
         ],
         "title": "HeartbeatResponseDTO",
         "description": "Heartbeat response DTO."
+      },
+      "UpdateNode": {
+        "properties": {
+          "parent_node_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Node Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "color": {
+            "type": "string",
+            "title": "Color"
+          }
+        },
+        "type": "object",
+        "required": [
+          "parent_node_id",
+          "name",
+          "color"
+        ],
+        "title": "UpdateNode",
+        "description": "UpdateNode."
       },
       "ValidationError": {
         "properties": {

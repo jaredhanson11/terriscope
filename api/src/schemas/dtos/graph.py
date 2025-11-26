@@ -9,10 +9,21 @@ class CreateLayer(BaseModel):
     name: str
 
 
-class CreateNode(BaseModel):
-    """CreateNode."""
+class UpdateNode(BaseModel):
+    """UpdateNode."""
 
-    layer_id: int
     parent_node_id: int | None
     name: str
     color: str
+
+
+class BulkUpdateNode(UpdateNode):
+    """BulkUpdateNode."""
+
+    id: int
+
+
+class CreateNode(UpdateNode):
+    """CreateNode."""
+
+    layer_id: int

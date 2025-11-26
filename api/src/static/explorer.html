@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -334,7 +334,7 @@
         if (layers.length > 0) {
           const highestLayer = layers[0];
           const response = await fetch(
-            `${API_BASE}/nodes?layer_id=${highestLayer.id}&page=1&page_size=1`
+            `${API_BASE}/nodes?layer_id=${highestLayer.id}&page=1&page_size=1`,
           );
           const data = await response.json();
           document.getElementById("rootNodes").textContent = data.total;
@@ -343,7 +343,7 @@
           let total = 0;
           for (const layer of layers) {
             const resp = await fetch(
-              `${API_BASE}/nodes?layer_id=${layer.id}&page=1&page_size=1`
+              `${API_BASE}/nodes?layer_id=${layer.id}&page=1&page_size=1`,
             );
             const layerData = await resp.json();
             total += layerData.total;
@@ -372,7 +372,7 @@
         container,
         layer,
         indentLevel,
-        parentNodeId = null
+        parentNodeId = null,
       ) {
         const cacheKey = parentNodeId
           ? `parent_${parentNodeId}`
@@ -490,7 +490,7 @@
               // Collapse
               expandedNodes.delete(node.id);
               const childContainer = document.getElementById(
-                `children-${node.id}`
+                `children-${node.id}`,
               );
               if (childContainer) {
                 childContainer.remove();
@@ -509,7 +509,7 @@
 
               // Find child layer (order - 1)
               const childLayer = layers.find(
-                (l) => l.order === layer.order - 1
+                (l) => l.order === layer.order - 1,
               );
               if (childLayer) {
                 childrenDiv.innerHTML =
@@ -518,7 +518,7 @@
                   childrenDiv,
                   childLayer,
                   indentLevel + 1,
-                  node.id
+                  node.id,
                 );
                 // Remove loading message
                 const loadingMsg = childrenDiv.querySelector(".loading");
@@ -541,7 +541,7 @@
         if (totalNodesCount > 1000) {
           if (
             !confirm(
-              `This will expand ${totalNodesCount} nodes. This may take a while. Continue?`
+              `This will expand ${totalNodesCount} nodes. This may take a while. Continue?`,
             )
           ) {
             return;

@@ -42,7 +42,7 @@ def get_tile(layer_id: int, z: int, x: int, y: int, db: DatabaseSession):
         ),
         descendants AS (
             -- Base case: nodes in the target layer
-            SELECT 
+            SELECT
                 id,
                 id as root_id,
                 name,
@@ -51,11 +51,11 @@ def get_tile(layer_id: int, z: int, x: int, y: int, db: DatabaseSession):
                 parent_node_id
             FROM nodes
             WHERE layer_id = :layer_id
-            
+
             UNION ALL
-            
+
             -- Recursive case: find all descendants
-            SELECT 
+            SELECT
                 n.id,
                 d.root_id,
                 n.name,
@@ -66,13 +66,13 @@ def get_tile(layer_id: int, z: int, x: int, y: int, db: DatabaseSession):
             INNER JOIN descendants d ON n.parent_node_id = d.id
         ),
         node_geometries AS (
-            SELECT 
+            SELECT
                 d.root_id,
                 n.name,
                 n.color,
                 -- If the root node has geometry, use it; otherwise union all leaf descendants
-                CASE 
-                    WHEN n.geom IS NOT NULL 
+                CASE
+                    WHEN n.geom IS NOT NULL
                     THEN n.geom
                     ELSE ST_Union(ST_MakeValid(d.geom))
                 END as geom
@@ -125,16 +125,16 @@ def get_tile(layer_id: int, z: int, x: int, y: int, db: DatabaseSession):
 def debug_layer_colors(layer_id: int, db: DatabaseSession):
     """Debug endpoint to check if color values exist in the database."""
     query = text("""
-        SELECT 
-            id, 
-            name, 
+        SELECT
+            id,
+            name,
             color,
-            CASE WHEN color IS NULL THEN 'NULL' 
-                 WHEN color = '' THEN 'EMPTY' 
-                 ELSE 'HAS_VALUE' 
+            CASE WHEN color IS NULL THEN 'NULL'
+                 WHEN color = '' THEN 'EMPTY'
+                 ELSE 'HAS_VALUE'
             END as color_status
-        FROM nodes 
-        WHERE layer_id = :layer_id 
+        FROM nodes
+        WHERE layer_id = :layer_id
         LIMIT 10
     """)
 
@@ -212,7 +212,7 @@ def list_tile_layers(db: DatabaseSession):
             "name": row["name"],
             "order": row["order"],
             "node_count": row["node_count"],
-            "tile_url": f"/tiles/{row['id']}/{{z}}/{{x}}/{{y}}.pbf",
+            "tile_url": f"/tiles/{row["id"]}/{{z}}/{{x}}/{{y}}.pbf",
         }
         for row in result
     ]
@@ -391,7 +391,7 @@ def get_node_stats(node_id: int, db: DatabaseSession):
     query = text(
         """
         WITH node_geom AS (
-            SELECT 
+            SELECT
                 id,
                 name,
                 layer_id,
@@ -434,7 +434,7 @@ def get_node_stats(node_id: int, db: DatabaseSession):
                     SELECT ST_PointN(dp1.geom, generate_series(2, ST_NPoints(dp1.geom))) as point2
                 ) pts2
             WHERE n.id = :node_id
-              AND point1 IS NOT NULL 
+              AND point1 IS NOT NULL
               AND point2 IS NOT NULL
         ),
         distance_stats AS (
@@ -453,8 +453,8 @@ def get_node_stats(node_id: int, db: DatabaseSession):
                 -- Estimate coordinate precision by checking smallest coordinate differences
                 -- Extract coordinates and find minimum non-zero decimal places
                 MAX(
-                    CASE 
-                        WHEN ABS(coord_diff) > 0 AND ABS(coord_diff) < 1 
+                    CASE
+                        WHEN ABS(coord_diff) > 0 AND ABS(coord_diff) < 1
                         THEN CEIL(-LOG10(ABS(coord_diff)))
                         ELSE 0
                     END
@@ -462,7 +462,7 @@ def get_node_stats(node_id: int, db: DatabaseSession):
             FROM nodes n,
                 LATERAL ST_DumpPoints(n.geom) AS dp,
                 LATERAL (
-                    SELECT 
+                    SELECT
                         ST_X(dp.geom) - LAG(ST_X(dp.geom)) OVER (ORDER BY dp.path) as coord_diff
                     FROM (SELECT dp.geom, dp.path) sub
                     LIMIT 1000  -- Sample first 1000 points for performance
@@ -481,8 +481,8 @@ def get_node_stats(node_id: int, db: DatabaseSession):
             ng.num_vertices,
             ng.num_polygons,
             COALESCE(rs.num_rings, 0) as num_rings,
-            CASE 
-                WHEN ng.num_polygons > 0 
+            CASE
+                WHEN ng.num_polygons > 0
                 THEN ROUND(ng.num_vertices::numeric / ng.num_polygons, 2)
                 ELSE 0
             END as avg_vertices_per_polygon,

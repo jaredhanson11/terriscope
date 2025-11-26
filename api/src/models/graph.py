@@ -4,10 +4,9 @@ from typing import Any
 
 from geoalchemy2 import Geometry
 from geoalchemy2.elements import WKBElement
-from sqlalchemy import ForeignKey, UniqueConstraint
+from sqlalchemy import ForeignKey, UniqueConstraint, func, select
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.ext.orderinglist import ordering_list
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, column_property, declared_attr, mapped_column
 
 from src.models.base import Base, intpk
 
@@ -47,3 +46,15 @@ class NodeModel(Base):
     )
 
     parent_node_id: Mapped[int | None] = mapped_column(ForeignKey("nodes.id"), nullable=True)
+
+    @declared_attr
+    def child_count(cls):
+        """Eagerly-loadable count of children using correlated subquery."""
+        nodes = cls.__table__
+        return column_property(
+            select(func.count())
+            .select_from(nodes)
+            .where(nodes.c.parent_node_id == cls.id)
+            .correlate_except(nodes)
+            .scalar_subquery()
+        )

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
@@ -317,7 +317,7 @@
 
       async function fetchNodes(layerId) {
         const response = await fetch(
-          `${window.location.origin}/nodes?layer_id=${layerId}`
+          `${window.location.origin}/nodes?layer_id=${layerId}`,
         );
         return await response.json();
       }
@@ -471,7 +471,7 @@
               })">View</button>
             </div>
           </div>
-        `
+        `,
           )
           .join("");
       }
@@ -503,24 +503,24 @@
                   <input type="radio" name="fill-layer" value="${
                     layer.id
                   }" onchange="setFillLayer(${
-              layer.id
-            })" style="margin: 0 3px 0 0;" />
+                    layer.id
+                  })" style="margin: 0 3px 0 0;" />
                   Fill
                 </label>
                 <label style="margin: 0 4px; display: inline-flex; align-items: center; cursor: pointer; font-size: 11px;" title="Show outline">
                   <input type="checkbox" class="outline-checkbox" data-layer-id="${
                     layer.id
                   }" onchange="toggleOutline(${
-              layer.id
-            }, this.checked)" style="margin: 0 3px 0 0;" />
+                    layer.id
+                  }, this.checked)" style="margin: 0 3px 0 0;" />
                   Border
                 </label>
                 <label style="margin: 0; display: inline-flex; align-items: center; cursor: pointer; font-size: 11px;" title="Show labels">
                   <input type="radio" name="label-layer" value="${
                     layer.id
                   }" onchange="setLabelLayer(${
-              layer.id
-            })" style="margin: 0 3px 0 0;" />
+                    layer.id
+                  })" style="margin: 0 3px 0 0;" />
                   Labels
                 </label>
               </div>
@@ -538,7 +538,7 @@
             }
             <div class="node-list" id="nodes-${layer.id}"></div>
           </div>
-        `
+        `,
           )
           .join("");
       }
@@ -571,7 +571,7 @@
           map.setLayoutProperty(
             `layer${layerId}-fill`,
             "visibility",
-            "visible"
+            "visible",
           );
         }
 
@@ -590,7 +590,7 @@
           map.setLayoutProperty(
             `layer${layerId}-outline`,
             "visibility",
-            show ? "visible" : "none"
+            show ? "visible" : "none",
           );
         }
 
@@ -616,7 +616,7 @@
           map.setLayoutProperty(
             `layer${layerId}-label`,
             "visibility",
-            "visible"
+            "visible",
           );
         }
 
@@ -760,7 +760,7 @@
           map.setLayoutProperty(
             `basemap-${basemapId}`,
             "visibility",
-            "visible"
+            "visible",
           );
         }
 
@@ -827,7 +827,7 @@
             .setHTML(
               `<strong>${layerName}</strong><br><span style="color: ${
                 f.properties.color || "#333"
-              };">●</span> ${f.properties.name || "Unnamed"}`
+              };">●</span> ${f.properties.name || "Unnamed"}`,
             )
             .addTo(map);
         });
@@ -853,7 +853,7 @@
               !layer3Feats.length
             ) {
               console.warn(
-                "No features visible. Check MVT layer names or tile responses."
+                "No features visible. Check MVT layer names or tile responses.",
               );
             }
           } catch (e) {

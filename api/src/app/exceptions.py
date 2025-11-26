@@ -42,7 +42,7 @@ def configure_exceptions(app: FastAPI) -> None:
 
         error_msg = "Invalid request."
         if len(exc.errors()) > 0 and exc.errors()[0].get("ctx") and exc.errors()[0]["ctx"].get("reason"):
-            error_msg += f" {exc.errors()[0]['ctx']['reason']}"
+            error_msg += f" {exc.errors()[0]["ctx"]["reason"]}"
 
         try:
             return JSONResponse(
