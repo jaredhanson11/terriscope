@@ -1,7 +1,6 @@
 """Layers router."""
 
-    from src.schemas.graph import Node, PaginatedNodes
-from typing import Sequence
+from collections.abc import Sequence
 
 from fastapi import APIRouter, HTTPException
 from sqlalchemy import func, select
@@ -10,8 +9,9 @@ from src.app.database import DatabaseSession
 from src.exceptions import TerriscopeException
 from src.models.graph import LayerModel, NodeModel
 from src.schemas.dtos.graph import BulkUpdateNode, CreateLayer, CreateNode, UpdateNode
-from src.schemas.graph import Layer, Node
-from src.services import GraphServiceDependency
+from src.schemas.graph import Layer, Node, PaginatedNodes
+from src.services import ComputationServiceDependency, GraphServiceDependency
+from src.services.performance import benchmark_layer_union, summarize_benchmark
 
 graph_router = APIRouter(prefix="", tags=["Graph"])
 
@@ -79,7 +79,7 @@ def create_node(
         color=new_node.color,
         name=new_node.name,
         parent_node_id=new_node.parent_node_id,
-        child_count=new_node.child_count
+        child_count=new_node.child_count,
     )
 
 
@@ -176,10 +176,18 @@ def bulk_update_node(
     graph_service: GraphServiceDependency,
 ):
     """Update node."""
-    nodes_and_layers = db.execute(select(NodeModel, LayerModel).join(target=LayerModel, onclause=NodeModel.layer_id == LayerModel.id).filter(NodeModel.id.in_([_node.id for _node in node_datas]))).tuples().all()
+    nodes_and_layers = (
+        db.execute(
+            select(NodeModel, LayerModel)
+            .join(target=LayerModel, onclause=NodeModel.layer_id == LayerModel.id)
+            .filter(NodeModel.id.in_([_node.id for _node in node_datas]))
+        )
+        .tuples()
+        .all()
+    )
     if len(nodes_and_layers) != len(node_datas):
-        found_ids = set(_node.id for _node, _ in nodes_and_layers)
-        wanted_ids = list(_node.id for _node in node_datas)
+        found_ids = {_node.id for _node, _ in nodes_and_layers}
+        wanted_ids = [_node.id for _node in node_datas]
         if len(wanted_ids) != len(set(wanted_ids)):
             raise HTTPException(400, f"Invalid request. Can't update the same node twice: {wanted_ids}")
         raise HTTPException(404, f"Can't find nodes: {found_ids - set(wanted_ids)}")
@@ -187,13 +195,15 @@ def bulk_update_node(
     updated_nodes: Sequence[Node] = []
     for (node, layer), node_data in zip(nodes_and_layers, node_datas, strict=True):
         graph_service.update_node(node=node, node_data=node_data, layer=layer)
-        updated_nodes.append(Node(
-            id=node.id,
-            layer_id=node.layer_id,
-            color=node.color,
-            name=node.name,
-            child_count=node.child_count,
-        ))
+        updated_nodes.append(
+            Node(
+                id=node.id,
+                layer_id=node.layer_id,
+                color=node.color,
+                name=node.name,
+                child_count=node.child_count,
+            )
+        )
     db.commit()
     return updated_nodes
 
@@ -202,3 +212,34 @@ def bulk_update_node(
 def delete_node(node_id: int):
     """Delete node."""
     pass
+
+
+@graph_router.get("/recompute")
+def recompute(db: DatabaseSession, computation_service: ComputationServiceDependency):
+    layer = db.query(LayerModel).order_by(LayerModel.order.desc()).all()[2]
+    if layer:
+        nodes = db.execute(select(NodeModel).filter(NodeModel.layer_id == layer.id)).scalars().all()
+        for i, node in enumerate(nodes):
+            import logging
+
+            logging.getLogger(__name__).info("%i", i)
+            computation_service.compute_geometry(db, node)
+
+
+@graph_router.get("/benchmark/{layer_id}")
+def benchmark_recompute(db: DatabaseSession, computation_service: ComputationServiceDependency, layer_id: int):
+    return summarize_benchmark(benchmark_layer_union(db, layer_id))
+
+
+@graph_router.post("/layers/{layer_id}/bulk-recompute")
+def bulk_recompute_layer(
+    layer_id: int,
+    db: DatabaseSession,
+    computation_service: ComputationServiceDependency,
+    force: bool = False,
+):
+    """Bulk recompute geometries for all parent nodes in a layer.
+
+    Set `force=true` to ignore input cache hashes and recompute all parents regardless of change state.
+    """
+    return computation_service.bulk_recompute_layer(db, layer_id=layer_id, force=force)

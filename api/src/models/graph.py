@@ -6,7 +6,7 @@ from geoalchemy2 import Geometry
 from geoalchemy2.elements import WKBElement
 from sqlalchemy import ForeignKey, UniqueConstraint, func, select
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, column_property, declared_attr, mapped_column
+from sqlalchemy.orm import Mapped, aliased, column_property, mapped_column
 
 from src.models.base import Base, intpk
 
@@ -39,22 +39,29 @@ class NodeModel(Base):
         nullable=True,
         deferred=True,
     )
+    data_cache_key: Mapped[str]
+    data_inputs_cache_key: Mapped[str]
     geom: Mapped[WKBElement | None] = mapped_column(
         Geometry(srid=4326),
         nullable=True,
         deferred=True,
     )
+    geom_cache_key: Mapped[str]
+    geom_inputs_cache_key: Mapped[str]
 
     parent_node_id: Mapped[int | None] = mapped_column(ForeignKey("nodes.id"), nullable=True)
 
-    @declared_attr
-    def child_count(cls):
-        """Eagerly-loadable count of children using correlated subquery."""
-        nodes = cls.__table__
-        return column_property(
-            select(func.count())
-            .select_from(nodes)
-            .where(nodes.c.parent_node_id == cls.id)
-            .correlate_except(nodes)
+    @classmethod
+    def __declare_last__(cls):
+        """Attach correlated child_count after mapper configuration.
+
+        Using __declare_last__ avoids premature inspection errors that occur
+        when attempting to alias the class inside @declared_attr before mapping.
+        """
+        child_alias = aliased(cls)
+        cls.child_count = column_property(
+            select(func.count(child_alias.id))
+            .where(child_alias.parent_node_id == cls.id)
+            .correlate_except(child_alias)
             .scalar_subquery()
         )

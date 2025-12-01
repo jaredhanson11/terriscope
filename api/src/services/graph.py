@@ -1,3 +1,5 @@
+"""Graph service."""
+
 from typing import Literal, cast
 
 from sqlalchemy import select
@@ -6,7 +8,6 @@ from sqlalchemy.exc import NoResultFound
 from src.exceptions import TerriscopeException
 from src.models.graph import LayerModel, NodeModel
 from src.schemas.dtos.graph import CreateLayer, CreateNode, UpdateNode
-from src.schemas.graph import Layer
 from src.services.base import BaseService
 
 
