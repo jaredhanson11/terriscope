@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Create New Map - Alignstar</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="create.css" />
+  </head>
+  <body>
+    <div class="app-container">
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <div class="logo">
+          <h1>Alignstar</h1>
+          <p class="subtitle">Create New Map</p>
+        </div>
+
+        <!-- Progress Steps -->
+        <div class="control-section">
+          <h3>Import Progress</h3>
+          <div class="progress-steps">
+            <div class="step active" data-step="1">
+              <div class="step-number">1</div>
+              <div class="step-label">Import File</div>
+            </div>
+            <div class="step" data-step="2">
+              <div class="step-number">2</div>
+              <div class="step-label">Configure Layers</div>
+            </div>
+            <div class="step" data-step="3">
+              <div class="step-number">3</div>
+              <div class="step-label">Configure Data</div>
+            </div>
+            <div class="step" data-step="4">
+              <div class="step-number">4</div>
+              <div class="step-label">Review & Create</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Navigation -->
+        <div class="control-section nav-buttons">
+          <button id="backBtn" class="btn btn-secondary" disabled>Back</button>
+          <button id="nextBtn" class="btn btn-primary">Next</button>
+        </div>
+
+        <!-- Help Section -->
+        <div class="control-section help-section">
+          <h3>Help</h3>
+          <div id="helpText" class="help-text">
+            <p><strong>Step 1: Import File</strong></p>
+            <p>
+              Upload a .ztt (ZeeMaps Territory) file or GeoJSON file to begin
+              creating your map.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Main Content Area -->
+      <div class="main-content">
+        <!-- Step 1: Import File -->
+        <div class="step-content active" data-step="1">
+          <div class="step-header">
+            <h2>Import Territory File</h2>
+            <p>Choose a file to import your territory data</p>
+          </div>
+
+          <div class="upload-area">
+            <div class="upload-box" id="uploadBox">
+              <svg
+                width="64"
+                height="64"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="17 8 12 3 7 8" />
+                <line x1="12" y1="3" x2="12" y2="15" />
+              </svg>
+              <h3>Drop file here or click to browse</h3>
+              <p>Supported formats: .ztt, .geojson, .json</p>
+              <input
+                type="file"
+                id="fileInput"
+                accept=".ztt,.geojson,.json"
+                hidden
+              />
+            </div>
+
+            <div id="fileInfo" class="file-info" style="display: none">
+              <div class="file-details">
+                <h4>Selected File</h4>
+                <p id="fileName"></p>
+                <p id="fileSize"></p>
+              </div>
+              <button id="changeFileBtn" class="btn btn-secondary">
+                Change File
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 2: Select Layers -->
+        <div class="step-content" data-step="2">
+          <div class="step-header">
+            <h2>Configure Layers</h2>
+            <p>
+              Map your data columns to layer hierarchy and customize layer names
+            </p>
+          </div>
+
+          <div class="layers-container">
+            <div class="layer-configuration">
+              <h3>Layer Hierarchy Configuration</h3>
+              <div id="layerConfigList" class="layer-config-list">
+                <!-- Layer configurations will be populated here -->
+              </div>
+            </div>
+
+            <div class="layer-preview">
+              <h3>Data Preview</h3>
+              <div id="layerPreview" class="preview-box">
+                <p>Configure layers to see data preview</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 3: Configure Data -->
+        <div class="step-content" data-step="3">
+          <div class="step-header">
+            <h2>Configure Data Fields</h2>
+            <p>Select data type and aggregation methods for each field</p>
+          </div>
+
+          <div class="data-config-grid">
+            <div class="data-fields-panel">
+              <h3>Data Fields</h3>
+              <div id="dataFieldsList" class="data-fields-list">
+                <!-- Data fields will be listed here -->
+              </div>
+            </div>
+
+            <div class="data-config-panel">
+              <h3>Field Configuration</h3>
+              <div id="fieldConfigForm" class="field-config-form">
+                <p style="color: #888; text-align: center; padding: 40px">
+                  Select a field to configure
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step 4: Review & Create -->
+        <div class="step-content" data-step="4">
+          <div class="step-header">
+            <h2>Review & Create Map</h2>
+            <p>Review your settings and create the map</p>
+          </div>
+
+          <div class="review-container">
+            <div class="review-section">
+              <h3>Map Settings</h3>
+              <div class="setting-row">
+                <label>Map Name</label>
+                <input
+                  type="text"
+                  id="mapNameInput"
+                  class="text-input"
+                  placeholder="Enter map name"
+                />
+              </div>
+
+              <div class="setting-row">
+                <label>Description</label>
+                <textarea
+                  id="mapDescInput"
+                  class="text-input"
+                  rows="3"
+                  placeholder="Optional description"
+                ></textarea>
+              </div>
+            </div>
+
+            <div class="review-section">
+              <h3>Import Summary</h3>
+              <div id="importSummary" class="summary-content">
+                <!-- Summary will be populated here -->
+              </div>
+            </div>
+
+            <div class="review-section">
+              <h3>Preview</h3>
+              <div id="finalPreview" class="final-preview">
+                <!-- Map preview will be shown here -->
+              </div>
+            </div>
+
+            <div class="create-actions">
+              <button id="createMapBtn" class="btn btn-primary btn-large">
+                Create Map
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script src="create.js"></script>
+  </body>
+</html>
