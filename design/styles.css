@@ -353,28 +353,8 @@ body {
   border: 1px solid #555;
   border-radius: 8px;
   margin-bottom: 20px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  max-height: 500px;
+  overflow: hidden;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
-}
-
-.project-dropdown::-webkit-scrollbar {
-  width: 8px;
-}
-
-.project-dropdown::-webkit-scrollbar-track {
-  background: #262626;
-  border-radius: 0 8px 8px 0;
-}
-
-.project-dropdown::-webkit-scrollbar-thumb {
-  background: #555;
-  border-radius: 4px;
-}
-
-.project-dropdown::-webkit-scrollbar-thumb:hover {
-  background: #666;
 }
 
 .dropdown-section {

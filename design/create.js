@@ -706,6 +706,7 @@ class MapCreationWizard {
           type: isNumeric ? "number" : "text",
           aggregations: isNumeric ? ["sum"] : [],
           displayName: field,
+          associatedLayer: "none", // zip_codes | territories | regions | areas | none
         };
       }
     });
@@ -792,6 +793,19 @@ class MapCreationWizard {
                         <span>Date</span>
                     </label>
                 </div>
+            </div>
+
+            <div class="config-group">
+              <h4>Associated Layer</h4>
+              <div class="config-row">
+                <select id="layerAssoc_${fieldName}" class="layer-select">
+                  <option value="zip_codes">Zip Codes</option>
+                  <option value="territories">Territories</option>
+                  <option value="regions">Regions</option>
+                  <option value="areas">Areas</option>
+                </select>
+              </div>
+              <p style="font-size: 12px; color: #888; margin-top: 8px;">Map this column to the correct hierarchy level (e.g., Territory Rep → Territories, Regional Rep → Regions).</p>
             </div>
         `;
 
@@ -906,6 +920,16 @@ class MapCreationWizard {
       });
     });
 
+    // Initialize and handle associated layer select
+    const assocSelect = configPanel.querySelector(`#layerAssoc_${fieldName}`);
+    if (assocSelect) {
+      assocSelect.value =
+        this.dataFieldConfigs[fieldName].associatedLayer || "none";
+      assocSelect.addEventListener("change", (e) => {
+        this.dataFieldConfigs[fieldName].associatedLayer = e.target.value;
+      });
+    }
+
     configPanel
       .querySelectorAll('input[type="checkbox"]')
       .forEach((checkbox) => {
@@ -980,11 +1004,24 @@ class MapCreationWizard {
           aggDisplay = `<span style="color: #888; font-size: 11px;">No aggregation</span>`;
         }
 
+        const layerDisplay =
+          config.associatedLayer && config.associatedLayer !== "none"
+            ? `<span style="background: rgba(74,158,255,0.15); color: #4a9eff; padding: 2px 8px; border-radius: 3px; font-size: 10px; margin-left: 8px;">Layer: ${
+                {
+                  zip_codes: "Zip Codes",
+                  territories: "Territories",
+                  regions: "Regions",
+                  areas: "Areas",
+                }[config.associatedLayer]
+              }</span>`
+            : "";
+
         fieldsHtml += `
                     <div style="padding: 10px; border-bottom: 1px solid #3a3a3a; display: flex; justify-content: space-between; align-items: center;">
                         <div>
                             <code style="color: #ccc; font-weight: bold;">${field}</code>
                             <span style="color: #888; font-size: 11px; margin-left: 8px;">(${config.type})</span>
+                            ${layerDisplay}
                         </div>
                         <div>${aggDisplay}</div>
                     </div>

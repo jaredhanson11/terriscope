@@ -205,9 +205,17 @@ class AlignstarDemo {
   }
 
   loadMapConfiguration() {
+    const params = new URLSearchParams(window.location.search);
+    const forceDemo = params.get('demo') === '1' || params.get('demo') === 'true';
+    const reset = params.get('reset') === '1' || params.get('reset') === 'true';
+
+    if (reset) {
+      try { localStorage.removeItem('alignstar_map'); } catch {}
+    }
+
     // Check if there's a saved map configuration from the create wizard
     const savedMap = localStorage.getItem("alignstar_map");
-    if (savedMap) {
+    if (savedMap && !forceDemo) {
       try {
         const mapData = JSON.parse(savedMap);
 
@@ -223,7 +231,88 @@ class AlignstarDemo {
       } catch (error) {
         console.error("Error loading map configuration:", error);
       }
+    } else {
+      // No saved map; generate demo data covering continental US
+      const demo = this.generateDemoDemoGeoJSON();
+      this.updateDataFieldSelectors(demo.dataFieldConfigs);
+      this.loadGeoJSONData(demo.geojson);
+      this.updateStatus('Loaded demo map (large zip regions). Add ?demo=1 to URL to force demo, ?reset=1 to clear saved map.');
     }
+  }
+
+  // Generate demo rectangles across continental US with hierarchy properties
+  generateDemoDemoGeoJSON() {
+    const usBounds = { south: 24.5, west: -124.8, north: 49.4, east: -66.9 };
+    // Use fewer, much larger cells so "zip codes" look like states-scale areas
+    const cols = 5; // wide grid
+    const rows = 3; // tall grid
+    const zipCount = cols * rows; // 15 large zip-like regions
+    const dLat = (usBounds.north - usBounds.south) / rows;
+    const dLon = (usBounds.east - usBounds.west) / cols;
+
+    const features = [];
+    let zipIndex = 0;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        if (zipIndex >= zipCount) break;
+        const minLat = usBounds.south + r * dLat;
+        const minLon = usBounds.west + c * dLon;
+        const maxLat = minLat + dLat * 0.95;
+        const maxLon = minLon + dLon * 0.95;
+
+        const zipId = String(90000 + zipIndex); // distinguish demo IDs
+        const territoryId = `T${Math.floor(zipIndex / 2) + 1}`; // 1-2 zips per territory
+        const regionId = `R${Math.floor((Math.floor(zipIndex / 2)) / 5) + 1}`; // ~5 territories per region
+        const areaId = `A${Math.floor((Math.floor((Math.floor(zipIndex / 2)) / 5)) / 2) + 1}`; // ~2 regions per area
+
+        const coords = [
+          [minLon, minLat],
+          [maxLon, minLat],
+          [maxLon, maxLat],
+          [minLon, maxLat],
+          [minLon, minLat],
+        ];
+
+        features.push({
+          type: 'Feature',
+          geometry: { type: 'Polygon', coordinates: [coords] },
+          properties: {
+            zip_id: zipId,
+            name: `Demo Zip ${zipId}`,
+            territory_id: territoryId,
+            territory_name: `Territory ${territoryId}`,
+            region_id: regionId,
+            region_name: `Region ${regionId}`,
+            area_id: areaId,
+            area_name: `Area ${areaId}`,
+            population: 20000 + Math.floor(Math.random() * 80000),
+            households: 8000 + Math.floor(Math.random() * 20000),
+            workload_index: Math.round(Math.random() * 100),
+          }
+        });
+        zipIndex++;
+      }
+    }
+
+    const territories = new Set(features.map(f => f.properties.territory_id));
+    const regions = new Set(features.map(f => f.properties.region_id));
+    const areas = new Set(features.map(f => f.properties.area_id));
+
+    const geojson = { type: 'FeatureCollection', features, metadata: {
+      totalTerritories: territories.size,
+      totalRegions: regions.size,
+      totalAreas: areas.size,
+    }};
+
+    // Provide minimal data field config to populate selectors
+    const dataFieldConfigs = {
+      population: { displayName: 'Population', type: 'number', aggregations: ['sum'] },
+      households: { displayName: 'Households', type: 'number', aggregations: ['sum'] },
+      workload_index: { displayName: 'Workload Index', type: 'number', aggregations: ['avg'] }
+    };
+
+    // Also set expected layer configs so naming tooltips work
+    return { geojson, dataFieldConfigs };
   }
 
   updateDataFieldSelectors(dataFieldConfigs) {
