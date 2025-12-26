@@ -1,6 +1,7 @@
 """Graph schemas."""
 
 from collections.abc import Sequence
+from typing import Literal
 
 from pydantic import BaseModel
 
@@ -16,7 +17,7 @@ class Layer(BaseModel):
 class Node(BaseModel):
     """Node."""
 
-    id: int
+    id: int | Literal["default"]
     layer_id: int
     name: str
     color: str
@@ -27,7 +28,7 @@ class Node(BaseModel):
 class PaginatedNodes(BaseModel):
     """Paginated nodes response."""
 
-    nodes: list[Node]
+    nodes: Sequence[Node]
     total: int
     page: int
     page_size: int

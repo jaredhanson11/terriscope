@@ -10,8 +10,7 @@ from src.exceptions import TerriscopeException
 from src.models.graph import LayerModel, NodeModel
 from src.schemas.dtos.graph import BulkUpdateNode, CreateLayer, CreateNode, UpdateNode
 from src.schemas.graph import Layer, Node, PaginatedNodes
-from src.services import ComputationServiceDependency, GraphServiceDependency
-from src.services.performance import benchmark_layer_union, summarize_benchmark
+from src.services import GraphServiceDependency
 
 graph_router = APIRouter(prefix="", tags=["Graph"])
 
@@ -92,7 +91,6 @@ def list_nodes(
     page_size: int = 100,
 ):
     """List nodes filtered by layer_id OR parent_node_id (not both) with pagination."""
-
     # Build filter condition - use either layer_id or parent_node_id, not both
     if layer_id is not None and parent_node_id is not None:
         raise HTTPException(400, "Provide either layer_id or parent_node_id, not both")
@@ -212,34 +210,3 @@ def bulk_update_node(
 def delete_node(node_id: int):
     """Delete node."""
     pass
-
-
-@graph_router.get("/recompute")
-def recompute(db: DatabaseSession, computation_service: ComputationServiceDependency):
-    layer = db.query(LayerModel).order_by(LayerModel.order.desc()).all()[2]
-    if layer:
-        nodes = db.execute(select(NodeModel).filter(NodeModel.layer_id == layer.id)).scalars().all()
-        for i, node in enumerate(nodes):
-            import logging
-
-            logging.getLogger(__name__).info("%i", i)
-            computation_service.compute_geometry(db, node)
-
-
-@graph_router.get("/benchmark/{layer_id}")
-def benchmark_recompute(db: DatabaseSession, computation_service: ComputationServiceDependency, layer_id: int):
-    return summarize_benchmark(benchmark_layer_union(db, layer_id))
-
-
-@graph_router.post("/layers/{layer_id}/bulk-recompute")
-def bulk_recompute_layer(
-    layer_id: int,
-    db: DatabaseSession,
-    computation_service: ComputationServiceDependency,
-    force: bool = False,
-):
-    """Bulk recompute geometries for all parent nodes in a layer.
-
-    Set `force=true` to ignore input cache hashes and recompute all parents regardless of change state.
-    """
-    return computation_service.bulk_recompute_layer(db, layer_id=layer_id, force=force)

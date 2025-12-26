@@ -22,28 +22,6 @@ class GraphService(BaseService):
         new_layer = LayerModel(name=layer_data.name, order=child_layer.order + 1 if child_layer else 0)
         self.db.add(new_layer)
         self.db.flush()
-
-        # Create default node for new layer
-        default_node = NodeModel(
-            layer_id=new_layer.id,
-            name="__default__",
-            color="#fff",
-            data=None,
-            geom=None,
-            parent_node_id=None,
-        )
-        self.db.add(default_node)
-        self.db.flush()
-
-        # Update all nodes in the child layer to point to this new default node as parent
-        child_nodes = (
-            self.db.execute(select(NodeModel).filter(NodeModel.layer_id == child_layer.id)).scalars().all()
-            if child_layer
-            else list[NodeModel]([])
-        )
-        for child_node in child_nodes:
-            child_node.parent_node_id = default_node.id
-        self.db.flush()
         return new_layer
 
     def create_node(self, node_data: CreateNode) -> NodeModel:
@@ -74,6 +52,10 @@ class GraphService(BaseService):
             parent_node_id=node_data.parent_node_id,
             geom=None,
             data=None,
+            data_cache_key="",
+            data_inputs_cache_key="",
+            geom_cache_key="",
+            geom_inputs_cache_key="",
         )
         self.db.add(new_node)
         self.db.flush()
@@ -101,7 +83,11 @@ class GraphService(BaseService):
         self.db.flush()
         return node
 
-    def _propose_node_parent(self, current_layer: LayerModel, proposed_parent_node_id: int) -> Literal[True]:
+    def _propose_node_parent(
+        self,
+        current_layer: LayerModel,
+        proposed_parent_node_id: int,
+    ) -> Literal[True]:
         """Raise exception if node parent invalid.
 
         Raises:
@@ -125,6 +111,6 @@ class GraphService(BaseService):
         if parent_layer.order != current_layer.order + 1:
             raise TerriscopeException(
                 403,
-                f"Can't create node with parent: {proposed_parent_node_id}. Parent layer order {parent_layer.order} needs to be one level higher than current layer order {layer.order}.",
+                f"Can't create node with parent: {proposed_parent_node_id}. Parent layer order {parent_layer.order} needs to be one level higher than current layer order {current_layer.order}.",
             )
         return True

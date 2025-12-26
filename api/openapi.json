@@ -118,21 +118,8 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "example": {
-                  "message": "Invalid request",
-                  "details": [
-                    {
-                      "loc": [
-                        "body",
-                        "field"
-                      ],
-                      "msg": "field required",
-                      "type": "missing"
-                    }
-                  ]
-                },
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -172,21 +159,8 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "example": {
-                  "message": "Invalid request",
-                  "details": [
-                    {
-                      "loc": [
-                        "body",
-                        "field"
-                      ],
-                      "msg": "field required",
-                      "type": "missing"
-                    }
-                  ]
-                },
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -225,21 +199,8 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "example": {
-                  "message": "Invalid request",
-                  "details": [
-                    {
-                      "loc": [
-                        "body",
-                        "field"
-                      ],
-                      "msg": "field required",
-                      "type": "missing"
-                    }
-                  ]
-                },
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -320,21 +281,8 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "example": {
-                  "message": "Invalid request",
-                  "details": [
-                    {
-                      "loc": [
-                        "body",
-                        "field"
-                      ],
-                      "msg": "field required",
-                      "type": "missing"
-                    }
-                  ]
-                },
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -374,21 +322,8 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "example": {
-                  "message": "Invalid request",
-                  "details": [
-                    {
-                      "loc": [
-                        "body",
-                        "field"
-                      ],
-                      "msg": "field required",
-                      "type": "missing"
-                    }
-                  ]
-                },
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -436,21 +371,8 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "example": {
-                  "message": "Invalid request",
-                  "details": [
-                    {
-                      "loc": [
-                        "body",
-                        "field"
-                      ],
-                      "msg": "field required",
-                      "type": "missing"
-                    }
-                  ]
-                },
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -488,21 +410,8 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "example": {
-                  "message": "Invalid request",
-                  "details": [
-                    {
-                      "loc": [
-                        "body",
-                        "field"
-                      ],
-                      "msg": "field required",
-                      "type": "missing"
-                    }
-                  ]
-                },
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -545,157 +454,8 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "example": {
-                  "message": "Invalid request",
-                  "details": [
-                    {
-                      "loc": [
-                        "body",
-                        "field"
-                      ],
-                      "msg": "field required",
-                      "type": "missing"
-                    }
-                  ]
-                },
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/recompute": {
-      "get": {
-        "tags": [
-          "Graph"
-        ],
-        "summary": "Recompute",
-        "operationId": "recompute_recompute_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/benchmark/{layer_id}": {
-      "get": {
-        "tags": [
-          "Graph"
-        ],
-        "summary": "Benchmark Recompute",
-        "operationId": "benchmark_recompute_benchmark__layer_id__get",
-        "parameters": [
-          {
-            "name": "layer_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Layer Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "example": {
-                  "message": "Invalid request",
-                  "details": [
-                    {
-                      "loc": [
-                        "body",
-                        "field"
-                      ],
-                      "msg": "field required",
-                      "type": "missing"
-                    }
-                  ]
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/layers/{layer_id}/bulk-recompute": {
-      "post": {
-        "tags": [
-          "Graph"
-        ],
-        "summary": "Bulk Recompute Layer",
-        "description": "Bulk recompute geometries for all parent nodes in a layer.\n\nSet `force=true` to ignore input cache hashes and recompute all parents regardless of change state.",
-        "operationId": "bulk_recompute_layer_layers__layer_id__bulk_recompute_post",
-        "parameters": [
-          {
-            "name": "layer_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Layer Id"
-            }
-          },
-          {
-            "name": "force",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "boolean",
-              "default": false,
-              "title": "Force"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "example": {
-                  "message": "Invalid request",
-                  "details": [
-                    {
-                      "loc": [
-                        "body",
-                        "field"
-                      ],
-                      "msg": "field required",
-                      "type": "missing"
-                    }
-                  ]
-                },
-                "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -762,21 +522,8 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "example": {
-                  "message": "Invalid request",
-                  "details": [
-                    {
-                      "loc": [
-                        "body",
-                        "field"
-                      ],
-                      "msg": "field required",
-                      "type": "missing"
-                    }
-                  ]
-                },
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -816,21 +563,8 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "example": {
-                  "message": "Invalid request",
-                  "details": [
-                    {
-                      "loc": [
-                        "body",
-                        "field"
-                      ],
-                      "msg": "field required",
-                      "type": "missing"
-                    }
-                  ]
-                },
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -897,21 +631,8 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "example": {
-                  "message": "Invalid request",
-                  "details": [
-                    {
-                      "loc": [
-                        "body",
-                        "field"
-                      ],
-                      "msg": "field required",
-                      "type": "missing"
-                    }
-                  ]
-                },
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -978,21 +699,8 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "example": {
-                  "message": "Invalid request",
-                  "details": [
-                    {
-                      "loc": [
-                        "body",
-                        "field"
-                      ],
-                      "msg": "field required",
-                      "type": "missing"
-                    }
-                  ]
-                },
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -1049,21 +757,8 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "example": {
-                  "message": "Invalid request",
-                  "details": [
-                    {
-                      "loc": [
-                        "body",
-                        "field"
-                      ],
-                      "msg": "field required",
-                      "type": "missing"
-                    }
-                  ]
-                },
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
@@ -1103,21 +798,8 @@
             "description": "Validation Error",
             "content": {
               "application/json": {
-                "example": {
-                  "message": "Invalid request",
-                  "details": [
-                    {
-                      "loc": [
-                        "body",
-                        "field"
-                      ],
-                      "msg": "field required",
-                      "type": "missing"
-                    }
-                  ]
-                },
                 "schema": {
-                  "$ref": "#/components/schemas/ErrorResponse"
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }

@@ -12,26 +12,7 @@ logger = logging.getLogger(__name__)
 
 def openapi_generator(app: FastAPI) -> dict[str, Any]:
     """Generate the openapi.json schema on startup ."""
-    openapi_schema = app.openapi()
-    for path in openapi_schema["paths"]:
-        for method in openapi_schema["paths"][path]:
-            if openapi_schema["paths"][path][method]["responses"].get("422"):
-                openapi_schema["paths"][path][method]["responses"]["422"] = {
-                    "description": "Validation Error",
-                    "content": {
-                        "application/json": {
-                            "example": {
-                                "message": "Invalid request",
-                                "details": [{"loc": ["body", "field"], "msg": "field required", "type": "missing"}],
-                            },
-                            "schema": {"$ref": "#/components/schemas/ErrorResponse"},
-                        }
-                    },
-                }
-
-    app.openapi_schema = openapi_schema
-
-    return app.openapi_schema
+    return app.openapi()
 
 
 def save_openapi(app: FastAPI) -> None:
