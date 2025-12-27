@@ -2,11 +2,13 @@ import type { ReactNode } from "react"
 
 import { ComponentExample } from "@/components/component-example"
 import HomePage from "@/features/home/page"
+import InitializePage from "@/features/initialize/page"
 
 import { VersionsPage } from "./common/versions.page"
 
 const PageName = {
   Versions: "VersionsPage",
+  Initialize: "InitializePage",
   Example: "ExamplePage",
   Home: "HomePage",
 } as const
@@ -45,6 +47,10 @@ const Routes: Record<PageName, Route> = {
   [PageName.Home]: {
     route: "/",
     component: <HomePage />,
+  },
+  [PageName.Initialize]: {
+    route: "/new",
+    component: <InitializePage />,
   },
   [PageName.Example]: {
     route: "/example",

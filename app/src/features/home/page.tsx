@@ -11,6 +11,7 @@ import {
 } from "@tabler/icons-react"
 import * as React from "react"
 
+import { AppRoutes } from "@/app/routes"
 import Logo from "@/assets/logoipsum.svg?react"
 import { PageLayout } from "@/components/layout"
 import { Button } from "@/components/ui/button"
@@ -168,9 +169,11 @@ export default function HomePage() {
                   <IconSettings className="h-4 w-4" />
                   <span>Map Settings</span>
                 </DropdownMenuItem>
-                <DropdownMenuItem>
-                  <IconPlus className="h-4 w-4" />
-                  <span>New Map</span>
+                <DropdownMenuItem asChild>
+                  <a href={AppRoutes.getRoute("InitializePage")}>
+                    <IconPlus className="h-4 w-4" />
+                    <span>New Map</span>
+                  </a>
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>

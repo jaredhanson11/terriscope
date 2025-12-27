@@ -2,6 +2,8 @@ import * as React from "react"
 
 import { cn } from "@/lib/utils"
 
+import { Sidebar } from "./ui/sidebar"
+
 interface PageLayoutProps {
   children: React.ReactNode
   className?: string
