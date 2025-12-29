@@ -361,6 +361,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/maps": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Map
+         * @description Create map.
+         */
+        post: operations["create_map_maps_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -401,6 +421,21 @@ export interface components {
             /** Layer Id */
             layer_id: number;
         };
+        /**
+         * DataFieldSetup
+         * @description DataFieldSetup.
+         */
+        DataFieldSetup: {
+            /** Name */
+            name: string;
+            /** Header */
+            header: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "text" | "number";
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -416,6 +451,40 @@ export interface components {
              * Format: date-time
              */
             timenow: string;
+        };
+        /**
+         * ImportMap
+         * @description ImportMap.
+         */
+        ImportMap: {
+            /** Name */
+            name: string;
+            /** Layers */
+            layers: components["schemas"]["LayerSetup"][];
+            /** Data Fields */
+            data_fields: components["schemas"]["DataFieldSetup"][];
+            /** Values */
+            values: string[][];
+            /** Headers */
+            headers: string[];
+        };
+        /**
+         * ImportMapResponse
+         * @description ImportMapResponse.
+         */
+        ImportMapResponse: {
+            /** Map Id */
+            map_id: number;
+        };
+        /**
+         * LayerSetup
+         * @description LayerSetup.
+         */
+        LayerSetup: {
+            /** Name */
+            name: string;
+            /** Header */
+            header: string;
         };
         /**
          * UpdateNode
@@ -996,6 +1065,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_map_maps_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ImportMap"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportMapResponse"];
                 };
             };
             /** @description Validation Error */

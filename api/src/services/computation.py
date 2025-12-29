@@ -70,7 +70,7 @@ class ComputationService(BaseService):
                 node.geom = new_geom
         return node.geom
 
-    def bulk_recompute_layer(self, db: Session, layer_id: int, force: bool = False) -> dict[str, object]:
+    def bulk_recompute_layer(self, layer_id: int, force: bool = False) -> dict[str, object]:
         """Bulk recompute geometries for all parent nodes in a layer.
 
         Performs set-based signature hashing to detect which parents need recompute unless
@@ -100,7 +100,7 @@ class ComputationService(BaseService):
             JOIN nodes p ON p.id = cg.pid
             """
         )
-        rows = db.execute(grouping_sql, {"layer_id": layer_id}).mappings().all()
+        rows = self.db.execute(grouping_sql, {"layer_id": layer_id}).mappings().all()
         grouping_ms = (time.perf_counter() - start) * 1000.0
 
         if force:
@@ -162,9 +162,11 @@ class ComputationService(BaseService):
             SELECT COUNT(*) AS updated_count FROM upd;
             """
         )
-        updated_count = db.execute(union_update_sql, {"changed_ids": changed_parent_ids, "force": force}).scalar() or 0
+        updated_count = (
+            self.db.execute(union_update_sql, {"changed_ids": changed_parent_ids, "force": force}).scalar() or 0
+        )
         if updated_count:
-            db.commit()
+            self.db.flush()
         union_ms = (time.perf_counter() - union_start) * 1000.0
         total_ms = (time.perf_counter() - start) * 1000.0
 

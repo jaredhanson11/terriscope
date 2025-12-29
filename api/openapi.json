@@ -806,6 +806,48 @@
           }
         }
       }
+    },
+    "/maps": {
+      "post": {
+        "tags": [
+          "Maps"
+        ],
+        "summary": "Create Map",
+        "description": "Create map.\n\nTOODS:\n    - Return errors for zip codes we don't have data for\n    - Validate no duplicate layer names\n    - Validate no duplicate parents and raise error if so\n    - Fix all typing issues\n    - Recompute after loading zip codes\n    - Add data fields",
+        "operationId": "create_map_maps_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ImportMap"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportMapResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -896,6 +938,34 @@
         "title": "CreateNode",
         "description": "CreateNode."
       },
+      "DataFieldSetup": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "header": {
+            "type": "string",
+            "title": "Header"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "text",
+              "number"
+            ],
+            "title": "Type"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "header",
+          "type"
+        ],
+        "title": "DataFieldSetup",
+        "description": "DataFieldSetup."
+      },
       "HTTPValidationError": {
         "properties": {
           "detail": {
@@ -923,6 +993,101 @@
         ],
         "title": "HeartbeatResponseDTO",
         "description": "Heartbeat response DTO."
+      },
+      "ImportMap": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "layers": {
+            "items": {
+              "$ref": "#/components/schemas/LayerSetup"
+            },
+            "type": "array",
+            "title": "Layers"
+          },
+          "data_fields": {
+            "items": {
+              "$ref": "#/components/schemas/DataFieldSetup"
+            },
+            "type": "array",
+            "title": "Data Fields"
+          },
+          "values": {
+            "items": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Values"
+          },
+          "headers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Headers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "layers",
+          "data_fields",
+          "values",
+          "headers"
+        ],
+        "title": "ImportMap",
+        "description": "ImportMap."
+      },
+      "ImportMapResponse": {
+        "properties": {
+          "map_id": {
+            "type": "integer",
+            "title": "Map Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "map_id"
+        ],
+        "title": "ImportMapResponse",
+        "description": "ImportMapResponse."
+      },
+      "LayerSetup": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "header": {
+            "type": "string",
+            "title": "Header"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name",
+          "header"
+        ],
+        "title": "LayerSetup",
+        "description": "LayerSetup."
       },
       "UpdateNode": {
         "properties": {

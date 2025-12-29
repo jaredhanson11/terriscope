@@ -34,8 +34,8 @@ export default function InitializePage() {
       name: "",
       headers: [] as HeadersData,
       values: [] as ValuesData,
-      layerFields: [] as LayerFields | [],
-      dataFields: [] as DataFields,
+      layers: [] as LayerFields | [],
+      data_fields: [] as DataFields,
     },
     onSubmit: () => undefined,
   })
@@ -94,7 +94,7 @@ export default function InitializePage() {
             formik
               .setValues({
                 ...formik.values,
-                layerFields,
+                layers: layerFields,
               })
               .then(() => {
                 setActiveStepIdx(2)
@@ -111,7 +111,7 @@ export default function InitializePage() {
       component: (
         <DataStep
           headers={formik.values.headers}
-          layerHeaders={formik.values.layerFields.map((l) => l.header)}
+          layerHeaders={formik.values.layers.map((l) => l.header)}
           onBack={() => {
             setActiveStepIdx(1)
           }}
@@ -119,7 +119,7 @@ export default function InitializePage() {
             formik
               .setValues({
                 ...formik.values,
-                dataFields,
+                data_fields: dataFields,
               })
               .then(() => {
                 setActiveStepIdx(3)
@@ -138,8 +138,8 @@ export default function InitializePage() {
           name={formik.values.name}
           headers={formik.values.headers}
           values={formik.values.values}
-          layerFields={formik.values.layerFields as LayerFields}
-          dataFields={formik.values.dataFields}
+          layerFields={formik.values.layers as LayerFields}
+          dataFields={formik.values.data_fields}
           onNameChange={(name) => {
             formik.setFieldValue("name", name).catch(() => undefined)
           }}
@@ -148,7 +148,7 @@ export default function InitializePage() {
           }}
           onComplete={() => {
             // TODO: Submit the form and create the project
-            console.log("Creating project:", formik.values)
+            console.log(JSON.stringify(formik.values, null, 2))
             formik.handleSubmit()
           }}
         />

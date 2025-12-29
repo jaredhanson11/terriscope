@@ -21,6 +21,8 @@ scalar-fastapi = "^1.4.4"
 geoalchemy2 = "^0.18.1"
 shapely = "^2.1.2"
 asgi-correlation-id = "^4.3.4"
+numpy = "^2.4.0"
+pandas = "^2.3.3"
 
 [tool.poetry.group.dev.dependencies]
 deptry = "^0.24.0"
@@ -32,6 +34,7 @@ typing-extensions = "^4.15.0"
 
 [tool.poetry.group.migrations.dependencies]
 alembic = "^1.17.2"
+geopandas = "^1.1.2"
 
 [tool.poetry.group.debugger.dependencies]
 debugpy = "^1.8.17"
