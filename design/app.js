@@ -206,11 +206,14 @@ class AlignstarDemo {
 
   loadMapConfiguration() {
     const params = new URLSearchParams(window.location.search);
-    const forceDemo = params.get('demo') === '1' || params.get('demo') === 'true';
-    const reset = params.get('reset') === '1' || params.get('reset') === 'true';
+    const forceDemo =
+      params.get("demo") === "1" || params.get("demo") === "true";
+    const reset = params.get("reset") === "1" || params.get("reset") === "true";
 
     if (reset) {
-      try { localStorage.removeItem('alignstar_map'); } catch {}
+      try {
+        localStorage.removeItem("alignstar_map");
+      } catch {}
     }
 
     // Check if there's a saved map configuration from the create wizard
@@ -236,7 +239,9 @@ class AlignstarDemo {
       const demo = this.generateDemoDemoGeoJSON();
       this.updateDataFieldSelectors(demo.dataFieldConfigs);
       this.loadGeoJSONData(demo.geojson);
-      this.updateStatus('Loaded demo map (large zip regions). Add ?demo=1 to URL to force demo, ?reset=1 to clear saved map.');
+      this.updateStatus(
+        "Loaded demo map (large zip regions). Add ?demo=1 to URL to force demo, ?reset=1 to clear saved map."
+      );
     }
   }
 
@@ -262,8 +267,10 @@ class AlignstarDemo {
 
         const zipId = String(90000 + zipIndex); // distinguish demo IDs
         const territoryId = `T${Math.floor(zipIndex / 2) + 1}`; // 1-2 zips per territory
-        const regionId = `R${Math.floor((Math.floor(zipIndex / 2)) / 5) + 1}`; // ~5 territories per region
-        const areaId = `A${Math.floor((Math.floor((Math.floor(zipIndex / 2)) / 5)) / 2) + 1}`; // ~2 regions per area
+        const regionId = `R${Math.floor(Math.floor(zipIndex / 2) / 5) + 1}`; // ~5 territories per region
+        const areaId = `A${
+          Math.floor(Math.floor(Math.floor(zipIndex / 2) / 5) / 2) + 1
+        }`; // ~2 regions per area
 
         const coords = [
           [minLon, minLat],
@@ -274,8 +281,8 @@ class AlignstarDemo {
         ];
 
         features.push({
-          type: 'Feature',
-          geometry: { type: 'Polygon', coordinates: [coords] },
+          type: "Feature",
+          geometry: { type: "Polygon", coordinates: [coords] },
           properties: {
             zip_id: zipId,
             name: `Demo Zip ${zipId}`,
@@ -288,27 +295,43 @@ class AlignstarDemo {
             population: 20000 + Math.floor(Math.random() * 80000),
             households: 8000 + Math.floor(Math.random() * 20000),
             workload_index: Math.round(Math.random() * 100),
-          }
+          },
         });
         zipIndex++;
       }
     }
 
-    const territories = new Set(features.map(f => f.properties.territory_id));
-    const regions = new Set(features.map(f => f.properties.region_id));
-    const areas = new Set(features.map(f => f.properties.area_id));
+    const territories = new Set(features.map((f) => f.properties.territory_id));
+    const regions = new Set(features.map((f) => f.properties.region_id));
+    const areas = new Set(features.map((f) => f.properties.area_id));
 
-    const geojson = { type: 'FeatureCollection', features, metadata: {
-      totalTerritories: territories.size,
-      totalRegions: regions.size,
-      totalAreas: areas.size,
-    }};
+    const geojson = {
+      type: "FeatureCollection",
+      features,
+      metadata: {
+        totalTerritories: territories.size,
+        totalRegions: regions.size,
+        totalAreas: areas.size,
+      },
+    };
 
     // Provide minimal data field config to populate selectors
     const dataFieldConfigs = {
-      population: { displayName: 'Population', type: 'number', aggregations: ['sum'] },
-      households: { displayName: 'Households', type: 'number', aggregations: ['sum'] },
-      workload_index: { displayName: 'Workload Index', type: 'number', aggregations: ['avg'] }
+      population: {
+        displayName: "Population",
+        type: "number",
+        aggregations: ["sum"],
+      },
+      households: {
+        displayName: "Households",
+        type: "number",
+        aggregations: ["sum"],
+      },
+      workload_index: {
+        displayName: "Workload Index",
+        type: "number",
+        aggregations: ["avg"],
+      },
     };
 
     // Also set expected layer configs so naming tooltips work
