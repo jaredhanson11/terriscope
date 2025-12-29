@@ -13,12 +13,18 @@ import {
   SidebarHeader,
 } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
+import { useImportMapMutation } from "@/queries/mutations"
 
 import DataStep from "./components/data-step"
 import ImportStep from "./components/import-step"
 import LayerStep from "./components/layer-step"
 import ReviewStep from "./components/review-step"
-import type { DataFields, HeadersData, LayerFields, ValuesData } from "./types"
+import type {
+  DataFields,
+  HeadersData,
+  LayerFields,
+  ValuesData,
+} from "./initialize"
 
 interface Step {
   id: string
@@ -29,15 +35,20 @@ interface Step {
 
 export default function InitializePage() {
   const [activeStepIdx, setActiveStepIdx] = React.useState<number>(0)
+  const importMutation = useImportMapMutation()
   const formik = useFormik({
     initialValues: {
       name: "",
       headers: [] as HeadersData,
       values: [] as ValuesData,
-      layers: [] as LayerFields | [],
+      layers: [] as LayerFields,
       data_fields: [] as DataFields,
     },
-    onSubmit: () => undefined,
+    onSubmit: () => {
+      importMutation.mutate({
+        import_data: formik.values,
+      })
+    },
   })
 
   const STEPS: Step[] = [
@@ -48,16 +59,9 @@ export default function InitializePage() {
       component: (
         <ImportStep
           onComplete={(headers, values) => {
-            formik
-              .setValues({
-                ...formik.values,
-                headers,
-                values,
-              })
-              .then(() => {
-                setActiveStepIdx(1)
-              })
-              .catch(() => undefined) // TODO: handle random errors with toast
+            void formik.setFieldValue("headers", headers)
+            void formik.setFieldValue("values", values)
+            setActiveStepIdx(1)
           }}
         />
       ),
@@ -73,33 +77,15 @@ export default function InitializePage() {
             setActiveStepIdx(0)
           }}
           onComplete={(layers) => {
-            // Convert LayerConfig[] to LayerFields format
             const layerFields: LayerFields = layers
               .filter((l) => l.enabled)
-              .map((layer, index) => {
-                if (index === 0) {
-                  return {
-                    name: layer.name,
-                    header: layer.idField,
-                    parentHeader: undefined,
-                  }
-                }
-                return {
-                  name: layer.name,
-                  header: layer.idField,
-                  parentHeader: layers[index - 1].idField,
-                }
-              }) as LayerFields
+              .map((layer) => ({
+                name: layer.name,
+                header: layer.idField,
+              }))
 
-            formik
-              .setValues({
-                ...formik.values,
-                layers: layerFields,
-              })
-              .then(() => {
-                setActiveStepIdx(2)
-              })
-              .catch(() => undefined)
+            void formik.setFieldValue("layers", layerFields)
+            setActiveStepIdx(2)
           }}
         />
       ),
@@ -116,15 +102,8 @@ export default function InitializePage() {
             setActiveStepIdx(1)
           }}
           onComplete={(dataFields) => {
-            formik
-              .setValues({
-                ...formik.values,
-                data_fields: dataFields,
-              })
-              .then(() => {
-                setActiveStepIdx(3)
-              })
-              .catch(() => undefined)
+            void formik.setFieldValue("data_fields", dataFields)
+            setActiveStepIdx(3)
           }}
         />
       ),
@@ -138,17 +117,15 @@ export default function InitializePage() {
           name={formik.values.name}
           headers={formik.values.headers}
           values={formik.values.values}
-          layerFields={formik.values.layers as LayerFields}
+          layerFields={formik.values.layers}
           dataFields={formik.values.data_fields}
           onNameChange={(name) => {
-            formik.setFieldValue("name", name).catch(() => undefined)
+            void formik.setFieldValue("name", name)
           }}
           onBack={() => {
             setActiveStepIdx(2)
           }}
           onComplete={() => {
-            // TODO: Submit the form and create the project
-            console.log(JSON.stringify(formik.values, null, 2))
             formik.handleSubmit()
           }}
         />

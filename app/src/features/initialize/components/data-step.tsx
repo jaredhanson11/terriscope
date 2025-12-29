@@ -20,7 +20,7 @@ import type {
   NumberDataField,
   NumberDataFieldOption,
   TextDataField,
-} from "@/features/initialize/types"
+} from "@/features/initialize/initialize"
 import { cn } from "@/lib/utils"
 
 interface DataStepProps {
@@ -156,9 +156,7 @@ export default function DataStep({
       const next = new Map(prev)
       const field = next.get(key)
       if (field && field.type === "number") {
-        const newOptions = new Set(
-          Array.from(field.options as Set<NumberDataFieldOption>),
-        )
+        const newOptions = new Set(Array.from(field.options))
         if (newOptions.has(option)) {
           newOptions.delete(option)
         } else {
@@ -235,9 +233,7 @@ export default function DataStep({
                               config.options instanceof Set &&
                               config.options.size > 0 && (
                                 <div className="text-muted-foreground text-xs">
-                                  {Array.from(
-                                    config.options as Set<NumberDataFieldOption>,
-                                  ).join(", ")}
+                                  {Array.from(config.options).join(", ")}
                                 </div>
                               )}
                           </div>
@@ -391,9 +387,7 @@ export default function DataStep({
                           {AGGREGATION_OPTIONS.map((option) => {
                             const isChecked =
                               selectedConfig.options instanceof Set &&
-                              (
-                                selectedConfig.options as Set<NumberDataFieldOption>
-                              ).has(option.value)
+                              selectedConfig.options.has(option.value)
                             return (
                               <div
                                 key={option.value}

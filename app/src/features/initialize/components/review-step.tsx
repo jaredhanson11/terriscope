@@ -23,7 +23,7 @@ import type {
   LayerFields,
   NumberDataFieldOption,
   ValuesData,
-} from "@/features/initialize/types"
+} from "@/features/initialize/initialize"
 
 interface ReviewStepProps {
   name: string

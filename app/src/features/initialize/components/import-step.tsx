@@ -12,7 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import type { CellData } from "@/features/initialize/types"
+import type { CellData } from "@/features/initialize/initialize"
 import { cn } from "@/lib/utils"
 
 const MAX_FILE_SIZE_MB = 50
