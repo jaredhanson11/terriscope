@@ -15,7 +15,7 @@ from src.services import GraphServiceDependency
 graph_router = APIRouter(prefix="", tags=["Graph"])
 
 
-@graph_router.post("/layers")
+@graph_router.post("/layers", response_model=Layer)
 def create_layer(
     layer_data: CreateLayer,
     graph_service: GraphServiceDependency,
@@ -28,8 +28,8 @@ def create_layer(
     return Layer(id=new_layer.id, name=new_layer.name, order=new_layer.order)
 
 
-@graph_router.get("/layers")
-def list_layers(db: DatabaseSession):
+@graph_router.get("/layers", response_model=list[Layer])
+def list_layers(db: DatabaseSession) -> list[Layer]:
     """List layers."""
     return [
         Layer(

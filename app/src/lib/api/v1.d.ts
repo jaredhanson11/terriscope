@@ -485,6 +485,18 @@ export interface components {
             map_id: number;
         };
         /**
+         * Layer
+         * @description Layer.
+         */
+        Layer: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Order */
+            order: number;
+        };
+        /**
          * LayerSetup
          * @description LayerSetup.
          */
@@ -607,7 +619,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Layer"][];
                 };
             };
         };
@@ -631,7 +643,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["Layer"];
                 };
             };
             /** @description Validation Error */

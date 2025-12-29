@@ -82,7 +82,13 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Layer"
+                  },
+                  "type": "array",
+                  "title": "Response List Layers Layers Get"
+                }
               }
             }
           }
@@ -110,7 +116,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Layer"
+                }
               }
             }
           },
@@ -1069,6 +1077,30 @@
         ],
         "title": "ImportMapResponse",
         "description": "ImportMapResponse."
+      },
+      "Layer": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "order": {
+            "type": "integer",
+            "title": "Order"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "order"
+        ],
+        "title": "Layer",
+        "description": "Layer."
       },
       "LayerSetup": {
         "properties": {

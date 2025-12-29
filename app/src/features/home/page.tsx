@@ -3,12 +3,11 @@ import {
   IconChevronDown,
   IconHome,
   IconInfoCircle,
-  IconMoon,
   IconPlus,
   IconSettings,
-  IconSun,
   IconTrash,
 } from "@tabler/icons-react"
+import { useQuery } from "@tanstack/react-query"
 import * as React from "react"
 
 import { AppRoutes } from "@/app/routes"
@@ -48,6 +47,9 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { Map } from "@/features/home/components/map"
+import { queries } from "@/queries/queries"
+
+import type { BaseMapName } from "./components/map/config"
 
 // Placeholder data - will be replaced with real data from API
 const PROJECTS = [
@@ -73,13 +75,6 @@ const PROJECTS = [
   },
 ]
 
-const LAYERS = [
-  { id: "zip_codes", name: "Zip Codes", visible: true },
-  { id: "territories", name: "Territories", visible: true },
-  { id: "regions", name: "Regions", visible: true },
-  { id: "areas", name: "Areas", visible: false },
-]
-
 const BASE_MAPS = [
   { id: "osm", name: "OpenStreetMap" },
   { id: "satellite", name: "Satellite" },
@@ -88,38 +83,41 @@ const BASE_MAPS = [
   { id: "none", name: "None" },
 ]
 
-const OVERLAYS = [
-  { id: "traffic", name: "Traffic" },
-  { id: "transit", name: "Transit Lines" },
-  { id: "bicycling", name: "Bike Paths" },
-  { id: "demographics", name: "Demographics" },
-  { id: "weather", name: "Weather" },
-]
+// const OVERLAYS = [
+//   { id: "traffic", name: "Traffic" },
+//   { id: "transit", name: "Transit Lines" },
+//   { id: "bicycling", name: "Bike Paths" },
+//   { id: "demographics", name: "Demographics" },
+//   { id: "weather", name: "Weather" },
+// ]
 
 export default function HomePage() {
   const currentProject = PROJECTS[0]
-  const [isDark, setIsDark] = React.useState(
-    document.documentElement.classList.contains("dark"),
+  const layersQuery = useQuery(queries.listLayers())
+  const [baseMap, setBaseMap] = React.useState<BaseMapName>("osm")
+  const [visibleLayers, setVisibleLayers] = React.useState<number[]>([])
+
+  const layers = React.useMemo(
+    () =>
+      layersQuery.data
+        ? layersQuery.data.map((_layer) => ({
+            id: _layer.id,
+            showFill: visibleLayers.includes(_layer.id),
+            showOutline: visibleLayers.includes(_layer.id),
+            showLabel: false,
+          }))
+        : [],
+    [layersQuery.data, visibleLayers],
   )
-  const [baseMap, setBaseMap] = React.useState<
-    "osm" | "satellite" | "terrain" | "dark" | "none"
-  >("osm")
-  const [visibleLayers, setVisibleLayers] = React.useState<
-    Record<string, boolean>
-  >(LAYERS.reduce((acc, layer) => ({ ...acc, [layer.id]: layer.visible }), {}))
 
-  const toggleTheme = () => {
-    const newTheme = !isDark
-    setIsDark(newTheme)
-    if (newTheme) {
-      document.documentElement.classList.add("dark")
-    } else {
-      document.documentElement.classList.remove("dark")
-    }
-  }
-
-  const toggleLayerVisibility = (layerId: string) => {
-    setVisibleLayers((prev) => ({ ...prev, [layerId]: !prev[layerId] }))
+  const toggleLayerVisibility = (layerId: number) => {
+    setVisibleLayers((prev) => {
+      if (prev.includes(layerId)) {
+        return prev.filter((id) => id !== layerId)
+      } else {
+        return [...prev, layerId]
+      }
+    })
   }
 
   return (
@@ -212,11 +210,13 @@ export default function HomePage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    {LAYERS.map((layer) => (
-                      <SelectItem key={layer.id} value={layer.id}>
-                        {layer.name}
-                      </SelectItem>
-                    ))}
+                    {layersQuery.data
+                      ? layersQuery.data.map((layer) => (
+                          <SelectItem key={layer.id} value={layer.id}>
+                            {layer.name}
+                          </SelectItem>
+                        ))
+                      : undefined}
                   </SelectContent>
                 </Select>
               </SidebarGroupContent>
@@ -415,43 +415,32 @@ export default function HomePage() {
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <div className="space-y-2">
-                  {LAYERS.map((layer) => (
-                    <label key={layer.id} className="flex items-center gap-2">
-                      <input
-                        type="checkbox"
-                        checked={visibleLayers[layer.id]}
-                        onChange={() => {
-                          toggleLayerVisibility(layer.id)
-                        }}
-                        className="rounded border-input"
-                      />
-                      <span className="text-sm font-medium">{layer.name}</span>
-                    </label>
-                  ))}
+                  {layersQuery.data
+                    ? layersQuery.data.map((layer) => (
+                        <label
+                          key={layer.id}
+                          className="flex items-center gap-2"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={visibleLayers.includes(layer.id)}
+                            onChange={() => {
+                              toggleLayerVisibility(layer.id)
+                            }}
+                            className="rounded border-input"
+                          />
+                          <span className="text-sm font-medium">
+                            {layer.name}
+                          </span>
+                        </label>
+                      ))
+                    : undefined}
                 </div>
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
 
-          <SidebarFooter className="border-border border-t p-4">
-            <Button
-              variant="outline"
-              className="w-full justify-start"
-              onClick={toggleTheme}
-            >
-              {isDark ? (
-                <>
-                  <IconSun className="h-4 w-4" />
-                  <span>Light Mode</span>
-                </>
-              ) : (
-                <>
-                  <IconMoon className="h-4 w-4" />
-                  <span>Dark Mode</span>
-                </>
-              )}
-            </Button>
-          </SidebarFooter>
+          <SidebarFooter className="border-border border-t p-4"></SidebarFooter>
         </Sidebar>
       </PageLayout.SideNav>
 
@@ -463,14 +452,7 @@ export default function HomePage() {
       </PageLayout.TopNav>
 
       <PageLayout.FullScreenBody>
-        <Map
-          baseMap={{ type: baseMap }}
-          layers={LAYERS.map((layer) => ({
-            ...layer,
-            visible: visibleLayers[layer.id],
-            mvtUrl: `/api/mvt/${layer.id}/{z}/{x}/{y}`,
-          }))}
-        />
+        <Map baseMap={baseMap} layers={layers} />
       </PageLayout.FullScreenBody>
     </PageLayout>
   )
