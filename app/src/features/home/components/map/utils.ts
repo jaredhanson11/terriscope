@@ -63,62 +63,67 @@ export function updateLayers(
     const labelLayerId = `layer-${id.toString()}-label`
     const sourceId = `layer-${id.toString()}`
 
-    // Fill layer - create once, then toggle visibility
-    if (!map.getLayer(fillLayerId)) {
-      map.addLayer({
-        id: fillLayerId,
-        type: "fill",
-        source: sourceId,
-        "source-layer": "nodes",
-        paint: {
-          "fill-color": "#888888",
-          "fill-opacity": 0.5,
+    // Fill layer
+    const fillLayerExists = map.getLayer(fillLayerId)
+    if (showFill && !fillLayerExists) {
+      map.addLayer(
+        {
+          id: fillLayerId,
+          type: "fill",
+          source: sourceId,
+          "source-layer": "nodes",
+          paint: {
+            "fill-color": "#888888",
+            "fill-opacity": 0.5,
+          },
         },
-        layout: {
-          visibility: showFill ? "visible" : "none",
-        },
-      })
-    } else {
-      map.setLayoutProperty(fillLayerId, "visibility", showFill ? "visible" : "none")
+        undefined,
+      )
+    } else if (!showFill && fillLayerExists) {
+      map.removeLayer(fillLayerId)
     }
 
-    // Outline layer - create once, then toggle visibility
-    if (!map.getLayer(outlineLayerId)) {
-      map.addLayer({
-        id: outlineLayerId,
-        type: "line",
-        source: sourceId,
-        "source-layer": "nodes",
-        paint: {
-          "line-color": "#000000",
-          "line-width": 2,
+    // Outline layer
+    const outlineLayerExists = map.getLayer(outlineLayerId)
+    if (showOutline && !outlineLayerExists) {
+      map.addLayer(
+        {
+          id: outlineLayerId,
+          type: "line",
+          source: sourceId,
+          "source-layer": "nodes",
+          paint: {
+            "line-color": "#000000",
+            "line-width": 2,
+          },
         },
-        layout: {
-          visibility: showOutline ? "visible" : "none",
-        },
-      })
-    } else {
-      map.setLayoutProperty(outlineLayerId, "visibility", showOutline ? "visible" : "none")
+        undefined,
+      )
+    } else if (!showOutline && outlineLayerExists) {
+      map.removeLayer(outlineLayerId)
     }
 
-    // Label layer - create once, then toggle visibility
-    if (!map.getLayer(labelLayerId)) {
-      map.addLayer({
-        id: labelLayerId,
-        type: "symbol",
-        source: sourceId,
-        "source-layer": "nodes",
-        layout: {
-          "text-field": ["get", "name"],
-          "text-size": 12,
-          visibility: showLabel ? "visible" : "none",
+    // Label layer
+    const labelLayerExists = map.getLayer(labelLayerId)
+    if (showLabel && !labelLayerExists) {
+      map.addLayer(
+        {
+          id: labelLayerId,
+          type: "symbol",
+          source: sourceId,
+          "source-layer": "nodes",
+          layout: {
+            "text-field": ["get", "name"],
+            "text-size": 12,
+          },
+          paint: {
+            "text-color": "#202020",
+          },
         },
-        paint: {
-          "text-color": "#202020",
-        },
-      })
-    } else {
-      map.setLayoutProperty(labelLayerId, "visibility", showLabel ? "visible" : "none")
+        undefined,
+      )
+    } else if (!showLabel && labelLayerExists) {
+      map.removeLayer(labelLayerId)
     }
   })
 }

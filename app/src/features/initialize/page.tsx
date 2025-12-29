@@ -1,7 +1,9 @@
 import { IconCheck } from "@tabler/icons-react"
 import { useFormik } from "formik"
 import * as React from "react"
+import { useNavigate } from "react-router-dom"
 
+import { AppRoutes } from "@/app/routes"
 import Logo from "@/assets/logoipsum.svg?react"
 import { PageLayout } from "@/components/layout"
 import {
@@ -34,8 +36,13 @@ interface Step {
 }
 
 export default function InitializePage() {
+  const navigate = useNavigate()
   const [activeStepIdx, setActiveStepIdx] = React.useState<number>(0)
-  const importMutation = useImportMapMutation()
+  const importMutation = useImportMapMutation({
+    onSuccess: () => {
+      void navigate(AppRoutes.getRoute("HomePage"))
+    },
+  })
   const formik = useFormik({
     initialValues: {
       name: "",
