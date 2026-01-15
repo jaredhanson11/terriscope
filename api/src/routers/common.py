@@ -13,7 +13,7 @@ from src.app.database import DatabaseSession
 
 logger = logging.getLogger(__name__)
 
-common_router = APIRouter(prefix="/v1.0", tags=["Common"])
+common_router = APIRouter(prefix="", tags=["Common"])
 
 
 class HeartbeatResponseDTO(BaseModel):

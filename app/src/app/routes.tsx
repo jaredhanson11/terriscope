@@ -1,6 +1,8 @@
 import type { ReactNode } from "react"
 
 import { ComponentExample } from "@/components/component-example"
+import LoginPage from "@/features/auth/login.page"
+import RegisterPage from "@/features/auth/register.page"
 import HomePage from "@/features/home/page"
 import InitializePage from "@/features/initialize/page"
 
@@ -11,6 +13,8 @@ const PageName = {
   Initialize: "InitializePage",
   Example: "ExamplePage",
   Home: "HomePage",
+  Login: "LoginPage",
+  Register: "RegisterPage",
 } as const
 
 type PageName = (typeof PageName)[keyof typeof PageName]
@@ -18,6 +22,7 @@ type PageName = (typeof PageName)[keyof typeof PageName]
 type Route = {
   route: string
   component: ReactNode
+  protected?: true
 }
 
 /* Here we can Define parameter types for each route in the format of
@@ -47,18 +52,30 @@ const Routes: Record<PageName, Route> = {
   [PageName.Home]: {
     route: "/",
     component: <HomePage />,
+    protected: true,
   },
   [PageName.Initialize]: {
     route: "/new",
     component: <InitializePage />,
+    protected: true,
   },
   [PageName.Example]: {
     route: "/example",
     component: <ComponentExample />,
+    protected: true,
   },
   [PageName.Versions]: {
     route: "/versions",
     component: <VersionsPage />,
+    protected: true,
+  },
+  [PageName.Login]: {
+    route: "/login",
+    component: <LoginPage />,
+  },
+  [PageName.Register]: {
+    route: "/register",
+    component: <RegisterPage />,
   },
 }
 
@@ -107,18 +124,36 @@ class RouteClass<T extends PageName> {
     return path
   }
 
-  getAllRoutes(): ({
+  getUnproctedRoutes(): ({
     name: string
   } & Route)[] {
     return Object.entries(
       this.routesObj as {
         [key: string]: Route
       },
-    ).map(([name, { route, component }]) => ({
-      name,
-      route,
-      component,
-    }))
+    )
+      .filter(([_, route]) => !route.protected)
+      .map(([name, { route, component }]) => ({
+        name,
+        route,
+        component,
+      }))
+  }
+
+  getProtectedRoutes(): ({
+    name: string
+  } & Route)[] {
+    return Object.entries(
+      this.routesObj as {
+        [key: string]: Route
+      },
+    )
+      .filter(([_, route]) => route.protected)
+      .map(([name, { route, component }]) => ({
+        name,
+        route,
+        component,
+      }))
   }
 }
 

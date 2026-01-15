@@ -11,7 +11,7 @@ from src.schemas.accounts import User
 from src.schemas.dtos.auth import LoginDTO, RegisterDTO
 from src.services.auth import AuthenticationError, AuthServiceDependency, JWTPayloadData
 
-auth_router = APIRouter(prefix="/v1.0/auth", tags=["Authentication"])
+auth_router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +68,7 @@ def register(
     )
 
 
-@auth_router.post("/login", response_model=None)
+@auth_router.post("/login", response_model=User)
 def login(
     response: Response,
     auth_service: AuthServiceDependency,
@@ -92,7 +92,10 @@ def login(
         refresh_token = auth_service.create_refresh_token(data=JWTPayloadData(sub=str(user.id), type="refresh"))
         set_auth_cookie(response, refresh_token, "refresh_token")
 
-    return {"message": "Successfully logged in"}
+    return User(
+        id=user.id,
+        email=user.email,
+    )
 
 
 @auth_router.post("/refresh-token", response_model=None)

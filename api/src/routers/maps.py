@@ -142,7 +142,7 @@ def create_map(
     return Map(id=new_map.id, name=new_map.name)
 
 
-@maps_router.post("", response_model=list[Map])
+@maps_router.get("", response_model=list[Map])
 def list_maps(
     db: DatabaseSession,
     current_user: CurrentUserDependency,

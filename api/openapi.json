@@ -5,14 +5,14 @@
     "version": "0.1.0"
   },
   "paths": {
-    "/v1.0/heartbeat": {
+    "/heartbeat": {
       "get": {
         "tags": [
           "Common"
         ],
         "summary": "Heartbeat",
         "description": "This route is used to check the server is up and running.",
-        "operationId": "heartbeat_v1_0_heartbeat_get",
+        "operationId": "heartbeat_heartbeat_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -27,14 +27,14 @@
         }
       }
     },
-    "/v1.0/db-heartbeat": {
+    "/db-heartbeat": {
       "get": {
         "tags": [
           "Common"
         ],
         "summary": "Db Heartbeat",
         "description": "This route is used to check the connection to the database is working.",
-        "operationId": "db_heartbeat_v1_0_db_heartbeat_get",
+        "operationId": "db_heartbeat_db_heartbeat_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -47,14 +47,14 @@
         }
       }
     },
-    "/v1.0/versions": {
+    "/versions": {
       "get": {
         "tags": [
           "Common"
         ],
         "summary": "Versions",
         "description": "This route returns the version of the current running API.",
-        "operationId": "versions_v1_0_versions_get",
+        "operationId": "versions_versions_get",
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -69,43 +69,61 @@
         }
       }
     },
-    "/layers": {
-      "get": {
+    "/auth/register": {
+      "post": {
         "tags": [
-          "Graph"
+          "Authentication"
         ],
-        "summary": "List Layers",
-        "description": "List layers.",
-        "operationId": "list_layers_layers_get",
+        "summary": "Register",
+        "description": "Register a new user.",
+        "operationId": "register_auth_register_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterDTO"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
-          "200": {
+          "201": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "items": {
-                    "$ref": "#/components/schemas/Layer"
-                  },
-                  "type": "array",
-                  "title": "Response List Layers Layers Get"
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
                 }
               }
             }
           }
         }
-      },
+      }
+    },
+    "/auth/login": {
       "post": {
         "tags": [
-          "Graph"
+          "Authentication"
         ],
-        "summary": "Create Layer",
-        "description": "Create layer.",
-        "operationId": "create_layer_layers_post",
+        "summary": "Login",
+        "description": "Login user and set JWT cookies.",
+        "operationId": "login_auth_login_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/CreateLayer"
+                "$ref": "#/components/schemas/LoginDTO"
               }
             }
           },
@@ -117,7 +135,156 @@
             "content": {
               "application/json": {
                 "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/refresh-token": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Refresh Token",
+        "description": "Refresh the access token using the refresh token.",
+        "operationId": "refresh_token_auth_refresh_token_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "summary": "Logout",
+        "description": "Logout user by clearing the auth cookie.",
+        "operationId": "logout_auth_logout_post",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me": {
+      "get": {
+        "tags": [
+          "Me"
+        ],
+        "summary": "Get Me",
+        "description": "Get the currently logged in user.",
+        "operationId": "get_me_me_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/layers": {
+      "post": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "Create Layer",
+        "description": "Create layer.",
+        "operationId": "create_layer_layers_post",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLayer"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
                   "$ref": "#/components/schemas/Layer"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "List Layers",
+        "description": "List layers.",
+        "operationId": "list_layers_layers_get",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Map Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/Layer"
+                  },
+                  "title": "Response List Layers Layers Get"
                 }
               }
             }
@@ -816,6 +983,30 @@
       }
     },
     "/maps": {
+      "get": {
+        "tags": [
+          "Maps"
+        ],
+        "summary": "List Maps",
+        "description": "List maps.",
+        "operationId": "list_maps_maps_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Map"
+                  },
+                  "type": "array",
+                  "title": "Response List Maps Maps Get"
+                }
+              }
+            }
+          }
+        }
+      },
       "post": {
         "tags": [
           "Maps"
@@ -839,7 +1030,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ImportMapResponse"
+                  "$ref": "#/components/schemas/Map"
                 }
               }
             }
@@ -901,11 +1092,16 @@
           "name": {
             "type": "string",
             "title": "Name"
+          },
+          "map_id": {
+            "type": "integer",
+            "title": "Map Id"
           }
         },
         "type": "object",
         "required": [
-          "name"
+          "name",
+          "map_id"
         ],
         "title": "CreateLayer",
         "description": "CreateLayer."
@@ -1064,25 +1260,15 @@
         "title": "ImportMap",
         "description": "ImportMap."
       },
-      "ImportMapResponse": {
-        "properties": {
-          "map_id": {
-            "type": "integer",
-            "title": "Map Id"
-          }
-        },
-        "type": "object",
-        "required": [
-          "map_id"
-        ],
-        "title": "ImportMapResponse",
-        "description": "ImportMapResponse."
-      },
       "Layer": {
         "properties": {
           "id": {
             "type": "integer",
             "title": "Id"
+          },
+          "map_id": {
+            "type": "integer",
+            "title": "Map Id"
           },
           "name": {
             "type": "string",
@@ -1096,6 +1282,7 @@
         "type": "object",
         "required": [
           "id",
+          "map_id",
           "name",
           "order"
         ],
@@ -1120,6 +1307,71 @@
         ],
         "title": "LayerSetup",
         "description": "LayerSetup."
+      },
+      "LoginDTO": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "title": "Password"
+          },
+          "remember_me": {
+            "type": "boolean",
+            "title": "Remember Me",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "LoginDTO",
+        "description": "POST model for logging in a user."
+      },
+      "Map": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "title": "Map",
+        "description": "Map."
+      },
+      "RegisterDTO": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 8,
+            "title": "Password"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email",
+          "password"
+        ],
+        "title": "RegisterDTO",
+        "description": "POST model for creating a new user."
       },
       "UpdateNode": {
         "properties": {
@@ -1151,6 +1403,26 @@
         ],
         "title": "UpdateNode",
         "description": "UpdateNode."
+      },
+      "User": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "email"
+        ],
+        "title": "User",
+        "description": "User schema."
       },
       "ValidationError": {
         "properties": {

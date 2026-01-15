@@ -4,7 +4,7 @@
  */
 
 export interface paths {
-    "/v1.0/heartbeat": {
+    "/heartbeat": {
         parameters: {
             query?: never;
             header?: never;
@@ -15,7 +15,7 @@ export interface paths {
          * Heartbeat
          * @description This route is used to check the server is up and running.
          */
-        get: operations["heartbeat_v1_0_heartbeat_get"];
+        get: operations["heartbeat_heartbeat_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -24,7 +24,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1.0/db-heartbeat": {
+    "/db-heartbeat": {
         parameters: {
             query?: never;
             header?: never;
@@ -35,7 +35,7 @@ export interface paths {
          * Db Heartbeat
          * @description This route is used to check the connection to the database is working.
          */
-        get: operations["db_heartbeat_v1_0_db_heartbeat_get"];
+        get: operations["db_heartbeat_db_heartbeat_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -44,7 +44,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/v1.0/versions": {
+    "/versions": {
         parameters: {
             query?: never;
             header?: never;
@@ -55,7 +55,107 @@ export interface paths {
          * Versions
          * @description This route returns the version of the current running API.
          */
-        get: operations["versions_v1_0_versions_get"];
+        get: operations["versions_versions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Register
+         * @description Register a new user.
+         */
+        post: operations["register_auth_register_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Login
+         * @description Login user and set JWT cookies.
+         */
+        post: operations["login_auth_login_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/refresh-token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Refresh Token
+         * @description Refresh the access token using the refresh token.
+         */
+        post: operations["refresh_token_auth_refresh_token_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Logout
+         * @description Logout user by clearing the auth cookie.
+         */
+        post: operations["logout_auth_logout_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Me
+         * @description Get the currently logged in user.
+         */
+        get: operations["get_me_me_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -368,7 +468,11 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * List Maps
+         * @description List maps.
+         */
+        get: operations["list_maps_maps_get"];
         put?: never;
         /**
          * Create Map
@@ -414,6 +518,8 @@ export interface components {
         CreateLayer: {
             /** Name */
             name: string;
+            /** Map Id */
+            map_id: number;
         };
         /**
          * CreateNode
@@ -477,20 +583,14 @@ export interface components {
             headers: string[];
         };
         /**
-         * ImportMapResponse
-         * @description ImportMapResponse.
-         */
-        ImportMapResponse: {
-            /** Map Id */
-            map_id: number;
-        };
-        /**
          * Layer
          * @description Layer.
          */
         Layer: {
             /** Id */
             id: number;
+            /** Map Id */
+            map_id: number;
             /** Name */
             name: string;
             /** Order */
@@ -507,6 +607,47 @@ export interface components {
             header: string;
         };
         /**
+         * LoginDTO
+         * @description POST model for logging in a user.
+         */
+        LoginDTO: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Password */
+            password: string;
+            /**
+             * Remember Me
+             * @default false
+             */
+            remember_me: boolean;
+        };
+        /**
+         * Map
+         * @description Map.
+         */
+        Map: {
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+        };
+        /**
+         * RegisterDTO
+         * @description POST model for creating a new user.
+         */
+        RegisterDTO: {
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
+            /** Password */
+            password: string;
+        };
+        /**
          * UpdateNode
          * @description UpdateNode.
          */
@@ -517,6 +658,19 @@ export interface components {
             name: string;
             /** Color */
             color: string;
+        };
+        /**
+         * User
+         * @description User schema.
+         */
+        User: {
+            /** Id */
+            id: number;
+            /**
+             * Email
+             * Format: email
+             */
+            email: string;
         };
         /** ValidationError */
         ValidationError: {
@@ -544,7 +698,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    heartbeat_v1_0_heartbeat_get: {
+    heartbeat_heartbeat_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -564,7 +718,7 @@ export interface operations {
             };
         };
     };
-    db_heartbeat_v1_0_db_heartbeat_get: {
+    db_heartbeat_db_heartbeat_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -584,7 +738,7 @@ export interface operations {
             };
         };
     };
-    versions_v1_0_versions_get: {
+    versions_versions_get: {
         parameters: {
             query?: never;
             header?: never;
@@ -604,7 +758,73 @@ export interface operations {
             };
         };
     };
-    list_layers_layers_get: {
+    register_auth_register_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterDTO"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    login_auth_login_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginDTO"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    refresh_token_auth_refresh_token_post: {
         parameters: {
             query?: never;
             header?: never;
@@ -619,7 +839,78 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    logout_auth_logout_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    get_me_me_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+        };
+    };
+    list_layers_layers_get: {
+        parameters: {
+            query: {
+                map_id: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
                     "application/json": components["schemas"]["Layer"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1098,6 +1389,26 @@ export interface operations {
             };
         };
     };
+    list_maps_maps_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Map"][];
+                };
+            };
+        };
+    };
     create_map_maps_post: {
         parameters: {
             query?: never;
@@ -1117,7 +1428,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ImportMapResponse"];
+                    "application/json": components["schemas"]["Map"];
                 };
             };
             /** @description Validation Error */

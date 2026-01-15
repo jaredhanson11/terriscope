@@ -1,0 +1,38 @@
+import { useQuery } from "@tanstack/react-query"
+import { type PropsWithChildren } from "react"
+import { useNavigate } from "react-router-dom"
+
+import { AppRoutes, PageName } from "@/app/routes"
+import { queries } from "@/queries/queries"
+
+import { MeContext } from "./context"
+
+export const AuthProvider = (props: PropsWithChildren) => {
+  const navigate = useNavigate()
+  const userQuery = useQuery(queries.me())
+  const mapsQuery = useQuery({
+    ...queries.listMaps(),
+    enabled: !!userQuery.data,
+  })
+
+  if (
+    (!userQuery.data && userQuery.isLoading) ||
+    (!mapsQuery.data && mapsQuery.isLoading)
+  ) {
+    return <div>Loading...</div>
+  }
+
+  if (userQuery.isSuccess && mapsQuery.isSuccess) {
+    if (mapsQuery.data.length === 0) {
+      void navigate(AppRoutes.getRoute(PageName.Initialize))
+    }
+    return (
+      <MeContext.Provider
+        value={{ user: userQuery.data, maps: mapsQuery.data }}
+      >
+        {props.children}
+      </MeContext.Provider>
+    )
+  }
+  void navigate(AppRoutes.getRoute(PageName.Login))
+}

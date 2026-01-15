@@ -7,7 +7,7 @@ from typing import Annotated, Literal, NotRequired, TypedDict
 
 import jwt
 from fastapi import Depends, HTTPException, Request, status
-from passlib.context import CryptContext
+from passlib.hash import bcrypt
 from sqlalchemy import select
 
 from src.app.config import app_settings
@@ -15,8 +15,6 @@ from src.app.database import DatabaseSession
 from src.models.accounts import UserModel
 
 from .base import BaseService
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 logger = logging.getLogger(__name__)
 
@@ -96,11 +94,13 @@ class AuthService(BaseService):
 
     def _get_password_hash(self, password: str) -> str:
         """Hash a password."""
-        return pwd_context.hash(password)
+        logger.error(password)
+        logger.error(len(password))
+        return bcrypt.hash(password)
 
     def _verify_password(self, plain_password: str, hashed_password: str) -> bool:
         """Verify a password."""
-        return pwd_context.verify(plain_password, hashed_password)
+        return bcrypt.verify(plain_password, hashed_password)
 
     def get_user_token(self, email: str) -> UserModel | None:
         """Get a user by their email."""

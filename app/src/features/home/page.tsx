@@ -3,6 +3,7 @@ import {
   IconChevronDown,
   IconHome,
   IconInfoCircle,
+  IconLogout,
   IconPlus,
   IconSettings,
   IconTrash,
@@ -10,6 +11,7 @@ import {
 import { useQuery } from "@tanstack/react-query"
 import * as React from "react"
 
+import { useMaps } from "@/app/providers/me-provider/context"
 import { AppRoutes } from "@/app/routes"
 import Logo from "@/assets/logoipsum.svg?react"
 import { PageLayout } from "@/components/layout"
@@ -47,33 +49,10 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { Map } from "@/features/home/components/map"
+import { useLogoutMutation } from "@/queries/mutations"
 import { queries } from "@/queries/queries"
 
 import type { BaseMapName } from "./components/map/config"
-
-// Placeholder data - will be replaced with real data from API
-const PROJECTS = [
-  {
-    id: 1,
-    name: "North America",
-    lastEdited: "2h ago",
-  },
-  {
-    id: 2,
-    name: "EMEA Sales Regions",
-    lastEdited: "1d ago",
-  },
-  {
-    id: 3,
-    name: "APAC Distribution Areas",
-    lastEdited: "3d ago",
-  },
-  {
-    id: 4,
-    name: "US Service Zones",
-    lastEdited: "1w ago",
-  },
-]
 
 const BASE_MAPS = [
   { id: "osm", name: "OpenStreetMap" },
@@ -83,19 +62,13 @@ const BASE_MAPS = [
   { id: "none", name: "None" },
 ]
 
-// const OVERLAYS = [
-//   { id: "traffic", name: "Traffic" },
-//   { id: "transit", name: "Transit Lines" },
-//   { id: "bicycling", name: "Bike Paths" },
-//   { id: "demographics", name: "Demographics" },
-//   { id: "weather", name: "Weather" },
-// ]
-
 export default function HomePage() {
-  const currentProject = PROJECTS[0]
-  const layersQuery = useQuery(queries.listLayers())
+  const maps = useMaps()
+  const currentMap = maps[0]
+  const layersQuery = useQuery(queries.listLayers(currentMap.id))
   const [baseMap, setBaseMap] = React.useState<BaseMapName>("osm")
   const [visibleLayers, setVisibleLayers] = React.useState<number[]>([])
+  const logoutMutation = useLogoutMutation()
 
   const layers = React.useMemo(
     () =>
@@ -133,10 +106,10 @@ export default function HomePage() {
                     <IconHome className="h-5 w-5 shrink-0" />
                     <div className="flex-1 text-left">
                       <div className="text-sm font-medium leading-tight">
-                        {currentProject.name}
+                        {currentMap?.name}
                       </div>
                       <div className="text-muted-foreground text-xs">
-                        Last edited {currentProject.lastEdited}
+                        Last edited TODO
                       </div>
                     </div>
                     <IconChevronDown className="h-4 w-4 shrink-0" />
@@ -148,16 +121,16 @@ export default function HomePage() {
                 className="w-(--radix-popper-anchor-width)"
               >
                 <DropdownMenuLabel>Recent Maps</DropdownMenuLabel>
-                {PROJECTS.map((project) => (
-                  <DropdownMenuItem key={project.id} className="gap-3">
+                {maps.map((map) => (
+                  <DropdownMenuItem key={map.id} className="gap-3">
                     <IconHome className="h-4 w-4" />
                     <div className="flex-1">
-                      <div className="text-sm font-medium">{project.name}</div>
+                      <div className="text-sm font-medium">{map.name}</div>
                       <div className="text-muted-foreground text-xs">
-                        Last edited {project.lastEdited}
+                        Last edited TODO
                       </div>
                     </div>
-                    {project.id === currentProject.id && (
+                    {map.id === currentMap.id && (
                       <IconCheck className="h-4 w-4" />
                     )}
                   </DropdownMenuItem>
@@ -440,7 +413,19 @@ export default function HomePage() {
             </SidebarGroup>
           </SidebarContent>
 
-          <SidebarFooter className="border-border border-t p-4"></SidebarFooter>
+          <SidebarFooter className="border-border border-t p-4">
+            <Button
+              variant="ghost"
+              className="w-full justify-start"
+              onClick={() => {
+                logoutMutation.mutate()
+              }}
+              disabled={logoutMutation.isPending}
+            >
+              <IconLogout className="mr-2 h-4 w-4" />
+              {logoutMutation.isPending ? "Logging out..." : "Logout"}
+            </Button>
+          </SidebarFooter>
         </Sidebar>
       </PageLayout.SideNav>
 

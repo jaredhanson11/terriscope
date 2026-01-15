@@ -6,7 +6,7 @@ from geoalchemy2 import Geometry
 from geoalchemy2.elements import WKBElement
 from sqlalchemy import ForeignKey, UniqueConstraint, func, select
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.orm import Mapped, aliased, column_property, mapped_column
+from sqlalchemy.orm import Mapped, aliased, column_property, declared_attr, mapped_column
 
 from src.models.base import Base, intpk
 
@@ -27,11 +27,17 @@ class LayerModel(Base):
 
     id: Mapped[intpk] = mapped_column(init=False)
     map_id: Mapped[int] = mapped_column(ForeignKey("maps.id"))
-    name: Mapped[str] = mapped_column(unique=True)
+    name: Mapped[str]
     order: Mapped[int]
     """Order of the layer (aka 0 will always be zip, 1 will usually be territory, etc.)"""
 
-    __table_args__ = (UniqueConstraint("order", "map_id"),)
+    @declared_attr.directive
+    def __table_args__(cls):
+        """Table args for LayerModel."""
+        return (
+            UniqueConstraint("order", "map_id"),
+            UniqueConstraint("name", "map_id"),
+        )
 
 
 class NodeModel(Base):
@@ -75,3 +81,8 @@ class NodeModel(Base):
             .correlate_except(child_alias)
             .scalar_subquery()
         )
+
+    @declared_attr.directive
+    def __table_args__(cls):
+        """Table args for NodeModel."""
+        return (UniqueConstraint("layer_id", "name"),)
