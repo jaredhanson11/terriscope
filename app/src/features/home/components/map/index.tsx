@@ -1,5 +1,14 @@
+import { polygon } from "@turf/helpers"
+import { simplify } from "@turf/simplify"
+import type { Feature, Polygon } from "geojson"
 import "maplibre-gl/dist/maplibre-gl.css"
-import { forwardRef, useEffect, useImperativeHandle, useRef } from "react"
+import {
+  forwardRef,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+} from "react"
 import MapGL, { type MapRef } from "react-map-gl/maplibre"
 
 import type { LayerViewOptions } from "./config"
@@ -23,35 +32,146 @@ export const Map = forwardRef<
   {
     baseMap: BaseMapName
     layers: LayerViewOptions
+    currentTool: "lasso" | "pan"
+    selectedNodes: number[]
+    onLassoComplete: (points: Polygon) => void
   }
->(({ baseMap, layers }, forwardRef) => {
-  const ref = useRef<MapRef | null>(null)
-  useImperativeHandle(forwardRef, () => ref.current as MapRef, [])
+>(
+  (
+    { baseMap, layers, selectedNodes, onLassoComplete, currentTool },
+    forwardRef,
+  ) => {
+    const ref = useRef<MapRef | null>(null)
+    useImperativeHandle(forwardRef, () => ref.current as MapRef, [])
 
-  useEffect(() => {
-    const map = ref.current?.getMap()
-    if (map && map.isStyleLoaded()) {
-      updateSources(map, layers)
-      updateLayers(map, baseMap, layers)
-      console.log(map.getStyle())
-      console.log(layers)
+    useEffect(() => {
+      const map = ref.current?.getMap()
+      if (map && map.isStyleLoaded()) {
+        updateSources(map, layers)
+        updateLayers(map, baseMap, layers)
+      }
+    }, [baseMap, layers])
+
+    // State stays the same
+    const [isDrawing, setIsDrawing] = useState(false)
+    const [lassoPoints, setLassoPoints] = useState<[number, number][]>([])
+
+    // Update lasso visualization as it's being drawn
+    useEffect(() => {
+      const map = ref.current?.getMap()
+      if (!map || !map.isStyleLoaded()) return
+
+      const sourceId = "lasso-line"
+      const layerId = "lasso-line-layer"
+
+      // If we have points, show the lasso
+      if (lassoPoints.length > 0) {
+        const geojson = {
+          type: "FeatureCollection" as const,
+          features: [
+            {
+              type: "Feature" as const,
+              properties: {},
+              geometry: {
+                type: "LineString" as const,
+                coordinates: lassoPoints,
+              },
+            },
+          ],
+        }
+
+        // Add or update source
+        const source = map.getSource(sourceId)
+        if (source && source.type === "geojson") {
+          source.setData(geojson)
+        } else {
+          map.addSource(sourceId, {
+            type: "geojson",
+            data: geojson,
+          })
+        }
+
+        // Add layer if it doesn't exist
+        if (!map.getLayer(layerId)) {
+          map.addLayer({
+            id: layerId,
+            type: "line",
+            source: sourceId,
+            paint: {
+              "line-color": "#3b82f6",
+              "line-width": 2,
+              "line-dasharray": [2, 2],
+            },
+          })
+        }
+      } else {
+        // Clear the lasso visualization
+        if (map.getLayer(layerId)) {
+          map.removeLayer(layerId)
+        }
+        if (map.getSource(sourceId)) {
+          map.removeSource(sourceId)
+        }
+      }
+    }, [lassoPoints])
+
+    // Mouse DOWN - start the lasso
+    const handleMouseDown = (e: maplibregl.MapMouseEvent) => {
+      if (currentTool === "lasso") {
+        e.preventDefault() // Prevent map from panning
+        setIsDrawing(true)
+        const point: [number, number] = [e.lngLat.lng, e.lngLat.lat]
+        setLassoPoints([point])
+      }
     }
-  }, [baseMap, layers])
 
-  return (
-    <div className={`relative h-full w-full`}>
-      <MapGL
-        initialViewState={INITIAL_VIEW_STATE}
-        mapStyle={EMPTY_STYLE}
-        ref={ref}
-        onLoad={(evt) => {
-          const map = evt.target
-          updateSources(map, layers)
-          updateLayers(map, baseMap, layers)
-        }}
-        style={{ width: "100%", height: "100%" }}
-        attributionControl={false}
-      />
-    </div>
-  )
-})
+    // Mouse MOVE - only adds points while drawing (button held)
+    const handleMouseMove = (e: maplibregl.MapMouseEvent) => {
+      if (isDrawing && currentTool === "lasso") {
+        const point: [number, number] = [e.lngLat.lng, e.lngLat.lat]
+        const newPoints = [...lassoPoints, point]
+        setLassoPoints(newPoints)
+      }
+    }
+
+    // Mouse UP - complete the lasso
+    const handleMouseUp = () => {
+      if (isDrawing && currentTool === "lasso") {
+        setIsDrawing(false)
+
+        // Create closed polygon
+        const closedPoints: number[][] = [...lassoPoints, lassoPoints[0]]
+        const lassoPolygon = polygon([closedPoints])
+        const simplified = simplify<Feature<Polygon>>(lassoPolygon, {
+          tolerance: 0.001,
+          highQuality: true,
+        })
+        onLassoComplete(simplified.geometry)
+        // Clear the lasso
+        setLassoPoints([])
+      }
+    }
+
+    return (
+      <div className={`relative h-full w-full`}>
+        <MapGL
+          dragPan={currentTool === "pan"}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          onMouseUp={handleMouseUp}
+          cursor={currentTool === "lasso" ? "crosshair" : "grab"}
+          initialViewState={INITIAL_VIEW_STATE}
+          mapStyle={EMPTY_STYLE}
+          ref={ref}
+          onLoad={(evt) => {
+            const map = evt.target
+            updateSources(map, layers)
+            updateLayers(map, baseMap, layers)
+          }}
+          style={{ width: "100%", height: "100%" }}
+          attributionControl={false}
+        />
+      </div>
+    )
+  },
+)

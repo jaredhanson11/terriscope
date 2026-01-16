@@ -9,7 +9,8 @@ import {
   IconTrash,
 } from "@tabler/icons-react"
 import { useQuery } from "@tanstack/react-query"
-import * as React from "react"
+import pluralize from "pluralize"
+import { useMemo, useState } from "react"
 
 import { useMaps } from "@/app/providers/me-provider/context"
 import { AppRoutes } from "@/app/routes"
@@ -49,7 +50,10 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { Map } from "@/features/home/components/map"
-import { useLogoutMutation } from "@/queries/mutations"
+import {
+  useLogoutMutation,
+  useSpatialSelectMutation,
+} from "@/queries/mutations"
 import { queries } from "@/queries/queries"
 
 import type { BaseMapName } from "./components/map/config"
@@ -66,11 +70,27 @@ export default function HomePage() {
   const maps = useMaps()
   const currentMap = maps[0]
   const layersQuery = useQuery(queries.listLayers(currentMap.id))
-  const [baseMap, setBaseMap] = React.useState<BaseMapName>("osm")
-  const [visibleLayers, setVisibleLayers] = React.useState<number[]>([])
+  const [baseMap, setBaseMap] = useState<BaseMapName>("osm")
+  const [visibleLayers, setVisibleLayers] = useState<number[]>([])
   const logoutMutation = useLogoutMutation()
+  const spatialSelectMutation = useSpatialSelectMutation()
+  const [activeLayerId, setActiveLayerId] = useState<number | undefined>(
+    undefined,
+  )
+  const activeLayer = layersQuery.data?.find(
+    (layer) => layer.id === activeLayerId,
+  )
+  const [selectedNodes, setSelectedNodes] = useState<number[]>([])
 
-  const layers = React.useMemo(
+  if (
+    layersQuery.isSuccess &&
+    activeLayerId == null &&
+    layersQuery.data.length
+  ) {
+    setActiveLayerId(layersQuery.data[0].id)
+  }
+
+  const layers = useMemo(
     () =>
       layersQuery.data
         ? layersQuery.data.map((_layer) => ({
@@ -106,7 +126,7 @@ export default function HomePage() {
                     <IconHome className="h-5 w-5 shrink-0" />
                     <div className="flex-1 text-left">
                       <div className="text-sm font-medium leading-tight">
-                        {currentMap?.name}
+                        {currentMap.name}
                       </div>
                       <div className="text-muted-foreground text-xs">
                         Last edited TODO
@@ -178,14 +198,22 @@ export default function HomePage() {
                 </Popover>
               </SidebarGroupLabel>
               <SidebarGroupContent>
-                <Select defaultValue="zip_codes">
+                <Select
+                  value={activeLayerId?.toString()}
+                  onValueChange={(val) => {
+                    setActiveLayerId(parseInt(val))
+                  }}
+                >
                   <SelectTrigger className="w-full">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
                     {layersQuery.data
                       ? layersQuery.data.map((layer) => (
-                          <SelectItem key={layer.id} value={layer.id}>
+                          <SelectItem
+                            key={layer.id}
+                            value={layer.id.toString()}
+                          >
                             {layer.name}
                           </SelectItem>
                         ))
@@ -233,9 +261,11 @@ export default function HomePage() {
               <SidebarGroupContent>
                 <div className="bg-muted rounded-lg p-3">
                   <div className="mb-3 text-center">
-                    <div className="text-foreground text-2xl font-bold">0</div>
+                    <div className="text-foreground text-2xl font-bold">
+                      {selectedNodes.length}
+                    </div>
                     <div className="text-muted-foreground text-xs">
-                      items selected
+                      {pluralize(activeLayer?.name ?? "")} selected
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
@@ -437,7 +467,24 @@ export default function HomePage() {
       </PageLayout.TopNav>
 
       <PageLayout.FullScreenBody>
-        <Map baseMap={baseMap} layers={layers} />
+        <Map
+          baseMap={baseMap}
+          layers={layers}
+          currentTool="lasso"
+          onLassoComplete={(geojson) => {
+            if (activeLayerId != null) {
+              spatialSelectMutation.mutate(
+                { lasso: geojson, layerId: activeLayerId },
+                {
+                  onSuccess: (response) => {
+                    setSelectedNodes(response.nodes)
+                  },
+                },
+              )
+            }
+          }}
+          selectedNodes={selectedNodes}
+        />
       </PageLayout.FullScreenBody>
     </PageLayout>
   )

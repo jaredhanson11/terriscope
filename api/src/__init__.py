@@ -4,7 +4,16 @@ This file is responsible for importing the configured FastAPI object and adding 
 """
 
 from .app import app
-from .routers import accounts_router, auth_router, common_router, docs_router, graph_router, maps_router, mvt_router
+from .routers import (
+    accounts_router,
+    auth_router,
+    common_router,
+    docs_router,
+    graph_router,
+    maps_router,
+    mvt_router,
+    spatial_router,
+)
 
 app.include_router(common_router)
 app.include_router(auth_router)
@@ -13,3 +22,4 @@ app.include_router(docs_router)
 app.include_router(graph_router)
 app.include_router(mvt_router)
 app.include_router(maps_router)
+app.include_router(spatial_router)

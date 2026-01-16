@@ -232,7 +232,7 @@ export default function ReviewStep({
                             <span>
                               {" · Aggregations: "}
                               {Array.from(
-                                field.options as Set<NumberDataFieldOption>,
+                                field.options,
                               ).join(", ")}
                             </span>
                           )}

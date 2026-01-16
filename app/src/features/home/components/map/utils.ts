@@ -9,6 +9,7 @@ import {
 } from "./config"
 
 export function updateSources(map: maplibregl.Map, layers: LayerViewOptions) {
+  // Basemap source
   Object.entries(BASE_MAP_SOURCES).forEach(([name, source]) => {
     const sourceId = `base-map-${name}`
     if (!map.getSource(sourceId)) {
@@ -16,6 +17,7 @@ export function updateSources(map: maplibregl.Map, layers: LayerViewOptions) {
     }
   })
 
+  // Basemap layers
   layers.forEach((layerOption) => {
     const { id } = layerOption
     const sourceId = `layer-${id.toString()}`

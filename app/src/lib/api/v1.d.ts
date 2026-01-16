@@ -310,46 +310,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/tiles/debug/colors/{layer_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Debug Layer Colors
-         * @description Debug endpoint to check if color values exist in the database.
-         */
-        get: operations["debug_layer_colors_tiles_debug_colors__layer_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/tiles/debug/tile/{layer_id}/{z}/{x}/{y}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Debug Tile Data
-         * @description Debug endpoint to see what data would be in a tile (as JSON instead of MVT).
-         */
-        get: operations["debug_tile_data_tiles_debug_tile__layer_id___z___x___y__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/tiles/layers": {
         parameters: {
             query?: never;
@@ -365,94 +325,6 @@ export interface paths {
          *     to construct tile URLs.
          */
         get: operations["list_tile_layers_tiles_layers_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/tiles/diagnostics/geometry-stats": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Geometry Stats
-         * @description Get detailed statistics about polygon complexity to diagnose performance issues.
-         *
-         *     This endpoint helps identify problematic geometries that might be causing
-         *     database crashes or slow queries.
-         */
-        get: operations["get_geometry_stats_tiles_diagnostics_geometry_stats_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/tiles/diagnostics/problematic-nodes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Problematic Nodes
-         * @description List nodes with overly complex geometries that might cause performance issues.
-         *
-         *     Args:
-         *         db: Database session
-         *         layer_id: Optional layer to filter by
-         *         min_points: Minimum number of points to be considered problematic (default: 10000)
-         */
-        get: operations["get_problematic_nodes_tiles_diagnostics_problematic_nodes_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/tiles/diagnostics/node-stats/{node_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Node Stats
-         * @description Get detailed statistics about a specific node's geometry.
-         *
-         *     Args:
-         *         node_id: The node ID to analyze
-         *         db: Database session
-         *
-         *     Returns:
-         *         Dictionary with detailed geometry statistics including:
-         *         - size_bytes: Raw geometry size in bytes
-         *         - size_kb: Geometry size in kilobytes
-         *         - num_vertices: Total number of vertices across all polygons
-         *         - num_polygons: Number of polygons in the multipolygon
-         *         - num_rings: Total number of rings (exterior + interior/holes)
-         *         - avg_vertices_per_polygon: Average vertices per polygon
-         *         - min_distance: Minimum distance between consecutive points (meters)
-         *         - max_distance: Maximum distance between consecutive points (meters)
-         *         - avg_distance: Average distance between consecutive points (meters)
-         *         - median_distance: Median distance between consecutive points (meters)
-         *         - coordinate_precision: Estimated decimal places in coordinates
-         *         - is_valid: Whether geometry is topologically valid
-         *         - invalid_reason: Reason if geometry is invalid
-         */
-        get: operations["get_node_stats_tiles_diagnostics_node_stats__node_id__get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -487,6 +359,26 @@ export interface paths {
          *         - Add data fields
          */
         post: operations["create_map_maps_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/spatial/select": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Select Features In Lasso
+         * @description Select all features from a layer that intersect with a lasso polygon.
+         */
+        post: operations["select_features_in_lasso_spatial_select_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -635,6 +527,42 @@ export interface components {
             name: string;
         };
         /**
+         * Polygon
+         * @description Polygon Model
+         */
+        Polygon: {
+            /** Bbox */
+            bbox?: [
+                number,
+                number,
+                number,
+                number
+            ] | [
+                number,
+                number,
+                number,
+                number,
+                number,
+                number
+            ] | null;
+            /**
+             * Type
+             * @constant
+             */
+            type: "Polygon";
+            /** Coordinates */
+            coordinates: (components["schemas"]["Position2D"] | components["schemas"]["Position3D"])[][];
+        };
+        Position2D: [
+            number,
+            number
+        ];
+        Position3D: [
+            number,
+            number,
+            number
+        ];
+        /**
          * RegisterDTO
          * @description POST model for creating a new user.
          */
@@ -646,6 +574,19 @@ export interface components {
             email: string;
             /** Password */
             password: string;
+        };
+        /** SpatialSelectRequest */
+        SpatialSelectRequest: {
+            /** Layer Id */
+            layer_id: number;
+            polygon: components["schemas"]["Polygon"];
+        };
+        /** SpatialSelectResponse */
+        SpatialSelectResponse: {
+            /** Count */
+            count: number;
+            /** Nodes */
+            nodes: number[];
         };
         /**
          * UpdateNode
@@ -1210,71 +1151,6 @@ export interface operations {
             };
         };
     };
-    debug_layer_colors_tiles_debug_colors__layer_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                layer_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    debug_tile_data_tiles_debug_tile__layer_id___z___x___y__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                layer_id: number;
-                z: number;
-                x: number;
-                y: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     list_tile_layers_tiles_layers_get: {
         parameters: {
             query?: never;
@@ -1291,100 +1167,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-        };
-    };
-    get_geometry_stats_tiles_diagnostics_geometry_stats_get: {
-        parameters: {
-            query?: {
-                layer_id?: number | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_problematic_nodes_tiles_diagnostics_problematic_nodes_get: {
-        parameters: {
-            query?: {
-                layer_id?: number | null;
-                min_points?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_node_stats_tiles_diagnostics_node_stats__node_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                node_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -1429,6 +1211,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Map"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    select_features_in_lasso_spatial_select_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpatialSelectRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpatialSelectResponse"];
                 };
             };
             /** @description Validation Error */

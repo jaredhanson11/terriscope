@@ -24,6 +24,7 @@ shapely = "^2.1.2"
 asgi-correlation-id = "^4.3.4"
 numpy = "^2.4.0"
 pandas = "^2.3.3"
+geojson-pydantic = "^2.1.0"
 
 [tool.poetry.group.dev.dependencies]
 deptry = "^0.24.0"

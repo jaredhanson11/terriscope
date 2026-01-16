@@ -1,10 +1,11 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
+import type { Polygon } from "geojson"
 import type { FetchResponse } from "openapi-fetch"
 import { useNavigate } from "react-router-dom"
 
 import { AppRoutes, PageName } from "@/app/routes"
 import { fetchClient } from "@/fetch-client"
-import type { paths } from "@/lib/api/v1"
+import type { components, paths } from "@/lib/api/v1"
 
 import { queries } from "./queries"
 
@@ -99,6 +100,24 @@ export const useLogoutMutation = () => {
     },
     onSuccess: () => {
       void queryClient.resetQueries()
+    },
+  })
+}
+
+export const useSpatialSelectMutation = () => {
+  return useMutation({
+    mutationFn: async (vars: { layerId: number; lasso: Polygon }) => {
+      const response = await fetchClient.POST("/spatial/select", {
+        body: {
+          layer_id: vars.layerId,
+          polygon:
+            vars.lasso as components["schemas"]["SpatialSelectRequest"]["polygon"],
+        },
+      })
+      if (response.response.status !== 200 || !response.data) {
+        throw new Error("Unknown error.")
+      }
+      return response.data
     },
   })
 }

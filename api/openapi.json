@@ -706,115 +706,6 @@
         }
       }
     },
-    "/tiles/debug/colors/{layer_id}": {
-      "get": {
-        "tags": [
-          "MVT"
-        ],
-        "summary": "Debug Layer Colors",
-        "description": "Debug endpoint to check if color values exist in the database.",
-        "operationId": "debug_layer_colors_tiles_debug_colors__layer_id__get",
-        "parameters": [
-          {
-            "name": "layer_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Layer Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tiles/debug/tile/{layer_id}/{z}/{x}/{y}": {
-      "get": {
-        "tags": [
-          "MVT"
-        ],
-        "summary": "Debug Tile Data",
-        "description": "Debug endpoint to see what data would be in a tile (as JSON instead of MVT).",
-        "operationId": "debug_tile_data_tiles_debug_tile__layer_id___z___x___y__get",
-        "parameters": [
-          {
-            "name": "layer_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Layer Id"
-            }
-          },
-          {
-            "name": "z",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Z"
-            }
-          },
-          {
-            "name": "x",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "X"
-            }
-          },
-          {
-            "name": "y",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Y"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/tiles/layers": {
       "get": {
         "tags": [
@@ -829,153 +720,6 @@
             "content": {
               "application/json": {
                 "schema": {}
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tiles/diagnostics/geometry-stats": {
-      "get": {
-        "tags": [
-          "MVT"
-        ],
-        "summary": "Get Geometry Stats",
-        "description": "Get detailed statistics about polygon complexity to diagnose performance issues.\n\nThis endpoint helps identify problematic geometries that might be causing\ndatabase crashes or slow queries.",
-        "operationId": "get_geometry_stats_tiles_diagnostics_geometry_stats_get",
-        "parameters": [
-          {
-            "name": "layer_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Layer Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tiles/diagnostics/problematic-nodes": {
-      "get": {
-        "tags": [
-          "MVT"
-        ],
-        "summary": "Get Problematic Nodes",
-        "description": "List nodes with overly complex geometries that might cause performance issues.\n\nArgs:\n    db: Database session\n    layer_id: Optional layer to filter by\n    min_points: Minimum number of points to be considered problematic (default: 10000)",
-        "operationId": "get_problematic_nodes_tiles_diagnostics_problematic_nodes_get",
-        "parameters": [
-          {
-            "name": "layer_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Layer Id"
-            }
-          },
-          {
-            "name": "min_points",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "default": 10000,
-              "title": "Min Points"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tiles/diagnostics/node-stats/{node_id}": {
-      "get": {
-        "tags": [
-          "MVT"
-        ],
-        "summary": "Get Node Stats",
-        "description": "Get detailed statistics about a specific node's geometry.\n\nArgs:\n    node_id: The node ID to analyze\n    db: Database session\n\nReturns:\n    Dictionary with detailed geometry statistics including:\n    - size_bytes: Raw geometry size in bytes\n    - size_kb: Geometry size in kilobytes\n    - num_vertices: Total number of vertices across all polygons\n    - num_polygons: Number of polygons in the multipolygon\n    - num_rings: Total number of rings (exterior + interior/holes)\n    - avg_vertices_per_polygon: Average vertices per polygon\n    - min_distance: Minimum distance between consecutive points (meters)\n    - max_distance: Maximum distance between consecutive points (meters)\n    - avg_distance: Average distance between consecutive points (meters)\n    - median_distance: Median distance between consecutive points (meters)\n    - coordinate_precision: Estimated decimal places in coordinates\n    - is_valid: Whether geometry is topologically valid\n    - invalid_reason: Reason if geometry is invalid",
-        "operationId": "get_node_stats_tiles_diagnostics_node_stats__node_id__get",
-        "parameters": [
-          {
-            "name": "node_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Node Id"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
               }
             }
           }
@@ -1031,6 +775,48 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Map"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/spatial/select": {
+      "post": {
+        "tags": [
+          "Spatial"
+        ],
+        "summary": "Select Features In Lasso",
+        "description": "Select all features from a layer that intersect with a lasso polygon.",
+        "operationId": "select_features_in_lasso_spatial_select_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpatialSelectRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpatialSelectResponse"
                 }
               }
             }
@@ -1352,6 +1138,126 @@
         "title": "Map",
         "description": "Map."
       },
+      "Polygon": {
+        "properties": {
+          "bbox": {
+            "anyOf": [
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 4,
+                "minItems": 4
+              },
+              {
+                "prefixItems": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "number"
+                  }
+                ],
+                "type": "array",
+                "maxItems": 6,
+                "minItems": 6
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Bbox"
+          },
+          "type": {
+            "type": "string",
+            "const": "Polygon",
+            "title": "Type"
+          },
+          "coordinates": {
+            "items": {
+              "items": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/Position2D"
+                  },
+                  {
+                    "$ref": "#/components/schemas/Position3D"
+                  }
+                ]
+              },
+              "type": "array",
+              "minItems": 4
+            },
+            "type": "array",
+            "title": "Coordinates"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "coordinates"
+        ],
+        "title": "Polygon",
+        "description": "Polygon Model"
+      },
+      "Position2D": {
+        "prefixItems": [
+          {
+            "type": "number",
+            "title": "Longitude"
+          },
+          {
+            "type": "number",
+            "title": "Latitude"
+          }
+        ],
+        "type": "array",
+        "maxItems": 2,
+        "minItems": 2
+      },
+      "Position3D": {
+        "prefixItems": [
+          {
+            "type": "number",
+            "title": "Longitude"
+          },
+          {
+            "type": "number",
+            "title": "Latitude"
+          },
+          {
+            "type": "number",
+            "title": "Altitude"
+          }
+        ],
+        "type": "array",
+        "maxItems": 3,
+        "minItems": 3
+      },
       "RegisterDTO": {
         "properties": {
           "email": {
@@ -1372,6 +1278,44 @@
         ],
         "title": "RegisterDTO",
         "description": "POST model for creating a new user."
+      },
+      "SpatialSelectRequest": {
+        "properties": {
+          "layer_id": {
+            "type": "integer",
+            "title": "Layer Id"
+          },
+          "polygon": {
+            "$ref": "#/components/schemas/Polygon"
+          }
+        },
+        "type": "object",
+        "required": [
+          "layer_id",
+          "polygon"
+        ],
+        "title": "SpatialSelectRequest"
+      },
+      "SpatialSelectResponse": {
+        "properties": {
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "nodes": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Nodes"
+          }
+        },
+        "type": "object",
+        "required": [
+          "count",
+          "nodes"
+        ],
+        "title": "SpatialSelectResponse"
       },
       "UpdateNode": {
         "properties": {
