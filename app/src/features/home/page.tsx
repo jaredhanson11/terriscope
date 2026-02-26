@@ -1,6 +1,8 @@
 import {
   IconCheck,
   IconChevronDown,
+  IconEye,
+  IconEyeOff,
   IconHome,
   IconInfoCircle,
   IconLogout,
@@ -18,6 +20,12 @@ import { AppRoutes } from "@/app/routes"
 import Logo from "@/assets/logoipsum.svg?react"
 import { PageLayout } from "@/components/layout"
 import { Button } from "@/components/ui/button"
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible"
+import { Switch } from "@/components/ui/switch"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -74,7 +82,9 @@ export default function HomePage() {
   const currentMap = maps[0]
   const layersQuery = useQuery(queries.listLayers(currentMap.id))
   const [baseMap, setBaseMap] = useState<BaseMapName>("osm")
-  const [visibleLayers, setVisibleLayers] = useState<number[]>([])
+  const [fillLayerId, setFillLayerId] = useState<number | null>(null)
+  const [borderLayerIds, setBorderLayerIds] = useState<Set<number>>(new Set())
+  const [labelLayerIds, setLabelLayerIds] = useState<Set<number>>(new Set())
   const logoutMutation = useLogoutMutation()
   const spatialSelectMutation = useSpatialSelectMutation()
   const [activeLayerId, setActiveLayerId] = useState<number | undefined>(
@@ -98,21 +108,33 @@ export default function HomePage() {
       layersQuery.data
         ? layersQuery.data.map((_layer) => ({
             id: _layer.id,
-            showFill: visibleLayers.includes(_layer.id),
-            showOutline: visibleLayers.includes(_layer.id),
-            showLabel: false,
+            showFill: fillLayerId === _layer.id,
+            showOutline: borderLayerIds.has(_layer.id),
+            showLabel: labelLayerIds.has(_layer.id),
           }))
         : [],
-    [layersQuery.data, visibleLayers],
+    [layersQuery.data, fillLayerId, borderLayerIds, labelLayerIds],
   )
 
-  const toggleLayerVisibility = (layerId: number) => {
-    setVisibleLayers((prev) => {
-      if (prev.includes(layerId)) {
-        return prev.filter((id) => id !== layerId)
-      } else {
-        return [...prev, layerId]
-      }
+  const toggleFill = (layerId: number) => {
+    setFillLayerId((prev) => (prev === layerId ? null : layerId))
+  }
+
+  const toggleBorder = (layerId: number) => {
+    setBorderLayerIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(layerId)) next.delete(layerId)
+      else next.add(layerId)
+      return next
+    })
+  }
+
+  const toggleLabel = (layerId: number) => {
+    setLabelLayerIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(layerId)) next.delete(layerId)
+      else next.add(layerId)
+      return next
     })
   }
 
@@ -404,52 +426,104 @@ export default function HomePage() {
 
             {/* Layers */}
             <SidebarGroup>
-              <SidebarGroupLabel>
-                Layers
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button className="text-muted-foreground hover:text-foreground ml-auto">
-                      <IconInfoCircle className="h-3.5 w-3.5" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent side="right" className="w-80">
-                    <div className="space-y-2">
-                      <h4 className="font-semibold">Layer Visibility</h4>
-                      <p className="text-muted-foreground text-sm">
-                        Control which territory layers are displayed on the map.
-                        Hiding layers can improve performance and reduce visual
-                        clutter.
-                      </p>
-                      <div className="text-muted-foreground text-xs">
-                        <strong>Tip:</strong> You can still select features from
-                        hidden layers if they are set as the active layer.
-                      </div>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </SidebarGroupLabel>
+              <SidebarGroupLabel>Layers</SidebarGroupLabel>
               <SidebarGroupContent>
-                <div className="space-y-2">
-                  {layersQuery.data
-                    ? layersQuery.data.map((layer) => (
-                        <label
-                          key={layer.id}
-                          className="flex items-center gap-2"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={visibleLayers.includes(layer.id)}
-                            onChange={() => {
-                              toggleLayerVisibility(layer.id)
-                            }}
-                            className="rounded border-input"
-                          />
-                          <span className="text-sm font-medium">
+                <div className="space-y-1">
+                  {layersQuery.data?.map((layer) => {
+                    const hasFill = fillLayerId === layer.id
+                    const hasBorder = borderLayerIds.has(layer.id)
+                    const hasLabels = labelLayerIds.has(layer.id)
+                    return (
+                      <Collapsible key={layer.id}>
+                        <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+                          <IconChevronDown className="text-muted-foreground h-3.5 w-3.5 shrink-0 transition-transform group-data-[state=closed]:-rotate-90" />
+                          <span className="flex-1 truncate text-left font-medium">
                             {layer.name}
                           </span>
-                        </label>
-                      ))
-                    : undefined}
+                          <div className="flex items-center gap-1">
+                            <span
+                              className={`rounded px-1 py-0.5 font-mono text-[10px] font-semibold leading-none transition-colors ${hasFill ? "bg-primary text-primary-foreground" : "text-muted-foreground/50"}`}
+                            >
+                              F
+                            </span>
+                            <span
+                              className={`rounded px-1 py-0.5 font-mono text-[10px] font-semibold leading-none transition-colors ${hasBorder ? "bg-primary text-primary-foreground" : "text-muted-foreground/50"}`}
+                            >
+                              B
+                            </span>
+                            <span
+                              className={`rounded px-1 py-0.5 font-mono text-[10px] font-semibold leading-none transition-colors ${hasLabels ? "bg-primary text-primary-foreground" : "text-muted-foreground/50"}`}
+                            >
+                              L
+                            </span>
+                            <button
+                              className="text-muted-foreground/50 hover:text-foreground ml-0.5 transition-colors"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                const allOn =
+                                  hasFill && hasBorder && hasLabels
+                                if (allOn) {
+                                  setFillLayerId((prev) =>
+                                    prev === layer.id ? null : prev,
+                                  )
+                                  toggleBorder(layer.id)
+                                  toggleLabel(layer.id)
+                                } else {
+                                  setFillLayerId(layer.id)
+                                  setBorderLayerIds((prev) =>
+                                    new Set([...prev, layer.id]),
+                                  )
+                                  setLabelLayerIds((prev) =>
+                                    new Set([...prev, layer.id]),
+                                  )
+                                }
+                              }}
+                            >
+                              {hasFill && hasBorder && hasLabels ? (
+                                <IconEye className="h-3.5 w-3.5" />
+                              ) : (
+                                <IconEyeOff className="h-3.5 w-3.5" />
+                              )}
+                            </button>
+                          </div>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="mt-0.5 ml-2 space-y-px border-l pl-3.5 pb-1">
+                            <div className="flex items-center justify-between rounded px-1.5 py-1">
+                              <span className="text-muted-foreground text-xs">
+                                Fill
+                              </span>
+                              <Switch
+                                size="sm"
+                                checked={hasFill}
+                                onCheckedChange={() => toggleFill(layer.id)}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between rounded px-1.5 py-1">
+                              <span className="text-muted-foreground text-xs">
+                                Border
+                              </span>
+                              <Switch
+                                size="sm"
+                                checked={hasBorder}
+                                onCheckedChange={() => toggleBorder(layer.id)}
+                              />
+                            </div>
+                            <div className="flex items-center justify-between rounded px-1.5 py-1">
+                              <span className="text-muted-foreground text-xs">
+                                Labels
+                              </span>
+                              <Switch
+                                size="sm"
+                                checked={hasLabels}
+                                onCheckedChange={() => toggleLabel(layer.id)}
+                              />
+                            </div>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    )
+                  })}
                 </div>
               </SidebarGroupContent>
             </SidebarGroup>
