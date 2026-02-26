@@ -310,6 +310,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/tiles/{layer_id}/{z}/{x}/{y}/labels.pbf": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Label Tile
+         * @description Get a label tile for a specific layer using point-on-surface geometries.
+         *
+         *     Returns one point per node (the pole of inaccessibility), so each polygon
+         *     gets exactly one label placement regardless of how many tiles it spans.
+         */
+        get: operations["get_label_tile_tiles__layer_id___z___x___y__labels_pbf_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/tiles/layers": {
         parameters: {
             query?: never;
@@ -1118,6 +1141,40 @@ export interface operations {
         };
     };
     get_tile_tiles__layer_id___z___x___y__pbf_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                layer_id: number;
+                z: number;
+                x: number;
+                y: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_label_tile_tiles__layer_id___z___x___y__labels_pbf_get: {
         parameters: {
             query?: never;
             header?: never;

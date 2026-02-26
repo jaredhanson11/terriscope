@@ -17,6 +17,8 @@ import { updateLayers, updateSources } from "./utils"
 
 const EMPTY_STYLE = {
   version: 8 as const,
+  glyphs:
+    "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
   sources: {},
   layers: [],
 }

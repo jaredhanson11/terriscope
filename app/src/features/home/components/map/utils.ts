@@ -21,11 +21,22 @@ export function updateSources(map: maplibregl.Map, layers: LayerViewOptions) {
   layers.forEach((layerOption) => {
     const { id } = layerOption
     const sourceId = `layer-${id.toString()}`
+    const labelSourceId = `layer-${id.toString()}-labels`
     if (!map.getSource(sourceId)) {
       map.addSource(sourceId, {
         type: "vector",
         tiles: [
           `${config.get("api_base_url")}/tiles/${id.toString()}/{z}/{x}/{y}.pbf`,
+        ],
+        minzoom: 0,
+        maxzoom: 14,
+      })
+    }
+    if (!map.getSource(labelSourceId)) {
+      map.addSource(labelSourceId, {
+        type: "vector",
+        tiles: [
+          `${config.get("api_base_url")}/tiles/${id.toString()}/{z}/{x}/{y}/labels.pbf`,
         ],
         minzoom: 0,
         maxzoom: 14,
@@ -64,6 +75,7 @@ export function updateLayers(
     const outlineLayerId = `layer-${id.toString()}-outline`
     const labelLayerId = `layer-${id.toString()}-label`
     const sourceId = `layer-${id.toString()}`
+    const labelSourceId = `layer-${id.toString()}-labels`
 
     // Fill layer
     const fillLayerExists = map.getLayer(fillLayerId)
@@ -117,14 +129,18 @@ export function updateLayers(
         {
           id: labelLayerId,
           type: "symbol",
-          source: sourceId,
+          source: labelSourceId,
           "source-layer": "nodes",
           layout: {
             "text-field": ["get", "name"],
-            "text-size": 12,
+            "text-size": ["interpolate", ["linear"], ["zoom"], 4, 10, 10, 13],
+            "text-font": ["Open Sans Regular", "Arial Unicode MS Regular"],
+            "text-max-width": 8,
           },
           paint: {
-            "text-color": "#202020",
+            "text-color": "#1a1a1a",
+            "text-halo-color": "rgba(255,255,255,0.85)",
+            "text-halo-width": 1.5,
           },
         },
         undefined,

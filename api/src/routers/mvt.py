@@ -79,6 +79,57 @@ def get_tile(layer_id: int, z: int, x: int, y: int, db: DatabaseSession):
     )
 
 
+@mvt_router.get("/{layer_id}/{z}/{x}/{y}/labels.pbf")
+def get_label_tile(layer_id: int, z: int, x: int, y: int, db: DatabaseSession):
+    """Get a label tile for a specific layer using point-on-surface geometries.
+
+    Returns one point per node (the pole of inaccessibility), so each polygon
+    gets exactly one label placement regardless of how many tiles it spans.
+    """
+    if z < 0 or z > 20:
+        raise HTTPException(status_code=400, detail="Invalid zoom level")
+
+    query = text("""
+        WITH tile_bounds AS (
+            SELECT ST_TileEnvelope(:z, :x, :y) AS geom
+        ),
+        label_points AS (
+            SELECT
+                n.id,
+                n.name,
+                ST_Transform(ST_PointOnSurface(n.geom), 3857) AS pt
+            FROM nodes n
+            WHERE n.layer_id = :layer_id
+              AND n.geom IS NOT NULL
+        ),
+        tile_data AS (
+            SELECT
+                lp.id,
+                lp.name,
+                ST_AsMVTGeom(lp.pt, (SELECT geom FROM tile_bounds), 4096, 0, false) AS geom
+            FROM label_points lp
+            WHERE ST_Intersects(lp.pt, (SELECT geom FROM tile_bounds))
+        )
+        SELECT ST_AsMVT(tile_data, 'nodes', 4096, 'geom', 'id')
+        FROM tile_data
+        WHERE tile_data.geom IS NOT NULL;
+    """)
+
+    result = db.execute(query, {"layer_id": layer_id, "z": z, "x": x, "y": y}).scalar()
+
+    if result is None:
+        result = b""
+
+    return Response(
+        content=bytes(result),
+        media_type="application/x-protobuf",
+        headers={
+            "Content-Type": "application/x-protobuf",
+            "Cache-Control": "public, max-age=3600",
+        },
+    )
+
+
 @mvt_router.get("/layers")
 def list_tile_layers(db: DatabaseSession):
     """List all available layers that can be rendered as tiles.
