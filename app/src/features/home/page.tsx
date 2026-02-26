@@ -3,8 +3,10 @@ import {
   IconChevronDown,
   IconEye,
   IconEyeOff,
+  IconHandGrab,
   IconHome,
   IconInfoCircle,
+  IconLasso,
   IconLogout,
   IconPlus,
   IconSettings,
@@ -12,7 +14,7 @@ import {
 } from "@tabler/icons-react"
 import { useQuery } from "@tanstack/react-query"
 import pluralize from "pluralize"
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { type MapRef } from "react-map-gl/maplibre"
 
 import { useMaps } from "@/app/providers/me-provider/context"
@@ -26,6 +28,11 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
 import { Switch } from "@/components/ui/switch"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -85,7 +92,19 @@ export default function HomePage() {
   const [fillLayerId, setFillLayerId] = useState<number | null>(null)
   const [borderLayerIds, setBorderLayerIds] = useState<Set<number>>(new Set())
   const [labelLayerIds, setLabelLayerIds] = useState<Set<number>>(new Set())
+  const [currentTool, setCurrentTool] = useState<"pan" | "lasso">("pan")
   const logoutMutation = useLogoutMutation()
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === "INPUT" || tag === "TEXTAREA") return
+      if (e.key === "v" || e.key === "V") setCurrentTool("pan")
+      if (e.key === "l" || e.key === "L") setCurrentTool("lasso")
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [])
   const spatialSelectMutation = useSpatialSelectMutation()
   const [activeLayerId, setActiveLayerId] = useState<number | undefined>(
     undefined,
@@ -553,12 +572,13 @@ export default function HomePage() {
       </PageLayout.TopNav>
 
       <PageLayout.FullScreenBody>
-        <Map
-          ref={mapRef}
-          baseMap={baseMap}
-          layers={layers}
-          currentTool="lasso"
-          onLassoComplete={(geojson) => {
+        <div className="relative h-full w-full">
+          <Map
+            ref={mapRef}
+            baseMap={baseMap}
+            layers={layers}
+            currentTool={currentTool}
+            onLassoComplete={(geojson) => {
             if (activeLayerId != null) {
               spatialSelectMutation.mutate(
                 { lasso: geojson, layerId: activeLayerId },
@@ -586,6 +606,37 @@ export default function HomePage() {
           }}
           selectedNodes={selectedNodes}
         />
+
+          <div className="absolute bottom-4 left-4 flex flex-col gap-0.5 rounded-lg border bg-background/90 p-1 shadow-md backdrop-blur-sm">
+            {(
+              [
+                { tool: "pan", icon: IconHandGrab, label: "Pan", shortcut: "V" },
+                { tool: "lasso", icon: IconLasso, label: "Lasso", shortcut: "L" },
+              ] as const
+            ).map(({ tool, icon: Icon, label, shortcut }) => (
+              <Tooltip key={tool}>
+                <TooltipTrigger asChild>
+                  <button
+                    onClick={() => setCurrentTool(tool)}
+                    className={`rounded p-2 transition-colors ${
+                      currentTool === tool
+                        ? "bg-primary text-primary-foreground"
+                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                    }`}
+                  >
+                    <Icon className="h-4 w-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {label}
+                  <kbd className="bg-muted text-muted-foreground ml-2 rounded px-1 py-0.5 font-mono text-[10px]">
+                    {shortcut}
+                  </kbd>
+                </TooltipContent>
+              </Tooltip>
+            ))}
+          </div>
+        </div>
       </PageLayout.FullScreenBody>
     </PageLayout>
   )

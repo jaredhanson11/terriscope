@@ -72,12 +72,13 @@ export function updateLayers(
   layers.forEach((layerOption) => {
     const { id, showFill, showOutline, showLabel } = layerOption
     const fillLayerId = `layer-${id.toString()}-fill`
+    const selectionLayerId = `layer-${id.toString()}-selection`
     const outlineLayerId = `layer-${id.toString()}-outline`
     const labelLayerId = `layer-${id.toString()}-label`
     const sourceId = `layer-${id.toString()}`
     const labelSourceId = `layer-${id.toString()}-labels`
 
-    // Fill layer
+    // Fill layer — inserted below the selection layer so selection always renders on top
     const fillLayerExists = map.getLayer(fillLayerId)
     if (showFill && !fillLayerExists) {
       map.addLayer(
@@ -88,21 +89,39 @@ export function updateLayers(
           "source-layer": "nodes",
           paint: {
             "fill-color": "#888888",
-            "fill-opacity": [
-              "case",
-              ["boolean", ["feature-state", "selected"], false],
-              1, // Selected opacity
-              0.5, // Default opacity
-            ],
+            "fill-opacity": 0.4,
           },
         },
-        undefined,
+        map.getLayer(selectionLayerId) ? selectionLayerId : undefined,
       )
     } else if (!showFill && fillLayerExists) {
       map.removeLayer(fillLayerId)
     }
 
-    // Outline layer
+    // Selection highlight — always present, transparent until features are selected.
+    // This ensures lasso feedback is visible regardless of which layer has fill enabled.
+    if (!map.getLayer(selectionLayerId)) {
+      map.addLayer(
+        {
+          id: selectionLayerId,
+          type: "fill",
+          source: sourceId,
+          "source-layer": "nodes",
+          paint: {
+            "fill-color": "#2563eb",
+            "fill-opacity": [
+              "case",
+              ["boolean", ["feature-state", "selected"], false],
+              0.5,
+              0,
+            ],
+          },
+        },
+        map.getLayer(outlineLayerId) ? outlineLayerId : undefined,
+      )
+    }
+
+    // Outline layer — inserted below the label layer
     const outlineLayerExists = map.getLayer(outlineLayerId)
     if (showOutline && !outlineLayerExists) {
       map.addLayer(
@@ -116,13 +135,13 @@ export function updateLayers(
             "line-width": 2,
           },
         },
-        undefined,
+        map.getLayer(labelLayerId) ? labelLayerId : undefined,
       )
     } else if (!showOutline && outlineLayerExists) {
       map.removeLayer(outlineLayerId)
     }
 
-    // Label layer
+    // Label layer — always on top
     const labelLayerExists = map.getLayer(labelLayerId)
     if (showLabel && !labelLayerExists) {
       map.addLayer(
