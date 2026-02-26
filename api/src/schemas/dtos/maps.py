@@ -19,6 +19,8 @@ class DataFieldSetup(BaseModel):
     name: str
     header: str
     type: Literal["text", "number"]
+    aggregations: list[Literal["sum", "avg"]] = []
+    """Aggregation rules applied to direct children. Only meaningful when type == "number"."""
 
 
 class ImportMap(BaseModel):

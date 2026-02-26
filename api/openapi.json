@@ -824,7 +824,7 @@
           "Maps"
         ],
         "summary": "Create Map",
-        "description": "Create map.\n\nTOODS:\n    - Return errors for zip codes we don't have data for\n    - Validate no duplicate layer names\n    - Validate no duplicate parents and raise error if so\n    - Fix all typing issues\n    - Recompute after loading zip codes\n    - Add data fields",
+        "description": "Create map.\n\nTOODS:\n    - Return errors for zip codes we don't have data for\n    - Validate no duplicate layer names\n    - Validate no duplicate parents and raise error if so\n    - Fix all typing issues",
         "operationId": "create_map_maps_post",
         "requestBody": {
           "content": {
@@ -1013,6 +1013,18 @@
               "number"
             ],
             "title": "Type"
+          },
+          "aggregations": {
+            "items": {
+              "type": "string",
+              "enum": [
+                "sum",
+                "avg"
+              ]
+            },
+            "type": "array",
+            "title": "Aggregations",
+            "default": []
           }
         },
         "type": "object",

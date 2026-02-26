@@ -1,5 +1,7 @@
 """Maps router."""
 
+import hashlib
+import json
 from typing import Any, TypedDict
 
 import pandas as pd
@@ -29,6 +31,7 @@ class BulkInsertNode(TypedDict):
     parent_node_id: int | None
     geom: Any | None
     color: str
+    data: Any | None
     data_cache_key: str
     data_inputs_cache_key: str
     geom_cache_key: str
@@ -51,11 +54,17 @@ def create_map(
         - Validate no duplicate layer names
         - Validate no duplicate parents and raise error if so
         - Fix all typing issues
-        - Recompute after loading zip codes
-        - Add data fields
     """
+    # Build data_field_config from the incoming data fields (numeric with aggregations only)
+    data_field_config = [
+        {"field": df.name, "type": df.type, "aggregations": df.aggregations}
+        for df in import_data.data_fields
+        if df.type == "number" and df.aggregations
+    ]
+
     # Create map
     new_map = graph_service.create_map(name=import_data.name)
+    new_map.data_field_config = data_field_config or None
     permission_service.add_map_role(
         user_id=current_user.id,
         map_id=new_map.id,
@@ -76,6 +85,9 @@ def create_map(
     # Convert values to numpy array for efficient column access
     df_values = pd.DataFrame(import_data.values, columns=list[str](import_data.headers)).astype(object)
 
+    # Numeric data fields that need aggregation
+    numeric_data_fields = [df for df in import_data.data_fields if df.type == "number" and df.aggregations]
+
     # Get unique combinations of layer values with their layer IDs
     previous_header: str | None = None
     previous_nodes: pd.DataFrame | None = None
@@ -95,10 +107,27 @@ def create_map(
             # Filter out zip codes that don't exist in geography table
             if valid_zip_codes is not None:
                 nodes_df = nodes_df[nodes_df[header].isin(valid_zip_codes)]
+
+        # For leaf nodes, compute raw data from the spreadsheet keyed by suffixed agg name
+        # (e.g. "customers_sum": 150) so bulk_recompute_data_layer SQL is uniform at all levels.
+        leaf_data_by_name: dict[str, dict[str, float | None]] = {}
+        if layer.order == 0 and numeric_data_fields:
+            normalized_col = df_values[header].astype(str).str.zfill(5)
+            for leaf_name in nodes_df[header].unique():
+                matching = df_values[normalized_col == str(leaf_name)]
+                data_dict: dict[str, float | None] = {}
+                for field in numeric_data_fields:
+                    vals = pd.to_numeric(matching[field.header], errors="coerce").dropna()
+                    raw = float(vals.sum()) if not vals.empty else None
+                    for agg in field.aggregations:
+                        data_dict[f"{field.name}_{agg}"] = raw
+                leaf_data_by_name[str(leaf_name)] = data_dict
+
         # TODO should add validation that no duplicates of (layer) exists (aka not two different parents for same child)
         current_previous_nodes = previous_nodes.copy() if previous_nodes is not None else None
+        current_leaf_data = leaf_data_by_name
         bulk_insert_nodes_df = nodes_df.apply(
-            lambda row, layer_id=layer.id, prev_nodes=current_previous_nodes: BulkInsertNode(
+            lambda row, layer_id=layer.id, prev_nodes=current_previous_nodes, leaf_data=current_leaf_data: BulkInsertNode(
                 layer_id=layer_id,
                 name=str(row[header]),
                 parent_node_id=next(iter(prev_nodes.loc[prev_nodes["name"] == str(row[previous_header]), "id"]), None)
@@ -106,7 +135,12 @@ def create_map(
                 else None,
                 geom=None,
                 color="#FFFFF",
-                data_cache_key="",
+                data=leaf_data.get(str(row[header])) or None,
+                data_cache_key=hashlib.md5(
+                    json.dumps(leaf_data[str(row[header])], sort_keys=True).encode()
+                ).hexdigest()
+                if leaf_data.get(str(row[header]))
+                else "",
                 data_inputs_cache_key="",
                 geom_cache_key="",
                 geom_inputs_cache_key="",
@@ -132,10 +166,20 @@ def create_map(
         )
     )
 
-    # Recompute all parent layers from bottom to top
+    # Recompute geometry for all parent layers from bottom to top
     for layer, _ in layer_and_headers[1:]:  # Skip layer 0
         result = computation_service.bulk_recompute_layer(layer_id=layer.id, force=True)
-        print(f"Layer {layer.name} (id={layer.id}): {result}")
+        print(f"Geometry layer {layer.name} (id={layer.id}): {result}")
+
+    # Recompute aggregated data for all parent layers from bottom to top
+    if numeric_data_fields and data_field_config:
+        for layer, _ in layer_and_headers[1:]:  # Skip layer 0 (already has raw data)
+            result = computation_service.bulk_recompute_data_layer(
+                layer_id=layer.id,
+                data_field_config=data_field_config,
+                force=True,
+            )
+            print(f"Data layer {layer.name} (id={layer.id}): {result}")
 
     db.commit()
 

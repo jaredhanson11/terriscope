@@ -18,6 +18,12 @@ class MapModel(Base):
 
     id: Mapped[intpk] = mapped_column(init=False)
     name: Mapped[str]
+    data_field_config: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        default=None,
+    )
+    """Per-field aggregation config. Each entry: {"field": str, "aggregations": ["sum"|"avg"]}"""
 
 
 class LayerModel(Base):

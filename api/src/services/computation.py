@@ -188,6 +188,126 @@ class ComputationService(BaseService):
             "notes": {"changed_parent_ids_sample": changed_parent_ids[:10], "force": force},
         }
 
+    def bulk_recompute_data_layer(
+        self,
+        layer_id: int,
+        data_field_config: list[dict[str, object]],
+        force: bool = False,
+    ) -> dict[str, object]:
+        """Bulk recompute aggregated data for all parent nodes in a layer.
+
+        For each numeric field in data_field_config, aggregates direct children's
+        data values using the configured aggregations (sum/avg). Leaf nodes must
+        already have their raw data populated before calling this.
+
+        Uses the same cache-key pattern as geometry: skips nodes whose child data
+        hasn't changed unless force=True.
+        """
+        import time
+
+        # Only numeric fields with at least one aggregation need computing
+        numeric_fields: list[dict[str, object]] = [
+            f for f in data_field_config if f.get("type") == "number" and f.get("aggregations")
+        ]
+        if not numeric_fields:
+            return {"layer_id": layer_id, "parents_recomputed": 0, "notes": {"message": "No numeric fields"}}
+
+        start = time.perf_counter()
+
+        # Build the aggregated JSONB expression dynamically from field config.
+        # Each field produces keys like "customers_sum" and/or "customers_avg".
+        agg_parts: list[str] = []
+        for field in numeric_fields:
+            field_name = str(field["field"])
+            aggs = list(field.get("aggregations", []))  # type: ignore[arg-type]
+            for agg in aggs:
+                key = f"{field_name}_{agg}"
+                # Children store their values under the same suffixed key (e.g. "customers_sum").
+                # Leaf nodes are initialized with these same keys so the SQL is uniform at all levels.
+                if agg == "sum":
+                    expr = f"'{key}', SUM((c.data->>'{key}')::numeric)"
+                else:  # avg
+                    expr = f"'{key}', AVG((c.data->>'{key}')::numeric)"
+                agg_parts.append(expr)
+
+        agg_expr = f"jsonb_build_object({', '.join(agg_parts)})"
+
+        grouping_sql = text(
+            f"""
+            WITH child_groups AS (
+              SELECT c.parent_node_id AS pid,
+                     STRING_AGG(c.id::text || ':' || COALESCE(c.data_cache_key,'null'), ';' ORDER BY c.id) AS signature,
+                     {agg_expr} AS agg_data
+              FROM nodes c
+              JOIN nodes p ON p.id = c.parent_node_id
+              WHERE p.layer_id = :layer_id
+                AND c.data IS NOT NULL
+              GROUP BY c.parent_node_id
+            )
+            SELECT cg.pid,
+                   md5(cg.signature) AS inputs_hash,
+                   p.data_inputs_cache_key AS existing_hash,
+                   cg.agg_data
+            FROM child_groups cg
+            JOIN nodes p ON p.id = cg.pid
+            """  # noqa: S608
+        )
+        rows = self.db.execute(grouping_sql, {"layer_id": layer_id}).mappings().all()
+        grouping_ms = (time.perf_counter() - start) * 1000.0
+
+        if force:
+            to_update = [(r["pid"], r["inputs_hash"], r["agg_data"]) for r in rows]
+        else:
+            to_update = [
+                (r["pid"], r["inputs_hash"], r["agg_data"])
+                for r in rows
+                if r["existing_hash"] != r["inputs_hash"] or r["existing_hash"] is None
+            ]
+
+        if not to_update:
+            total_ms = (time.perf_counter() - start) * 1000.0
+            return {
+                "layer_id": layer_id,
+                "parents_considered": len(rows),
+                "parents_recomputed": 0,
+                "timing_ms": {"total": round(total_ms, 2)},
+                "notes": {"message": "No parents needed recompute", "force": force},
+            }
+
+        update_start = time.perf_counter()
+        update_sql = text(
+            """
+            UPDATE nodes
+            SET data = vals.agg_data,
+                data_inputs_cache_key = vals.inputs_hash,
+                data_cache_key = md5(vals.agg_data::text)
+            FROM (SELECT unnest(:pids) AS pid,
+                         unnest(:hashes) AS inputs_hash,
+                         unnest(:agg_datas::jsonb[]) AS agg_data) AS vals
+            WHERE nodes.id = vals.pid
+            """
+        )
+        pids = [r[0] for r in to_update]
+        hashes = [r[1] for r in to_update]
+        agg_datas = [r[2] for r in to_update]
+        self.db.execute(update_sql, {"pids": pids, "hashes": hashes, "agg_datas": agg_datas})
+        self.db.flush()
+
+        update_ms = (time.perf_counter() - update_start) * 1000.0
+        total_ms = (time.perf_counter() - start) * 1000.0
+
+        return {
+            "layer_id": layer_id,
+            "parents_considered": len(rows),
+            "parents_recomputed": len(to_update),
+            "timing_ms": {
+                "grouping": round(grouping_ms, 2),
+                "update": round(update_ms, 2),
+                "total": round(total_ms, 2),
+            },
+            "notes": {"force": force},
+        }
+
     @staticmethod
     def _get_children(db: Session, parent_id: int) -> Sequence[NodeModel]:
         rows = db.execute(select(NodeModel).where(NodeModel.parent_node_id == parent_id)).scalars().all()

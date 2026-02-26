@@ -378,8 +378,6 @@ export interface paths {
          *         - Validate no duplicate layer names
          *         - Validate no duplicate parents and raise error if so
          *         - Fix all typing issues
-         *         - Recompute after loading zip codes
-         *         - Add data fields
          */
         post: operations["create_map_maps_post"];
         delete?: never;
@@ -464,6 +462,11 @@ export interface components {
              * @enum {string}
              */
             type: "text" | "number";
+            /**
+             * Aggregations
+             * @default []
+             */
+            aggregations: ("sum" | "avg")[];
         };
         /** HTTPValidationError */
         HTTPValidationError: {
