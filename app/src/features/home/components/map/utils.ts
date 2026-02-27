@@ -70,7 +70,7 @@ export function updateLayers(
   })
 
   layers.forEach((layerOption) => {
-    const { id, showFill, showOutline, showLabel } = layerOption
+    const { id, showFill, showOutline, showLabel, labelField } = layerOption
     const fillLayerId = `layer-${id.toString()}-fill`
     const selectionLayerId = `layer-${id.toString()}-selection`
     const outlineLayerId = `layer-${id.toString()}-outline`
@@ -151,7 +151,7 @@ export function updateLayers(
           source: labelSourceId,
           "source-layer": "nodes",
           layout: {
-            "text-field": ["get", "name"],
+            "text-field": ["get", labelField ?? "name"],
             "text-size": ["interpolate", ["linear"], ["zoom"], 4, 10, 10, 13],
             "text-font": ["Open Sans Regular", "Arial Unicode MS Regular"],
             "text-max-width": 8,
@@ -164,6 +164,9 @@ export function updateLayers(
         },
         undefined,
       )
+    } else if (showLabel && labelLayerExists) {
+      // Update text-field in place when the selected label field changes.
+      map.setLayoutProperty(labelLayerId, "text-field", ["get", labelField ?? "name"])
     } else if (!showLabel && labelLayerExists) {
       map.removeLayer(labelLayerId)
     }

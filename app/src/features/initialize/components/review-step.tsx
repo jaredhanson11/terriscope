@@ -21,7 +21,6 @@ import type {
   DataFields,
   HeadersData,
   LayerFields,
-  NumberDataFieldOption,
   ValuesData,
 } from "@/features/initialize/initialize"
 
@@ -227,13 +226,10 @@ export default function ReviewStep({
                       <div className="text-sm text-muted-foreground">
                         Column: {field.header}
                         {field.type === "number" &&
-                          field.options instanceof Set &&
-                          field.options.size > 0 && (
+                          field.aggregations.length > 0 && (
                             <span>
                               {" · Aggregations: "}
-                              {Array.from(
-                                field.options,
-                              ).join(", ")}
+                              {field.aggregations.join(", ")}
                             </span>
                           )}
                       </div>

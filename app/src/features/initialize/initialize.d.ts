@@ -3,19 +3,14 @@ export type LayerField = {
   header: string
 }
 export type LayerFields = LayerField[]
-export type NumberDataFieldOption = "average" | "sum" | "min" | "max"
-export type NumberDataField = {
+export type DataFieldAggregation = "sum" | "avg"
+export type DataField = {
   name: string
   header: string
-  type: "number"
-  options: Set<NumberDataFieldOption>
+  type: "text" | "number"
+  aggregations: DataFieldAggregation[]
 }
-export type TextDataField = {
-  name: string
-  header: string
-  type: "text"
-}
-export type DataFields = (NumberDataField | TextDataField)[]
+export type DataFields = DataField[]
 export type HeadersData = string[]
 export type ValuesData = (string | number | null)[][]
 export type CellData = string | number | null

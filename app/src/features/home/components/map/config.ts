@@ -6,6 +6,8 @@ export type LayerViewOption = {
   showFill: boolean
   showOutline: boolean
   showLabel: boolean
+  /** Which property to render as the map label. null means use "name". */
+  labelField: string | null
 }
 
 export type LayerViewOptions = LayerViewOption[]

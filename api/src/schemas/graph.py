@@ -1,9 +1,17 @@
 """Graph schemas."""
 
 from collections.abc import Sequence
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel
+
+
+class DataFieldConfig(BaseModel):
+    """Data field config entry stored on a map."""
+
+    field: str
+    type: Literal["text", "number"]
+    aggregations: list[Literal["sum", "avg"]]
 
 
 class Map(BaseModel):
@@ -11,6 +19,7 @@ class Map(BaseModel):
 
     id: int
     name: str
+    data_field_config: list[DataFieldConfig] | None = None
 
 
 class Layer(BaseModel):

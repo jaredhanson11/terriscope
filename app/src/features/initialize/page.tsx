@@ -20,6 +20,7 @@ import ImportStep from "./components/import-step"
 import LayerStep from "./components/layer-step"
 import ReviewStep from "./components/review-step"
 import type {
+  DataField,
   DataFields,
   HeadersData,
   LayerFields,
@@ -46,7 +47,20 @@ export default function InitializePage() {
     },
     onSubmit: () => {
       importMutation.mutate({
-        import_data: formik.values,
+        import_data: {
+          name: formik.values.name,
+          headers: formik.values.headers,
+          values: formik.values.values,
+          layers: formik.values.layers,
+          data_fields: formik.values.data_fields.map(
+            (f: DataField) => ({
+              name: f.name,
+              header: f.header,
+              type: f.type,
+              aggregations: f.aggregations,
+            }),
+          ),
+        },
       })
     },
   })

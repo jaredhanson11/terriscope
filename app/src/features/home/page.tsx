@@ -27,12 +27,6 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { Switch } from "@/components/ui/switch"
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -65,6 +59,12 @@ import {
   SidebarMenuButton,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
+import { Switch } from "@/components/ui/switch"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { Map } from "@/features/home/components/map"
 import {
   useLogoutMutation,
@@ -85,8 +85,14 @@ const BASE_MAPS = [
 
 export default function HomePage() {
   const mapRef = useRef<MapRef | null>(null)
+
+  // Track labelField for each layer
+  const [labelFields, setLabelFields] = useState<Record<number, string | null>>(
+    {},
+  )
   const maps = useMaps()
-  const currentMap = maps[0]
+  const [currentMapId, setCurrentMapId] = useState<number>(maps[0]?.id ?? 0)
+  const currentMap = maps.find((m) => m.id === currentMapId) ?? maps[0]
   const layersQuery = useQuery(queries.listLayers(currentMap.id))
   const [baseMap, setBaseMap] = useState<BaseMapName>("osm")
   const [fillLayerId, setFillLayerId] = useState<number | null>(null)
@@ -103,7 +109,9 @@ export default function HomePage() {
       if (e.key === "l" || e.key === "L") setCurrentTool("lasso")
     }
     window.addEventListener("keydown", handler)
-    return () => window.removeEventListener("keydown", handler)
+    return () => {
+      window.removeEventListener("keydown", handler)
+    }
   }, [])
   const spatialSelectMutation = useSpatialSelectMutation()
   const [activeLayerId, setActiveLayerId] = useState<number | undefined>(
@@ -130,9 +138,10 @@ export default function HomePage() {
             showFill: fillLayerId === _layer.id,
             showOutline: borderLayerIds.has(_layer.id),
             showLabel: labelLayerIds.has(_layer.id),
+            labelField: labelFields[_layer.id] ?? "name",
           }))
         : [],
-    [layersQuery.data, fillLayerId, borderLayerIds, labelLayerIds],
+    [layersQuery.data, fillLayerId, borderLayerIds, labelLayerIds, labelFields],
   )
 
   const toggleFill = (layerId: number) => {
@@ -186,7 +195,19 @@ export default function HomePage() {
               >
                 <DropdownMenuLabel>Recent Maps</DropdownMenuLabel>
                 {maps.map((map) => (
-                  <DropdownMenuItem key={map.id} className="gap-3">
+                  <DropdownMenuItem
+                    key={map.id}
+                    className="gap-3"
+                    onClick={() => {
+                      setCurrentMapId(map.id)
+                      setActiveLayerId(undefined)
+                      setFillLayerId(null)
+                      setBorderLayerIds(new Set())
+                      setLabelLayerIds(new Set())
+                      setLabelFields({})
+                      setSelectedNodes([])
+                    }}
+                  >
                     <IconHome className="h-4 w-4" />
                     <div className="flex-1">
                       <div className="text-sm font-medium">{map.name}</div>
@@ -452,6 +473,17 @@ export default function HomePage() {
                     const hasFill = fillLayerId === layer.id
                     const hasBorder = borderLayerIds.has(layer.id)
                     const hasLabels = labelLayerIds.has(layer.id)
+                    // Build label options: "Name" plus one entry per field+aggregation combo
+                    const mapDataFields = currentMap.data_field_config ?? []
+                    const labelFieldOptions = [
+                      { value: "name", label: "Name" },
+                      ...mapDataFields.flatMap((f) =>
+                        f.aggregations.map((agg) => ({
+                          value: `${f.field}_${agg}`,
+                          label: `${f.field} (${agg})`,
+                        })),
+                      ),
+                    ]
                     return (
                       <Collapsible key={layer.id}>
                         <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
@@ -479,8 +511,7 @@ export default function HomePage() {
                               className="text-muted-foreground/50 hover:text-foreground ml-0.5 transition-colors"
                               onClick={(e) => {
                                 e.stopPropagation()
-                                const allOn =
-                                  hasFill && hasBorder && hasLabels
+                                const allOn = hasFill && hasBorder && hasLabels
                                 if (allOn) {
                                   setFillLayerId((prev) =>
                                     prev === layer.id ? null : prev,
@@ -489,11 +520,11 @@ export default function HomePage() {
                                   toggleLabel(layer.id)
                                 } else {
                                   setFillLayerId(layer.id)
-                                  setBorderLayerIds((prev) =>
-                                    new Set([...prev, layer.id]),
+                                  setBorderLayerIds(
+                                    (prev) => new Set([...prev, layer.id]),
                                   )
-                                  setLabelLayerIds((prev) =>
-                                    new Set([...prev, layer.id]),
+                                  setLabelLayerIds(
+                                    (prev) => new Set([...prev, layer.id]),
                                   )
                                 }
                               }}
@@ -515,7 +546,9 @@ export default function HomePage() {
                               <Switch
                                 size="sm"
                                 checked={hasFill}
-                                onCheckedChange={() => toggleFill(layer.id)}
+                                onCheckedChange={() => {
+                                  toggleFill(layer.id)
+                                }}
                               />
                             </div>
                             <div className="flex items-center justify-between rounded px-1.5 py-1">
@@ -525,7 +558,9 @@ export default function HomePage() {
                               <Switch
                                 size="sm"
                                 checked={hasBorder}
-                                onCheckedChange={() => toggleBorder(layer.id)}
+                                onCheckedChange={() => {
+                                  toggleBorder(layer.id)
+                                }}
                               />
                             </div>
                             <div className="flex items-center justify-between rounded px-1.5 py-1">
@@ -535,9 +570,42 @@ export default function HomePage() {
                               <Switch
                                 size="sm"
                                 checked={hasLabels}
-                                onCheckedChange={() => toggleLabel(layer.id)}
+                                onCheckedChange={() => {
+                                  toggleLabel(layer.id)
+                                }}
                               />
                             </div>
+                            {/* Label field selector */}
+                            {hasLabels && (
+                              <div className="flex items-center justify-between rounded px-1.5 py-1">
+                                <span className="text-muted-foreground text-xs">
+                                  Label Field
+                                </span>
+                                <Select
+                                  value={labelFields[layer.id] ?? "name"}
+                                  onValueChange={(val) => {
+                                    setLabelFields((prev) => ({
+                                      ...prev,
+                                      [layer.id]: val,
+                                    }))
+                                  }}
+                                >
+                                  <SelectTrigger className="w-32">
+                                    <SelectValue />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                    {labelFieldOptions.map((opt) => (
+                                      <SelectItem
+                                        key={opt.value}
+                                        value={opt.value}
+                                      >
+                                        {opt.label}
+                                      </SelectItem>
+                                    ))}
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                            )}
                           </div>
                         </CollapsibleContent>
                       </Collapsible>
@@ -579,45 +647,57 @@ export default function HomePage() {
             layers={layers}
             currentTool={currentTool}
             onLassoComplete={(geojson) => {
-            if (activeLayerId != null) {
-              spatialSelectMutation.mutate(
-                { lasso: geojson, layerId: activeLayerId },
-                {
-                  onSuccess: (response) => {
-                    console.log(
-                      mapRef,
-                      activeLayerId,
-                      selectedNodes,
-                      response.nodes,
-                    )
-                    if (mapRef.current) {
-                      updateSelectedFeatureStates(
-                        mapRef.current.getMap(),
+              if (activeLayerId != null) {
+                spatialSelectMutation.mutate(
+                  { lasso: geojson, layerId: activeLayerId },
+                  {
+                    onSuccess: (response) => {
+                      console.log(
+                        mapRef,
                         activeLayerId,
                         selectedNodes,
                         response.nodes,
                       )
-                      setSelectedNodes(response.nodes)
-                    }
+                      if (mapRef.current) {
+                        updateSelectedFeatureStates(
+                          mapRef.current.getMap(),
+                          activeLayerId,
+                          selectedNodes,
+                          response.nodes,
+                        )
+                        setSelectedNodes(response.nodes)
+                      }
+                    },
                   },
-                },
-              )
-            }
-          }}
-          selectedNodes={selectedNodes}
-        />
+                )
+              }
+            }}
+            selectedNodes={selectedNodes}
+          />
 
           <div className="absolute bottom-4 left-4 flex flex-col gap-0.5 rounded-lg border bg-background/90 p-1 shadow-md backdrop-blur-sm">
             {(
               [
-                { tool: "pan", icon: IconHandGrab, label: "Pan", shortcut: "V" },
-                { tool: "lasso", icon: IconLasso, label: "Lasso", shortcut: "L" },
+                {
+                  tool: "pan",
+                  icon: IconHandGrab,
+                  label: "Pan",
+                  shortcut: "V",
+                },
+                {
+                  tool: "lasso",
+                  icon: IconLasso,
+                  label: "Lasso",
+                  shortcut: "L",
+                },
               ] as const
             ).map(({ tool, icon: Icon, label, shortcut }) => (
               <Tooltip key={tool}>
                 <TooltipTrigger asChild>
                   <button
-                    onClick={() => setCurrentTool(tool)}
+                    onClick={() => {
+                      setCurrentTool(tool)
+                    }}
                     className={`rounded p-2 transition-colors ${
                       currentTool === tool
                         ? "bg-primary text-primary-foreground"

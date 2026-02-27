@@ -323,6 +323,8 @@ export interface paths {
          *
          *     Returns one point per node (the pole of inaccessibility), so each polygon
          *     gets exactly one label placement regardless of how many tiles it spans.
+         *     Includes all configured data field values as tile properties so the frontend
+         *     can dynamically switch the displayed label field.
          */
         get: operations["get_label_tile_tiles__layer_id___z___x___y__labels_pbf_get"];
         put?: never;
@@ -449,6 +451,21 @@ export interface components {
             layer_id: number;
         };
         /**
+         * DataFieldConfig
+         * @description Data field config entry stored on a map.
+         */
+        DataFieldConfig: {
+            /** Field */
+            field: string;
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "text" | "number";
+            /** Aggregations */
+            aggregations: ("sum" | "avg")[];
+        };
+        /**
          * DataFieldSetup
          * @description DataFieldSetup.
          */
@@ -551,6 +568,8 @@ export interface components {
             id: number;
             /** Name */
             name: string;
+            /** Data Field Config */
+            data_field_config?: components["schemas"]["DataFieldConfig"][] | null;
         };
         /**
          * Polygon

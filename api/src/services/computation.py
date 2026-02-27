@@ -6,7 +6,8 @@ from typing import Annotated
 
 from fastapi import Depends
 from geoalchemy2.elements import WKBElement
-from sqlalchemy import select, text
+from sqlalchemy import bindparam, select, text
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB as PgJSONB
 from sqlalchemy.orm import Session
 
 from src.app.database import DatabaseSession
@@ -275,6 +276,8 @@ class ComputationService(BaseService):
             }
 
         update_start = time.perf_counter()
+        # bindparam with ARRAY(JSONB) tells psycopg2 how to serialize the list of dicts.
+        # Avoids using `:param::jsonb[]` inline cast which confuses SQLAlchemy's param parser.
         update_sql = text(
             """
             UPDATE nodes
@@ -283,10 +286,10 @@ class ComputationService(BaseService):
                 data_cache_key = md5(vals.agg_data::text)
             FROM (SELECT unnest(:pids) AS pid,
                          unnest(:hashes) AS inputs_hash,
-                         unnest(:agg_datas::jsonb[]) AS agg_data) AS vals
+                         unnest(:agg_datas) AS agg_data) AS vals
             WHERE nodes.id = vals.pid
             """
-        )
+        ).bindparams(bindparam("agg_datas", type_=ARRAY(PgJSONB())))
         pids = [r[0] for r in to_update]
         hashes = [r[1] for r in to_update]
         agg_datas = [r[2] for r in to_update]

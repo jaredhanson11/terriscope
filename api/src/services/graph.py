@@ -25,7 +25,15 @@ class GraphService(BaseService):
 
     def create_layer(self, layer_data: CreateLayer) -> LayerModel:
         """Create layer."""
-        child_layer = self.db.execute(select(LayerModel).order_by(LayerModel.order.desc())).scalars().first()
+        child_layer = (
+            self.db.execute(
+                select(LayerModel)
+                .where(LayerModel.map_id == layer_data.map_id)
+                .order_by(LayerModel.order.desc())
+            )
+            .scalars()
+            .first()
+        )
 
         # Create new layer one level above
         new_layer = LayerModel(

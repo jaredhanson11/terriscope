@@ -15,11 +15,10 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import type {
+  DataField,
+  DataFieldAggregation,
   DataFields,
   HeadersData,
-  NumberDataField,
-  NumberDataFieldOption,
-  TextDataField,
 } from "@/features/initialize/initialize"
 import { cn } from "@/lib/utils"
 
@@ -30,17 +29,13 @@ interface DataStepProps {
   onBack?: () => void
 }
 
-type FieldConfig = NumberDataField | TextDataField
-
 const AGGREGATION_OPTIONS: {
-  value: NumberDataFieldOption
+  value: DataFieldAggregation
   label: string
   description: string
 }[] = [
   { value: "sum", label: "Sum", description: "Add all values together" },
-  { value: "average", label: "Average", description: "Calculate mean value" },
-  { value: "min", label: "Minimum", description: "Take smallest value" },
-  { value: "max", label: "Maximum", description: "Take largest value" },
+  { value: "avg", label: "Average", description: "Calculate mean value" },
 ]
 
 export default function DataStep({
@@ -49,41 +44,29 @@ export default function DataStep({
   onComplete,
   onBack,
 }: DataStepProps) {
-  // Available headers (including layer headers for selection)
-  const availableHeaders = headers
-
-  // Track which fields are added
-  const [fieldConfigs, setFieldConfigs] = React.useState<
-    Map<string, FieldConfig>
-  >(() => {
-    // Initialize with non-layer headers
-    const map = new Map<string, FieldConfig>()
-    headers
-      .filter((h) => !layerHeaders.includes(h))
-      .forEach((header) => {
-        map.set(header, {
-          name: header,
-          header,
-          type: "text",
+  const [fieldConfigs, setFieldConfigs] = React.useState<Map<string, DataField>>(
+    () => {
+      const map = new Map<string, DataField>()
+      headers
+        .filter((h) => !layerHeaders.includes(h))
+        .forEach((header) => {
+          map.set(header, { name: header, header, type: "text", aggregations: [] })
         })
-      })
-    return map
-  })
-
-  const [selectedField, setSelectedField] = React.useState<string | null>(
-    Array.from(fieldConfigs.keys())[0] || null,
+      return map
+    },
   )
 
-  // Get list of field keys
+  const [selectedField, setSelectedField] = React.useState<string | null>(
+    Array.from(fieldConfigs.keys())[0] ?? null,
+  )
+
   const fieldKeys = Array.from(fieldConfigs.keys())
 
   const updateFieldName = (key: string, name: string) => {
     setFieldConfigs((prev) => {
       const next = new Map(prev)
       const field = next.get(key)
-      if (field) {
-        next.set(key, { ...field, name })
-      }
+      if (field) next.set(key, { ...field, name })
       return next
     })
   }
@@ -92,9 +75,7 @@ export default function DataStep({
     setFieldConfigs((prev) => {
       const next = new Map(prev)
       const field = next.get(key)
-      if (field) {
-        next.set(key, { ...field, header })
-      }
+      if (field) next.set(key, { ...field, header })
       return next
     })
   }
@@ -104,20 +85,12 @@ export default function DataStep({
       const next = new Map(prev)
       const field = next.get(key)
       if (field) {
-        if (type === "text") {
-          next.set(key, {
-            name: field.name,
-            header: field.header,
-            type: "text",
-          })
-        } else {
-          next.set(key, {
-            name: field.name,
-            header: field.header,
-            type: "number",
-            options: new Set(),
-          })
-        }
+        next.set(key, {
+          ...field,
+          type,
+          // Clear aggregations when switching to text
+          aggregations: type === "number" ? field.aggregations : [],
+        })
       }
       return next
     })
@@ -129,48 +102,38 @@ export default function DataStep({
       next.delete(key)
       return next
     })
-    // Update selected field if we deleted the selected one
     if (selectedField === key) {
       const remaining = Array.from(fieldConfigs.keys()).filter((k) => k !== key)
-      setSelectedField(remaining[0] || null)
+      setSelectedField(remaining[0] ?? null)
     }
   }
 
   const addField = (header: string) => {
-    // Generate a unique key for the field
     const key = `${header}-${Date.now().toString()}`
     setFieldConfigs((prev) => {
       const next = new Map(prev)
-      next.set(key, {
-        name: header,
-        header,
-        type: "text",
-      })
+      next.set(key, { name: header, header, type: "text", aggregations: [] })
       return next
     })
     setSelectedField(key)
   }
 
-  const toggleAggregation = (key: string, option: NumberDataFieldOption) => {
+  const toggleAggregation = (key: string, agg: DataFieldAggregation) => {
     setFieldConfigs((prev) => {
       const next = new Map(prev)
       const field = next.get(key)
       if (field && field.type === "number") {
-        const newOptions = new Set(Array.from(field.options))
-        if (newOptions.has(option)) {
-          newOptions.delete(option)
-        } else {
-          newOptions.add(option)
-        }
-        next.set(key, { ...field, options: newOptions })
+        const aggregations = field.aggregations.includes(agg)
+          ? field.aggregations.filter((a) => a !== agg)
+          : [...field.aggregations, agg]
+        next.set(key, { ...field, aggregations })
       }
       return next
     })
   }
 
   const handleComplete = () => {
-    const fields = Array.from(fieldConfigs.values())
-    onComplete(fields)
+    onComplete(Array.from(fieldConfigs.values()))
   }
 
   const selectedConfig = selectedField ? fieldConfigs.get(selectedField) : null
@@ -209,31 +172,26 @@ export default function DataStep({
                       }`}
                     >
                       <button
-                        onClick={() => {
-                          setSelectedField(key)
-                        }}
+                        onClick={() => setSelectedField(key)}
                         className="w-full text-left"
                       >
                         <div className="space-y-1.5">
                           <div className="font-medium text-sm truncate">
-                            {config?.name || key}
+                            {config?.name ?? key}
                           </div>
                           <div className="flex items-center gap-2">
                             <Badge
                               variant={
-                                config?.type === "number"
-                                  ? "default"
-                                  : "secondary"
+                                config?.type === "number" ? "default" : "secondary"
                               }
                               className="shrink-0"
                             >
                               {config?.type}
                             </Badge>
                             {config?.type === "number" &&
-                              config.options instanceof Set &&
-                              config.options.size > 0 && (
+                              config.aggregations.length > 0 && (
                                 <div className="text-muted-foreground text-xs">
-                                  {Array.from(config.options).join(", ")}
+                                  {config.aggregations.join(", ")}
                                 </div>
                               )}
                           </div>
@@ -262,16 +220,14 @@ export default function DataStep({
               <Select
                 value=""
                 onValueChange={(value) => {
-                  if (value) {
-                    addField(value)
-                  }
+                  if (value) addField(value)
                 }}
               >
                 <SelectTrigger className="w-full">
                   <SelectValue placeholder="+ Add field" />
                 </SelectTrigger>
                 <SelectContent>
-                  {availableHeaders.map((header) => (
+                  {headers.map((header) => (
                     <SelectItem key={header} value={header}>
                       {header}
                     </SelectItem>
@@ -286,9 +242,7 @@ export default function DataStep({
             {selectedConfig ? (
               <>
                 <div className="shrink-0 border-b border-border p-4">
-                  <h3 className="font-semibold text-lg">
-                    {selectedConfig.name}
-                  </h3>
+                  <h3 className="font-semibold text-lg">{selectedConfig.name}</h3>
                   <p className="text-muted-foreground text-sm mt-1">
                     Configure how this field should be processed
                   </p>
@@ -308,9 +262,8 @@ export default function DataStep({
                         id="field-name"
                         value={selectedConfig.name}
                         onChange={(e) => {
-                          if (selectedField) {
+                          if (selectedField)
                             updateFieldName(selectedField, e.target.value)
-                          }
                         }}
                         placeholder="Enter field name"
                       />
@@ -324,16 +277,14 @@ export default function DataStep({
                       <Select
                         value={selectedConfig.header}
                         onValueChange={(value) => {
-                          if (selectedField) {
-                            updateFieldHeader(selectedField, value)
-                          }
+                          if (selectedField) updateFieldHeader(selectedField, value)
                         }}
                       >
                         <SelectTrigger>
                           <SelectValue placeholder="Select column header" />
                         </SelectTrigger>
                         <SelectContent>
-                          {availableHeaders.map((header) => (
+                          {headers.map((header) => (
                             <SelectItem key={header} value={header}>
                               {header}
                             </SelectItem>
@@ -344,15 +295,11 @@ export default function DataStep({
 
                     {/* Data Type */}
                     <div className="space-y-3">
-                      <Label className="text-base font-semibold">
-                        Data Type
-                      </Label>
+                      <Label className="text-base font-semibold">Data Type</Label>
                       <RadioGroup
                         value={selectedConfig.type}
                         onValueChange={(value: "text" | "number") => {
-                          if (selectedField) {
-                            updateFieldType(selectedField, value)
-                          }
+                          if (selectedField) updateFieldType(selectedField, value)
                         }}
                       >
                         <div className="flex items-center space-x-2">
@@ -370,7 +317,7 @@ export default function DataStep({
                       </RadioGroup>
                     </div>
 
-                    {/* Aggregation Methods - only for numbers */}
+                    {/* Aggregation Methods — only for numbers */}
                     {selectedConfig.type === "number" && (
                       <div className="space-y-3">
                         <div>
@@ -378,20 +325,18 @@ export default function DataStep({
                             Aggregation Methods
                           </Label>
                           <p className="text-muted-foreground text-sm mt-1">
-                            Select how this field should roll up through the
-                            hierarchy
+                            How this field rolls up through the hierarchy
                           </p>
                         </div>
 
-                        <div className="grid gap-3 sm:grid-cols-2">
+                        <div className="flex gap-3">
                           {AGGREGATION_OPTIONS.map((option) => {
                             const isChecked =
-                              selectedConfig.options instanceof Set &&
-                              selectedConfig.options.has(option.value)
+                              selectedConfig.aggregations.includes(option.value)
                             return (
                               <div
                                 key={option.value}
-                                className={`rounded-lg border p-4 transition-colors ${
+                                className={`flex-1 rounded-lg border p-4 transition-colors ${
                                   isChecked
                                     ? "border-primary bg-accent"
                                     : "border-border hover:border-primary/50"
@@ -402,21 +347,15 @@ export default function DataStep({
                                     id={`agg-${selectedField ?? ""}-${option.value}`}
                                     checked={isChecked}
                                     onCheckedChange={() => {
-                                      if (selectedField) {
-                                        toggleAggregation(
-                                          selectedField,
-                                          option.value,
-                                        )
-                                      }
+                                      if (selectedField)
+                                        toggleAggregation(selectedField, option.value)
                                     }}
                                   />
                                   <label
                                     htmlFor={`agg-${selectedField ?? ""}-${option.value}`}
                                     className="flex-1 cursor-pointer"
                                   >
-                                    <div className="font-medium">
-                                      {option.label}
-                                    </div>
+                                    <div className="font-medium">{option.label}</div>
                                     <div className="text-muted-foreground text-xs mt-0.5">
                                       {option.description}
                                     </div>

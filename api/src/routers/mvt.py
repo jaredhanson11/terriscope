@@ -1,9 +1,10 @@
 """MVT (Mapbox Vector Tile) router for rendering geographic data."""
 
 from fastapi import APIRouter, HTTPException, Response
-from sqlalchemy import text
+from sqlalchemy import select, text
 
 from src.app.database import DatabaseSession
+from src.models.graph import LayerModel, MapModel
 
 mvt_router = APIRouter(prefix="/tiles", tags=["MVT"])
 
@@ -85,18 +86,38 @@ def get_label_tile(layer_id: int, z: int, x: int, y: int, db: DatabaseSession):
 
     Returns one point per node (the pole of inaccessibility), so each polygon
     gets exactly one label placement regardless of how many tiles it spans.
+    Includes all configured data field values as tile properties so the frontend
+    can dynamically switch the displayed label field.
     """
     if z < 0 or z > 20:
         raise HTTPException(status_code=400, detail="Invalid zoom level")
 
-    query = text("""
+    # Look up the map's data_field_config via the layer so we can include
+    # data field values as properties in the MVT.
+    data_field_config = db.execute(
+        select(MapModel.data_field_config)
+        .join(LayerModel, LayerModel.map_id == MapModel.id)
+        .where(LayerModel.id == layer_id)
+    ).scalar()
+
+    # Build extra SELECT fragments for each configured data field/aggregation.
+    extra_label_selects = ""
+    extra_tile_selects = ""
+    if data_field_config:
+        for field_config in data_field_config:
+            for agg in field_config.get("aggregations", []):
+                key = f"{field_config['field']}_{agg}"
+                extra_label_selects += f",\n                n.data->>{key!r} AS \"{key}\""
+                extra_tile_selects += f",\n                lp.\"{key}\""
+
+    query = text(f"""
         WITH tile_bounds AS (
             SELECT ST_TileEnvelope(:z, :x, :y) AS geom
         ),
         label_points AS (
             SELECT
                 n.id,
-                n.name,
+                n.name{extra_label_selects},
                 ST_Transform(ST_PointOnSurface(n.geom), 3857) AS pt
             FROM nodes n
             WHERE n.layer_id = :layer_id
@@ -105,7 +126,7 @@ def get_label_tile(layer_id: int, z: int, x: int, y: int, db: DatabaseSession):
         tile_data AS (
             SELECT
                 lp.id,
-                lp.name,
+                lp.name{extra_tile_selects},
                 ST_AsMVTGeom(lp.pt, (SELECT geom FROM tile_bounds), 4096, 0, false) AS geom
             FROM label_points lp
             WHERE ST_Intersects(lp.pt, (SELECT geom FROM tile_bounds))

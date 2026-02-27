@@ -183,7 +183,7 @@ def create_map(
 
     db.commit()
 
-    return Map(id=new_map.id, name=new_map.name)
+    return Map(id=new_map.id, name=new_map.name, data_field_config=new_map.data_field_config)
 
 
 @maps_router.get("", response_model=list[Map])
@@ -195,7 +195,7 @@ def list_maps(
     """List maps."""
     map_roles = permission_service.list_map_roles(user_id=current_user.id)
     return [
-        Map(id=_map.id, name=_map.name)
+        Map(id=_map.id, name=_map.name, data_field_config=_map.data_field_config)
         for _map in db.execute(select(MapModel).where(MapModel.id.in_([map_role.map_id for map_role in map_roles])))
         .scalars()
         .all()
