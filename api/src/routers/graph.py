@@ -1,20 +1,26 @@
-"""Layers router."""
+"""Graph router."""
 
 from collections.abc import Sequence
 
 from fastapi import APIRouter, HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 
 from src.app.database import DatabaseSession
 from src.exceptions import TerriscopeException
-from src.models.graph import LayerModel, NodeModel
-from src.schemas.dtos.graph import BulkUpdateNode, CreateLayer, CreateNode, UpdateNode
-from src.schemas.graph import Layer, Node, PaginatedNodes
+from src.models.geography import ZipCodeGeography
+from src.models.graph import LayerModel, NodeModel, ZipAssignmentModel
+from src.schemas.dtos.graph import AssignZip, BulkAssignZips, BulkUpdateNode, CreateLayer, CreateNode, UpdateNode
+from src.schemas.graph import Layer, Node, PaginatedNodes, PaginatedZipAssignments, ZipAssignment
 from src.services.auth import CurrentUserDependency
 from src.services.graph import GraphServiceDependency
 from src.services.permissions import PermissionsServiceDependency
 
 graph_router = APIRouter(prefix="", tags=["Graph"])
+
+
+# ---------------------------------------------------------------------------
+# Layers
+# ---------------------------------------------------------------------------
 
 
 @graph_router.post("/layers", response_model=Layer)
@@ -26,7 +32,6 @@ def create_layer(
     permission_service: PermissionsServiceDependency,
 ):
     """Create layer."""
-    # Get the highest order layer (the current top layer)
     if not permission_service.check_for_map_access(
         user_id=current_user.id,
         map_id=layer_data.map_id,
@@ -35,12 +40,7 @@ def create_layer(
         raise HTTPException(403, "User does not have permission to this map.")
     new_layer = graph_service.create_layer(layer_data)
     db.commit()
-    return Layer(
-        id=new_layer.id,
-        name=new_layer.name,
-        order=new_layer.order,
-        map_id=new_layer.map_id,
-    )
+    return Layer(id=new_layer.id, name=new_layer.name, order=new_layer.order, map_id=new_layer.map_id)
 
 
 @graph_router.get("/layers", response_model=list[Layer])
@@ -58,17 +58,12 @@ def list_layers(
     ):
         raise HTTPException(403, "User does not have permission to this map.")
     return [
-        Layer(
-            id=layer.id,
-            map_id=map_id,
-            name=layer.name,
-            order=layer.order,
-        )
-        for layer in db.query(LayerModel).filter(LayerModel.map_id == map_id).all()
+        Layer(id=layer.id, map_id=map_id, name=layer.name, order=layer.order)
+        for layer in db.execute(select(LayerModel).where(LayerModel.map_id == map_id)).scalars().all()
     ]
 
 
-@graph_router.get("/layers/{layer_id}")
+@graph_router.get("/layers/{layer_id}", response_model=Layer)
 def get_layer(
     layer_id: int,
     db: DatabaseSession,
@@ -82,16 +77,16 @@ def get_layer(
         map_id=layer.map_id,
         map_roles=["OWNER"],
     ):
-        return Layer(
-            id=layer.id,
-            name=layer.name,
-            order=layer.order,
-            map_id=layer.map_id,
-        )
+        return Layer(id=layer.id, name=layer.name, order=layer.order, map_id=layer.map_id)
     raise HTTPException(404)
 
 
-@graph_router.post("/nodes")
+# ---------------------------------------------------------------------------
+# Nodes (order >= 1 only)
+# ---------------------------------------------------------------------------
+
+
+@graph_router.post("/nodes", response_model=Node)
 def create_node(
     node_data: CreateNode,
     db: DatabaseSession,
@@ -112,8 +107,7 @@ def create_node(
     except TerriscopeException as e:
         if e.code == 400 or e.code == 402:
             raise HTTPException(404, e.msg) from e
-        else:
-            raise HTTPException(400, e.msg) from e
+        raise HTTPException(400, e.msg) from e
     db.commit()
     return Node(
         id=new_node.id,
@@ -125,7 +119,7 @@ def create_node(
     )
 
 
-@graph_router.get("/nodes")
+@graph_router.get("/nodes", response_model=PaginatedNodes)
 def list_nodes(
     db: DatabaseSession,
     current_user: CurrentUserDependency,
@@ -135,12 +129,13 @@ def list_nodes(
     page: int = 1,
     page_size: int = 100,
 ):
-    """List nodes filtered by layer_id OR parent_node_id (not both) with pagination."""
-    # Build filter condition - use either layer_id or parent_node_id, not both
+    """List nodes filtered by layer_id OR parent_node_id (not both) with pagination.
+
+    Only applies to order>=1 layers. For order=0 (zip layer) use GET /zip-assignments.
+    """
     if layer_id is not None and parent_node_id is not None:
         raise HTTPException(400, "Provide either layer_id or parent_node_id, not both")
     elif layer_id is not None:
-        filter_condition = NodeModel.layer_id == layer_id
         layer = db.get(LayerModel, layer_id)
         if not layer or not permission_service.check_for_map_access(
             user_id=current_user.id,
@@ -148,6 +143,9 @@ def list_nodes(
             map_roles=["OWNER"],
         ):
             raise HTTPException(403)
+        if layer.order == 0:
+            raise HTTPException(400, "Layer order=0 is the zip layer. Use GET /zip-assignments instead.")
+        filter_condition = NodeModel.layer_id == layer_id
     elif parent_node_id is not None:
         parent_node = db.get(NodeModel, parent_node_id)
         layer = db.get(LayerModel, parent_node.layer_id) if parent_node else None
@@ -161,16 +159,11 @@ def list_nodes(
     else:
         raise HTTPException(400, "Must provide either layer_id or parent_node_id")
 
-    # Count total nodes
     total = db.execute(select(func.count(NodeModel.id)).filter(filter_condition)).scalar() or 0
-
-    # Calculate pagination
     total_pages = (total + page_size - 1) // page_size if total > 0 else 0
     offset = (page - 1) * page_size
 
-    # Query nodes with pagination
-    nodes_query = select(NodeModel).filter(filter_condition).offset(offset).limit(page_size)
-    nodes = db.execute(nodes_query).scalars().all()
+    nodes = db.execute(select(NodeModel).filter(filter_condition).offset(offset).limit(page_size)).scalars().all()
 
     return PaginatedNodes(
         nodes=[
@@ -191,7 +184,7 @@ def list_nodes(
     )
 
 
-@graph_router.get("/nodes/{node_id}")
+@graph_router.get("/nodes/{node_id}", response_model=Node)
 def get_node(
     node_id: int,
     db: DatabaseSession,
@@ -199,7 +192,7 @@ def get_node(
     permission_service: PermissionsServiceDependency,
 ):
     """Get node by id."""
-    node_layer_result = (
+    result = (
         db.execute(
             select(NodeModel, LayerModel)
             .join(LayerModel, NodeModel.layer_id == LayerModel.id)
@@ -208,25 +201,26 @@ def get_node(
         .tuples()
         .one_or_none()
     )
-    if node_layer_result:
-        node, layer = node_layer_result
-        if not layer or not permission_service.check_for_map_access(
-            user_id=current_user.id,
-            map_id=layer.map_id,
-            map_roles=["OWNER"],
-        ):
-            raise HTTPException(403)
+    if not result:
+        raise HTTPException(404)
+    node, layer = result
+    if not permission_service.check_for_map_access(
+        user_id=current_user.id,
+        map_id=layer.map_id,
+        map_roles=["OWNER"],
+    ):
+        raise HTTPException(403)
+    return Node(
+        id=node.id,
+        layer_id=node.layer_id,
+        color=node.color,
+        name=node.name,
+        parent_node_id=node.parent_node_id,
+        child_count=node.child_count,
+    )
 
-        return Node(
-            id=node.id,
-            layer_id=node.layer_id,
-            color=node.color,
-            name=node.name,
-        )
-    raise HTTPException(404)
 
-
-@graph_router.put("/nodes/{node_id}")
+@graph_router.put("/nodes/{node_id}", response_model=Node)
 def update_node(
     db: DatabaseSession,
     graph_service: GraphServiceDependency,
@@ -236,7 +230,7 @@ def update_node(
     node_data: UpdateNode,
 ):
     """Update node."""
-    node_layer_result = (
+    result = (
         db.execute(
             select(NodeModel, LayerModel)
             .join(LayerModel, NodeModel.layer_id == LayerModel.id)
@@ -245,54 +239,90 @@ def update_node(
         .tuples()
         .one_or_none()
     )
-    if node_layer_result:
-        node, layer = node_layer_result
-        if not layer or not permission_service.check_for_map_access(
-            user_id=current_user.id,
-            map_id=layer.map_id,
-            map_roles=["OWNER"],
-        ):
-            raise HTTPException(403)
-        graph_service.update_node(node=node, node_data=node_data)
-        db.commit()
-        return Node(
-            id=node.id,
-            layer_id=node.layer_id,
-            color=node.color,
-            name=node.name,
-            child_count=node.child_count,
+    if not result:
+        raise HTTPException(404)
+    node, layer = result
+    if not permission_service.check_for_map_access(
+        user_id=current_user.id,
+        map_id=layer.map_id,
+        map_roles=["OWNER"],
+    ):
+        raise HTTPException(403)
+    try:
+        graph_service.update_node(node=node, node_data=node_data, layer=layer)
+    except TerriscopeException as e:
+        raise HTTPException(400, e.msg) from e
+    db.commit()
+    return Node(
+        id=node.id,
+        layer_id=node.layer_id,
+        color=node.color,
+        name=node.name,
+        parent_node_id=node.parent_node_id,
+        child_count=node.child_count,
+    )
+
+
+@graph_router.delete("/nodes/{node_id}", status_code=204)
+def delete_node(
+    node_id: int,
+    db: DatabaseSession,
+    current_user: CurrentUserDependency,
+    permission_service: PermissionsServiceDependency,
+):
+    """Delete a node (order>=1 only). Cascades to child nodes via FK."""
+    result = (
+        db.execute(
+            select(NodeModel, LayerModel)
+            .join(LayerModel, NodeModel.layer_id == LayerModel.id)
+            .filter(NodeModel.id == node_id)
         )
-    raise HTTPException(404)
+        .tuples()
+        .one_or_none()
+    )
+    if not result:
+        raise HTTPException(404)
+    node, layer = result
+    if not permission_service.check_for_map_access(
+        user_id=current_user.id,
+        map_id=layer.map_id,
+        map_roles=["OWNER"],
+    ):
+        raise HTTPException(403)
+    if layer.order == 0:
+        raise HTTPException(400, "Cannot delete zip-layer entries via this endpoint. Use DELETE /zip-assignments.")
+    db.execute(delete(NodeModel).where(NodeModel.id == node_id))
+    db.commit()
 
 
-@graph_router.put("/nodes/bulk")
+@graph_router.put("/nodes/bulk", response_model=list[Node])
 def bulk_update_node(
     node_datas: Sequence[BulkUpdateNode],
     db: DatabaseSession,
     graph_service: GraphServiceDependency,
     current_user: CurrentUserDependency,
 ):
-    """Update node."""
+    """Bulk update nodes."""
     nodes_and_layers = (
         db.execute(
             select(NodeModel, LayerModel)
             .join(target=LayerModel, onclause=NodeModel.layer_id == LayerModel.id)
-            .filter(NodeModel.id.in_([_node.id for _node in node_datas]))
+            .filter(NodeModel.id.in_([n.id for n in node_datas]))
         )
         .tuples()
         .all()
     )
     if len(nodes_and_layers) != len(node_datas):
-        found_ids = {_node.id for _node, _ in nodes_and_layers}
-        wanted_ids = [_node.id for _node in node_datas]
+        found_ids = {n.id for n, _ in nodes_and_layers}
+        wanted_ids = [n.id for n in node_datas]
         if len(wanted_ids) != len(set(wanted_ids)):
-            raise HTTPException(400, f"Invalid request. Can't update the same node twice: {wanted_ids}")
-        raise HTTPException(404, f"Can't find nodes: {found_ids - set(wanted_ids)}")
+            raise HTTPException(400, f"Can't update the same node twice: {wanted_ids}")
+        raise HTTPException(404, f"Can't find nodes: {set(wanted_ids) - found_ids}")
 
-    updated_nodes: Sequence[Node] = []
+    updated: list[Node] = []
     for (node, layer), node_data in zip(nodes_and_layers, node_datas, strict=True):
         graph_service.update_node(node=node, node_data=node_data, layer=layer)
-        updated_nodes.append(
+        updated.append(
             Node(
                 id=node.id,
                 layer_id=node.layer_id,
@@ -302,10 +332,207 @@ def bulk_update_node(
             )
         )
     db.commit()
-    return updated_nodes
+    return updated
 
 
-@graph_router.delete("/nodes/{node_id}")
-def delete_node(node_id: int):
-    """Delete node."""
-    pass
+# ---------------------------------------------------------------------------
+# Zip assignments (order=0 layer)
+# ---------------------------------------------------------------------------
+
+
+def _check_layer_access(
+    db: DatabaseSession,
+    layer_id: int,
+    current_user_id: int,
+    permission_service: PermissionsServiceDependency,
+) -> LayerModel:
+    """Load layer and verify OWNER access. Raises 403/404 as appropriate."""
+    layer = db.get(LayerModel, layer_id)
+    if not layer:
+        raise HTTPException(404)
+    if not permission_service.check_for_map_access(
+        user_id=current_user_id,
+        map_id=layer.map_id,
+        map_roles=["OWNER"],
+    ):
+        raise HTTPException(403)
+    return layer
+
+
+@graph_router.get("/zip-assignments", response_model=PaginatedZipAssignments)
+def list_zip_assignments(
+    layer_id: int,
+    db: DatabaseSession,
+    current_user: CurrentUserDependency,
+    permission_service: PermissionsServiceDependency,
+    parent_node_id: int | None = None,
+    page: int = 1,
+    page_size: int = 100,
+):
+    """List zip assignments for an order=0 layer, optionally filtered by parent territory."""
+    _check_layer_access(db, layer_id, current_user.id, permission_service)
+
+    filter_conditions = [ZipAssignmentModel.layer_id == layer_id]
+    if parent_node_id is not None:
+        filter_conditions.append(ZipAssignmentModel.parent_node_id == parent_node_id)
+
+    total = (
+        db.execute(select(func.count(ZipAssignmentModel.id)).where(*filter_conditions)).scalar() or 0
+    )
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+    offset = (page - 1) * page_size
+
+    assignments = (
+        db.execute(
+            select(ZipAssignmentModel).where(*filter_conditions).offset(offset).limit(page_size)
+        )
+        .scalars()
+        .all()
+    )
+
+    return PaginatedZipAssignments(
+        zip_assignments=[
+            ZipAssignment(
+                zip_code=za.zip_code,
+                layer_id=za.layer_id,
+                parent_node_id=za.parent_node_id,
+                color=za.color,
+            )
+            for za in assignments
+        ],
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
+
+
+@graph_router.put("/zip-assignments/{layer_id}/{zip_code}", response_model=ZipAssignment)
+def assign_zip(
+    layer_id: int,
+    zip_code: str,
+    data: AssignZip,
+    db: DatabaseSession,
+    graph_service: GraphServiceDependency,
+    current_user: CurrentUserDependency,
+    permission_service: PermissionsServiceDependency,
+):
+    """Assign a zip code to a territory, or update an existing assignment.
+
+    Passing parent_node_id=null unassigns the zip (preserves the row and color).
+    """
+    _check_layer_access(db, layer_id, current_user.id, permission_service)
+    try:
+        za = graph_service.assign_zip(layer_id=layer_id, zip_code=zip_code.zfill(5), data=data)
+    except TerriscopeException as e:
+        raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
+    db.commit()
+    return ZipAssignment(
+        zip_code=za.zip_code,
+        layer_id=za.layer_id,
+        parent_node_id=za.parent_node_id,
+        color=za.color,
+    )
+
+
+@graph_router.put("/zip-assignments/{layer_id}/bulk", response_model=dict)
+def bulk_assign_zips(
+    layer_id: int,
+    data: BulkAssignZips,
+    db: DatabaseSession,
+    graph_service: GraphServiceDependency,
+    current_user: CurrentUserDependency,
+    permission_service: PermissionsServiceDependency,
+):
+    """Bulk assign or unassign zip codes to a territory.
+
+    Primary operation after lasso selection. Passing parent_node_id=null
+    unassigns all provided zip codes (preserves rows and colors).
+    """
+    _check_layer_access(db, layer_id, current_user.id, permission_service)
+    try:
+        count = graph_service.bulk_assign_zips(layer_id=layer_id, data=data)
+    except TerriscopeException as e:
+        raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
+    db.commit()
+    return {"updated": count}
+
+
+@graph_router.delete("/zip-assignments/{layer_id}/{zip_code}", status_code=204)
+def reset_zip(
+    layer_id: int,
+    zip_code: str,
+    db: DatabaseSession,
+    graph_service: GraphServiceDependency,
+    current_user: CurrentUserDependency,
+    permission_service: PermissionsServiceDependency,
+):
+    """Reset a zip code to its default state (removes the assignment row).
+
+    The zip remains implicitly present on the map but reverts to white with no territory.
+    """
+    _check_layer_access(db, layer_id, current_user.id, permission_service)
+    graph_service.reset_zip(layer_id=layer_id, zip_code=zip_code.zfill(5))
+    db.commit()
+
+
+@graph_router.get("/zip-assignments/{layer_id}/{zip_code}", response_model=ZipAssignment)
+def get_zip_assignment(
+    layer_id: int,
+    zip_code: str,
+    db: DatabaseSession,
+    current_user: CurrentUserDependency,
+    permission_service: PermissionsServiceDependency,
+):
+    """Get the assignment state of a specific zip code. Returns 404 if the zip is implicitly unassigned."""
+    _check_layer_access(db, layer_id, current_user.id, permission_service)
+    za = db.execute(
+        select(ZipAssignmentModel).where(
+            ZipAssignmentModel.layer_id == layer_id,
+            ZipAssignmentModel.zip_code == zip_code.zfill(5),
+        )
+    ).scalar_one_or_none()
+    if not za:
+        raise HTTPException(404)
+    return ZipAssignment(
+        zip_code=za.zip_code,
+        layer_id=za.layer_id,
+        parent_node_id=za.parent_node_id,
+        color=za.color,
+    )
+
+
+@graph_router.get(
+    "/zip-assignments/{layer_id}/{zip_code}/geography",
+    response_model=ZipAssignment,
+)
+def get_zip_with_geography_default(
+    layer_id: int,
+    zip_code: str,
+    db: DatabaseSession,
+    current_user: CurrentUserDependency,
+    permission_service: PermissionsServiceDependency,
+):
+    """Get a zip's assignment state, falling back to geography defaults if no row exists.
+
+    Unlike GET /zip-assignments/{layer_id}/{zip_code}, this never returns 404 for
+    known zip codes — it returns the implicit white/unassigned state.
+    """
+    _check_layer_access(db, layer_id, current_user.id, permission_service)
+    padded = zip_code.zfill(5)
+
+    za = db.execute(
+        select(ZipAssignmentModel).where(
+            ZipAssignmentModel.layer_id == layer_id,
+            ZipAssignmentModel.zip_code == padded,
+        )
+    ).scalar_one_or_none()
+
+    if za:
+        return ZipAssignment(zip_code=za.zip_code, layer_id=za.layer_id, parent_node_id=za.parent_node_id, color=za.color)
+
+    # Implicit state — verify zip exists in geography
+    geo = db.get(ZipCodeGeography, padded)
+    if not geo:
+        raise HTTPException(404, f"Zip code {padded} not found.")
+    return ZipAssignment(zip_code=padded, layer_id=layer_id, parent_node_id=None, color="#FFFFFF")

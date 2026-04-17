@@ -4,7 +4,7 @@ from typing import Any
 
 from geoalchemy2 import Geometry
 from geoalchemy2.elements import WKBElement
-from sqlalchemy import ForeignKey, UniqueConstraint, func, select
+from sqlalchemy import ForeignKey, String, UniqueConstraint, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, aliased, column_property, declared_attr, mapped_column
 
@@ -112,3 +112,37 @@ class NodeModel(Base):
     def __table_args__(cls):
         """Table args for NodeModel."""
         return (UniqueConstraint("layer_id", "name"),)
+
+
+class ZipAssignmentModel(Base):
+    """Assignment of a zip code to a layer, optionally under a parent territory node.
+
+    A row only exists when there is something meaningful to record — a parent territory,
+    custom data, or a preserved color from a previous assignment. Zip codes with no row
+    are implicitly present on the map and displayed in white.
+
+    Layer must be order=0. parent_node_id must point to a node in a layer with order=1.
+    """
+
+    __tablename__ = "zip_assignments"
+
+    id: Mapped[intpk] = mapped_column(init=False)
+    layer_id: Mapped[int] = mapped_column(ForeignKey("layers.id"))
+    zip_code: Mapped[str] = mapped_column(String(5), ForeignKey("geography_zip_codes.zip_code"))
+    parent_node_id: Mapped[int | None] = mapped_column(ForeignKey("nodes.id"), nullable=True)
+    color: Mapped[str]
+    """Display color for this zip. Copied from geography_zip_codes.color on first assignment.
+    Preserved when parent_node_id is cleared (unassign). Deleted row resets to white."""
+
+    data: Mapped[dict[Any, Any] | None] = mapped_column(
+        JSONB,
+        nullable=True,
+        deferred=True,
+    )
+    data_cache_key: Mapped[str]
+    data_inputs_cache_key: Mapped[str]
+
+    @declared_attr.directive
+    def __table_args__(cls):
+        """Table args for ZipAssignmentModel."""
+        return (UniqueConstraint("layer_id", "zip_code"),)

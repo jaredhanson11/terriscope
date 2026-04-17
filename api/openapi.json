@@ -326,7 +326,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Layer"
+                }
               }
             }
           },
@@ -366,7 +368,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Node"
+                }
               }
             }
           },
@@ -387,7 +391,7 @@
           "Graph"
         ],
         "summary": "List Nodes",
-        "description": "List nodes filtered by layer_id OR parent_node_id (not both) with pagination.",
+        "description": "List nodes filtered by layer_id OR parent_node_id (not both) with pagination.\n\nOnly applies to order>=1 layers. For order=0 (zip layer) use GET /zip-assignments.",
         "operationId": "list_nodes_nodes_get",
         "parameters": [
           {
@@ -448,7 +452,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedNodes"
+                }
               }
             }
           },
@@ -489,7 +495,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Node"
+                }
               }
             }
           },
@@ -538,7 +546,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/Node"
+                }
               }
             }
           },
@@ -559,7 +569,7 @@
           "Graph"
         ],
         "summary": "Delete Node",
-        "description": "Delete node.",
+        "description": "Delete a node (order>=1 only). Cascades to child nodes via FK.",
         "operationId": "delete_node_nodes__node_id__delete",
         "parameters": [
           {
@@ -573,13 +583,8 @@
           }
         ],
         "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -600,7 +605,7 @@
           "Graph"
         ],
         "summary": "Bulk Update Node",
-        "description": "Update node.",
+        "description": "Bulk update nodes.",
         "operationId": "bulk_update_node_nodes_bulk_put",
         "requestBody": {
           "content": {
@@ -621,7 +626,354 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Node"
+                  },
+                  "type": "array",
+                  "title": "Response Bulk Update Node Nodes Bulk Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/zip-assignments": {
+      "get": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "List Zip Assignments",
+        "description": "List zip assignments for an order=0 layer, optionally filtered by parent territory.",
+        "operationId": "list_zip_assignments_zip_assignments_get",
+        "parameters": [
+          {
+            "name": "layer_id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Layer Id"
+            }
+          },
+          {
+            "name": "parent_node_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Parent Node Id"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 100,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedZipAssignments"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/zip-assignments/{layer_id}/{zip_code}": {
+      "put": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "Assign Zip",
+        "description": "Assign a zip code to a territory, or update an existing assignment.\n\nPassing parent_node_id=null unassigns the zip (preserves the row and color).",
+        "operationId": "assign_zip_zip_assignments__layer_id___zip_code__put",
+        "parameters": [
+          {
+            "name": "layer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Layer Id"
+            }
+          },
+          {
+            "name": "zip_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Zip Code"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AssignZip"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZipAssignment"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "Reset Zip",
+        "description": "Reset a zip code to its default state (removes the assignment row).\n\nThe zip remains implicitly present on the map but reverts to white with no territory.",
+        "operationId": "reset_zip_zip_assignments__layer_id___zip_code__delete",
+        "parameters": [
+          {
+            "name": "layer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Layer Id"
+            }
+          },
+          {
+            "name": "zip_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Zip Code"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "Get Zip Assignment",
+        "description": "Get the assignment state of a specific zip code. Returns 404 if the zip is implicitly unassigned.",
+        "operationId": "get_zip_assignment_zip_assignments__layer_id___zip_code__get",
+        "parameters": [
+          {
+            "name": "layer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Layer Id"
+            }
+          },
+          {
+            "name": "zip_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Zip Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZipAssignment"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/zip-assignments/{layer_id}/bulk": {
+      "put": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "Bulk Assign Zips",
+        "description": "Bulk assign or unassign zip codes to a territory.\n\nPrimary operation after lasso selection. Passing parent_node_id=null\nunassigns all provided zip codes (preserves rows and colors).",
+        "operationId": "bulk_assign_zips_zip_assignments__layer_id__bulk_put",
+        "parameters": [
+          {
+            "name": "layer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Layer Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkAssignZips"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Bulk Assign Zips Zip Assignments  Layer Id  Bulk Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/zip-assignments/{layer_id}/{zip_code}/geography": {
+      "get": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "Get Zip With Geography Default",
+        "description": "Get a zip's assignment state, falling back to geography defaults if no row exists.\n\nUnlike GET /zip-assignments/{layer_id}/{zip_code}, this never returns 404 for\nknown zip codes \u2014 it returns the implicit white/unassigned state.",
+        "operationId": "get_zip_with_geography_default_zip_assignments__layer_id___zip_code__geography_get",
+        "parameters": [
+          {
+            "name": "layer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Layer Id"
+            }
+          },
+          {
+            "name": "zip_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Zip Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZipAssignment"
+                }
               }
             }
           },
@@ -644,7 +996,7 @@
           "MVT"
         ],
         "summary": "Get Tile",
-        "description": "Get a vector tile for a specific layer at the given tile coordinates.\n\nArgs:\n    layer_id: The layer ID to render nodes from\n    z: Zoom level\n    x: Tile X coordinate\n    y: Tile Y coordinate\n    db: Database session\n\nReturns:\n    Mapbox Vector Tile (MVT) in protobuf format",
+        "description": "Get a vector tile for a specific layer at the given tile coordinates.\n\nFor order=0 (zip) layers: queries geography_zip_codes LEFT JOIN zip_assignments.\nFor order>=1 layers: queries pre-computed node geometries.",
         "operationId": "get_tile_tiles__layer_id___z___x___y__pbf_get",
         "parameters": [
           {
@@ -712,7 +1064,7 @@
           "MVT"
         ],
         "summary": "Get Label Tile",
-        "description": "Get a label tile for a specific layer using point-on-surface geometries.\n\nReturns one point per node (the pole of inaccessibility), so each polygon\ngets exactly one label placement regardless of how many tiles it spans.\nIncludes all configured data field values as tile properties so the frontend\ncan dynamically switch the displayed label field.",
+        "description": "Get a label tile for a specific layer using point-on-surface geometries.\n\nFor order=0 (zip) layers: one point per zip code, label is the zip_code string.\nFor order>=1 layers: one point per node with all configured data field values.",
         "operationId": "get_label_tile_tiles__layer_id___z___x___y__labels_pbf_get",
         "parameters": [
           {
@@ -824,7 +1176,7 @@
           "Maps"
         ],
         "summary": "Create Map",
-        "description": "Create map.\n\nTOODS:\n    - Return errors for zip codes we don't have data for\n    - Validate no duplicate layer names\n    - Validate no duplicate parents and raise error if so\n    - Fix all typing issues",
+        "description": "Create map.\n\nTODO:\n    - Return errors for zip codes we don't have data for\n    - Validate no duplicate layer names\n    - Validate no duplicate parents and raise error if so",
         "operationId": "create_map_maps_post",
         "requestBody": {
           "content": {
@@ -860,35 +1212,13 @@
         }
       }
     },
-    "/maps/test-all-zips": {
-      "post": {
-        "tags": [
-          "Maps"
-        ],
-        "summary": "Create Test All Zips Map",
-        "description": "Test endpoint: creates a map with one layer where every zip code is a parentless node.",
-        "operationId": "create_test_all_zips_map_maps_test_all_zips_post",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Map"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/spatial/select": {
       "post": {
         "tags": [
           "Spatial"
         ],
         "summary": "Select Features In Lasso",
-        "description": "Select all features from a layer that intersect with a lasso polygon.",
+        "description": "Select all features from a layer that intersect with a lasso polygon.\n\nFor order=0 (zip) layers: returns zip_codes (strings) from geography_zip_codes.\nFor order>=1 layers: returns node IDs (integers) from nodes.",
         "operationId": "select_features_in_lasso_spatial_select_post",
         "requestBody": {
           "content": {
@@ -927,6 +1257,78 @@
   },
   "components": {
     "schemas": {
+      "AssignZip": {
+        "properties": {
+          "parent_node_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Node Id"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          }
+        },
+        "type": "object",
+        "required": [
+          "parent_node_id"
+        ],
+        "title": "AssignZip",
+        "description": "Assign or update a single zip code's territory assignment.\n\nPUT with parent_node_id=null unassigns the zip (nulls the FK, preserves the row and color).\nDELETE /layers/{layer_id}/zips/{zip_code} resets the zip (removes the row entirely)."
+      },
+      "BulkAssignZips": {
+        "properties": {
+          "zip_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Zip Codes"
+          },
+          "parent_node_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Node Id"
+          },
+          "color": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Color"
+          }
+        },
+        "type": "object",
+        "required": [
+          "zip_codes",
+          "parent_node_id"
+        ],
+        "title": "BulkAssignZips",
+        "description": "Bulk assign or unassign a list of zip codes to a territory.\n\nPrimary operation after lasso selection: select zips on map, assign to territory.\nparent_node_id=null unassigns all provided zip codes (preserves rows and colors)."
+      },
       "BulkUpdateNode": {
         "properties": {
           "parent_node_id": {
@@ -1289,6 +1691,133 @@
         "title": "Map",
         "description": "Map."
       },
+      "Node": {
+        "properties": {
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string",
+                "const": "default"
+              }
+            ],
+            "title": "Id"
+          },
+          "layer_id": {
+            "type": "integer",
+            "title": "Layer Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "color": {
+            "type": "string",
+            "title": "Color"
+          },
+          "parent_node_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Node Id"
+          },
+          "child_count": {
+            "type": "integer",
+            "title": "Child Count",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "layer_id",
+          "name",
+          "color"
+        ],
+        "title": "Node",
+        "description": "Node."
+      },
+      "PaginatedNodes": {
+        "properties": {
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/Node"
+            },
+            "type": "array",
+            "title": "Nodes"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total_pages": {
+            "type": "integer",
+            "title": "Total Pages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "nodes",
+          "total",
+          "page",
+          "page_size",
+          "total_pages"
+        ],
+        "title": "PaginatedNodes",
+        "description": "Paginated nodes response."
+      },
+      "PaginatedZipAssignments": {
+        "properties": {
+          "zip_assignments": {
+            "items": {
+              "$ref": "#/components/schemas/ZipAssignment"
+            },
+            "type": "array",
+            "title": "Zip Assignments"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total_pages": {
+            "type": "integer",
+            "title": "Total Pages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "zip_assignments",
+          "total",
+          "page",
+          "page_size",
+          "total_pages"
+        ],
+        "title": "PaginatedZipAssignments",
+        "description": "Paginated zip assignments response."
+      },
       "Polygon": {
         "properties": {
           "bbox": {
@@ -1459,6 +1988,14 @@
             },
             "type": "array",
             "title": "Nodes"
+          },
+          "zip_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Zip Codes",
+            "default": []
           }
         },
         "type": "object",
@@ -1572,6 +2109,53 @@
         ],
         "title": "VersionResponseDTO",
         "description": "Version response DTO."
+      },
+      "ZipAssignment": {
+        "properties": {
+          "zip_code": {
+            "type": "string",
+            "title": "Zip Code"
+          },
+          "layer_id": {
+            "type": "integer",
+            "title": "Layer Id"
+          },
+          "parent_node_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Node Id"
+          },
+          "color": {
+            "type": "string",
+            "title": "Color"
+          },
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "zip_code",
+          "layer_id",
+          "color"
+        ],
+        "title": "ZipAssignment",
+        "description": "A zip code's assignment state on a map layer.\n\nRepresents a zip_assignments row. Implicit zips (no row) are only visible\nvia MVT tiles and are not returned by the API as individual objects."
       }
     }
   }
