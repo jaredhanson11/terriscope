@@ -14,7 +14,7 @@ class ZipCodeGeography(Base):
     __tablename__ = "geography_zip_codes"
 
     zip_code: Mapped[str] = mapped_column(String(5), primary_key=True)
-    color: Mapped[str] = mapped_column(String(7), nullable=False, server_default="#CCCCCC")
+    color: Mapped[str] = mapped_column(String(7), nullable=False)
     """Hex color string (e.g. '#E05252'). No two adjacent zip codes share the same value."""
     geom: Mapped[WKBElement | None] = mapped_column(
         Geometry(srid=4326),

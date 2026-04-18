@@ -2,25 +2,36 @@
 
 import hashlib
 import json
+import uuid
 from typing import Any, TypedDict
 
 import pandas as pd
-from fastapi import APIRouter
+from fastapi import APIRouter, HTTPException
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 
 from src.app.database import DatabaseSession
 from src.models.geography import ZipCodeGeography
 from src.models.graph import LayerModel, MapModel, NodeModel, ZipAssignmentModel
+from src.models.jobs import MapJobModel
 from src.schemas.dtos.graph import CreateLayer
 from src.schemas.dtos.maps import DataFieldSetup, ImportMap
-from src.schemas.graph import Map
+from src.schemas.graph import Map, MapJob
 from src.services.auth import CurrentUserDependency
-from src.services.computation import ComputationServiceDependency
 from src.services.graph import GraphServiceDependency
 from src.services.permissions import PermissionsServiceDependency
 
 maps_router = APIRouter(prefix="/maps", tags=["Maps"])
+
+# Visually distinct palette for territory/region nodes on order>=1 layers.
+# Colors are cycled by insertion index within each layer so every territory
+# gets a unique color (up to 16; wraps after that).
+_TERRITORY_PALETTE = [
+    "#E63946", "#F4A261", "#2A9D8F", "#457B9D", "#6A4C93",
+    "#F72585", "#4CC9F0", "#7CB518", "#FB8500", "#023E8A",
+    "#8338EC", "#FF006E", "#3A86FF", "#06D6A0", "#FFBE0B",
+    "#FB5607",
+]
 
 
 class BulkInsertNode(TypedDict):
@@ -70,22 +81,60 @@ def _compute_leaf_data(
     return leaf_data_by_name
 
 
-@maps_router.post("", response_model=Map)
+def _load_active_job(db: DatabaseSession, map_id: int) -> MapJob | None:
+    """Return the most recent non-complete job for a map, or None."""
+    job = db.execute(
+        select(MapJobModel)
+        .where(MapJobModel.map_id == map_id)
+        .order_by(MapJobModel.created_at.desc())
+        .limit(1)
+    ).scalar_one_or_none()
+
+    if job is None or job.status == "complete":
+        return None
+
+    return MapJob(
+        id=job.id,
+        job_type=job.job_type,
+        status=job.status,
+        step=job.step,
+        error=job.error,
+    )
+
+
+def _map_to_schema(map_model: MapModel, active_job: MapJob | None) -> Map:
+    """Convert a MapModel ORM object to a Map schema, attaching job state."""
+    return Map(
+        id=map_model.id,
+        name=map_model.name,
+        tile_version=map_model.tile_version,
+        data_field_config=map_model.data_field_config,
+        active_job=active_job,
+    )
+
+
+@maps_router.post("", response_model=Map, status_code=202)
 def create_map(
     graph_service: GraphServiceDependency,
     db: DatabaseSession,
     import_data: ImportMap,
-    computation_service: ComputationServiceDependency,
     current_user: CurrentUserDependency,
     permission_service: PermissionsServiceDependency,
-):
+) -> Map:
     """Create map.
+
+    Synchronously inserts all nodes and zip assignments, then enqueues a
+    background task to compute geometry and data aggregations.  Returns 202
+    with the new map and an ``active_job`` tracking the pending computation.
 
     TODO:
         - Return errors for zip codes we don't have data for
         - Validate no duplicate layer names
         - Validate no duplicate parents and raise error if so
     """
+    # Lazy import to avoid importing Celery at module load time in API workers
+    from src.workers.tasks.maps import import_map_task  # noqa: PLC0415
+
     data_field_config = [
         {"field": df.name, "type": df.type, "aggregations": df.aggregations}
         for df in import_data.data_fields
@@ -166,31 +215,28 @@ def create_map(
             ).to_list()
 
             db.execute(insert(ZipAssignmentModel).values(bulk_insert_zips))
-            # Zip is always the leaf — no need to update previous_nodes
 
         else:
             # --- Parent layer (order>=1): insert into nodes ---
             prev_nodes_snap = previous_nodes.copy() if previous_nodes is not None else None
-            bulk_insert_nodes = rows_df.apply(
-                lambda row, lid=layer.id, prev=prev_nodes_snap: (
-                    BulkInsertNode(
-                        layer_id=lid,
-                        name=str(row[header]),
-                        parent_node_id=next(
-                            iter(prev.loc[prev["name"] == str(row[previous_header]), "id"]), None
-                        )
-                        if previous_header is not None and prev is not None
-                        else None,
-                        color="#CCCCCC",
-                        data=None,
-                        data_cache_key="",
-                        data_inputs_cache_key="",
-                        geom_cache_key="",
-                        geom_inputs_cache_key="",
+            bulk_insert_nodes = [
+                BulkInsertNode(
+                    layer_id=layer.id,
+                    name=str(row[header]),
+                    parent_node_id=next(
+                        iter(prev_nodes_snap.loc[prev_nodes_snap["name"] == str(row[previous_header]), "id"]), None
                     )
-                ),
-                axis=1,
-            ).to_list()
+                    if previous_header is not None and prev_nodes_snap is not None
+                    else None,
+                    color=_TERRITORY_PALETTE[int(hashlib.md5(str(row[header]).encode()).hexdigest(), 16) % len(_TERRITORY_PALETTE)],
+                    data=None,
+                    data_cache_key="",
+                    data_inputs_cache_key="",
+                    geom_cache_key="",
+                    geom_inputs_cache_key="",
+                )
+                for _, row in rows_df.iterrows()
+            ]
 
             result = db.execute(
                 insert(NodeModel).values(bulk_insert_nodes).returning(NodeModel.id, NodeModel.name)
@@ -199,23 +245,27 @@ def create_map(
 
         previous_header = header
 
-    # Recompute geometry for all parent layers bottom-to-top (order=1 first)
-    for layer, _ in layer_and_headers[1:]:
-        result = computation_service.bulk_recompute_layer(layer_id=layer.id, force=True)
-        print(f"Geometry layer {layer.name} (id={layer.id}): {result}")
-
-    # Recompute aggregated data for all parent layers bottom-to-top
-    if numeric_data_fields and data_field_config:
-        for layer, _ in layer_and_headers[1:]:
-            result = computation_service.bulk_recompute_data_layer(
-                layer_id=layer.id,
-                data_field_config=data_field_config,
-                force=True,
-            )
-            print(f"Data layer {layer.name} (id={layer.id}): {result}")
-
+    # Create the job record and commit everything together so the worker
+    # always sees the nodes/zips when it starts.
+    job_id = str(uuid.uuid4())
+    job = MapJobModel(
+        id=job_id,
+        map_id=new_map.id,
+        job_type="import",
+        status="pending",
+        step=None,
+        error=None,
+    )
+    db.add(job)
     db.commit()
-    return Map(id=new_map.id, name=new_map.name, data_field_config=new_map.data_field_config)
+
+    # Enqueue background computation
+    import_map_task.delay(job_id, new_map.id)
+
+    return _map_to_schema(
+        new_map,
+        MapJob(id=job_id, job_type="import", status="pending"),
+    )
 
 
 @maps_router.get("", response_model=list[Map])
@@ -223,14 +273,53 @@ def list_maps(
     db: DatabaseSession,
     current_user: CurrentUserDependency,
     permission_service: PermissionsServiceDependency,
-):
-    """List maps."""
+) -> list[Map]:
+    """List maps for the current user, each with its latest active job if any."""
     map_roles = permission_service.list_map_roles(user_id=current_user.id)
-    return [
-        Map(id=_map.id, name=_map.name, data_field_config=_map.data_field_config)
-        for _map in db.execute(
-            select(MapModel).where(MapModel.id.in_([mr.map_id for mr in map_roles]))
-        )
-        .scalars()
-        .all()
-    ]
+    map_ids = [mr.map_id for mr in map_roles]
+
+    maps = db.execute(select(MapModel).where(MapModel.id.in_(map_ids))).scalars().all()
+
+    # Fetch the most recent non-complete job per map in a single query.
+    # We use a subquery to rank jobs per map and take the latest one.
+    active_jobs: dict[int, MapJob] = {}
+    if map_ids:
+        job_rows = db.execute(
+            select(MapJobModel)
+            .where(MapJobModel.map_id.in_(map_ids))
+            .order_by(MapJobModel.map_id, MapJobModel.created_at.desc())
+        ).scalars().all()
+
+        seen: set[int] = set()
+        for job in job_rows:
+            if job.map_id not in seen:
+                seen.add(job.map_id)
+                if job.status != "complete":
+                    active_jobs[job.map_id] = MapJob(
+                        id=job.id,
+                        job_type=job.job_type,
+                        status=job.status,
+                        step=job.step,
+                        error=job.error,
+                    )
+
+    return [_map_to_schema(m, active_jobs.get(m.id)) for m in maps]
+
+
+@maps_router.get("/{map_id}", response_model=Map)
+def get_map(
+    map_id: int,
+    db: DatabaseSession,
+    current_user: CurrentUserDependency,
+    permission_service: PermissionsServiceDependency,
+) -> Map:
+    """Get a single map with its latest active job."""
+    map_roles = permission_service.list_map_roles(user_id=current_user.id)
+    if not any(mr.map_id == map_id for mr in map_roles):
+        raise HTTPException(status_code=404, detail="Map not found")
+
+    map_model = db.get(MapModel, map_id)
+    if not map_model:
+        raise HTTPException(status_code=404, detail="Map not found")
+
+    return _map_to_schema(map_model, _load_active_job(db, map_id))

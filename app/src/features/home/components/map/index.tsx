@@ -13,7 +13,7 @@ import MapGL, { type MapRef } from "react-map-gl/maplibre"
 
 import type { LayerViewOptions } from "./config"
 import type { BaseMapName } from "./config"
-import { updateLayers, updateSources } from "./utils"
+import { refreshTileSources, updateLayers, updateSources } from "./utils"
 
 const EMPTY_STYLE = {
   version: 8 as const,
@@ -35,20 +35,37 @@ export const Map = forwardRef<
     baseMap: BaseMapName
     layers: LayerViewOptions
     currentTool: "lasso" | "pan"
-    selectedNodes: number[]
+    selectedNodeIds: number[]
+    selectedZipCodes: string[]
+    tileVersion: number
     onLassoComplete: (points: Polygon) => void
   }
->(({ baseMap, layers, onLassoComplete, currentTool }, ref) => {
+>(({ baseMap, layers, onLassoComplete, currentTool, tileVersion }, ref) => {
   const mapRef = useRef<MapRef | null>(null)
   useImperativeHandle(ref, () => mapRef.current as MapRef)
 
   useEffect(() => {
     const map = mapRef.current?.getMap()
     if (map && map.isStyleLoaded()) {
-      updateSources(map, layers)
+      updateSources(map, layers, tileVersion)
       updateLayers(map, baseMap, layers)
     }
-  }, [baseMap, layers])
+  }, [baseMap, layers, tileVersion])
+
+  // When tileVersion increments (after a recompute completes), flush MapLibre's
+  // tile cache by updating the source URLs with a new cache-busting parameter.
+  const isFirstTileVersionRender = useRef(true)
+  const layersRef = useRef(layers)
+  useEffect(() => { layersRef.current = layers }, [layers])
+  useEffect(() => {
+    if (isFirstTileVersionRender.current) {
+      isFirstTileVersionRender.current = false
+      return
+    }
+    const map = mapRef.current?.getMap()
+    if (!map || !map.isStyleLoaded()) return
+    refreshTileSources(map, layersRef.current, tileVersion)
+  }, [tileVersion])
 
   // State stays the same
   const [isDrawing, setIsDrawing] = useState(false)
@@ -81,7 +98,7 @@ export const Map = forwardRef<
       // Add or update source
       const source = map.getSource(sourceId)
       if (source && source.type === "geojson") {
-        source.setData(geojson)
+        (source as maplibregl.GeoJSONSource).setData(geojson)
       } else {
         map.addSource(sourceId, {
           type: "geojson",
@@ -163,7 +180,7 @@ export const Map = forwardRef<
         ref={mapRef}
         onLoad={(evt) => {
           const map = evt.target
-          updateSources(map, layers)
+          updateSources(map, layers, tileVersion)
           updateLayers(map, baseMap, layers)
         }}
         style={{ width: "100%", height: "100%" }}

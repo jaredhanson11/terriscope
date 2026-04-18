@@ -1,6 +1,8 @@
 """Graph dtos."""
 
-from pydantic import BaseModel, field_validator
+from typing import Literal
+
+from pydantic import BaseModel, field_validator, model_validator
 
 
 class CreateLayer(BaseModel):
@@ -40,6 +42,50 @@ class AssignZip(BaseModel):
     parent_node_id: int | None
     color: str | None = None
     """Optional color override. If omitted on first assignment, copied from geography_zip_codes.color."""
+
+
+class ReparentNodes(BaseModel):
+    """Bulk reparent nodes to a new parent (or no parent).
+
+    All node_ids must belong to the same layer.
+    parent_node_id must be in the layer directly above, or null to orphan.
+    """
+
+    node_ids: list[int]
+    parent_node_id: int | None
+
+
+class MergeNodes(BaseModel):
+    """Merge multiple nodes into a single new node.
+
+    All node_ids must belong to the same layer (order >= 1).
+    Children (child nodes or zip assignments) are reparented to the new node.
+    parent_node_id must be in the layer directly above, or null.
+    """
+
+    node_ids: list[int]
+    name: str
+    parent_node_id: int | None
+
+
+class BulkDeleteNodes(BaseModel):
+    """Bulk delete nodes, with a declared strategy for their children.
+
+    All node_ids must belong to the same layer (order >= 1).
+    child_action='orphan'   → children's parent_node_id set to null.
+    child_action='reparent' → children moved to reparent_node_id (same layer, not in delete set).
+    """
+
+    node_ids: list[int]
+    child_action: Literal["orphan", "reparent"]
+    reparent_node_id: int | None = None
+
+    @model_validator(mode="after")
+    def reparent_node_required(self) -> "BulkDeleteNodes":
+        """Ensure reparent_node_id is provided when child_action is 'reparent'."""
+        if self.child_action == "reparent" and self.reparent_node_id is None:
+            raise ValueError("reparent_node_id is required when child_action is 'reparent'")
+        return self
 
 
 class BulkAssignZips(BaseModel):

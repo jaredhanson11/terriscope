@@ -3,6 +3,8 @@ import "maplibre-gl/dist/maplibre-gl.css"
 
 export type LayerViewOption = {
   id: number
+  /** Layer order from the API (0 = zip/leaf layer, 1+ = territory/region layers). */
+  order: number
   showFill: boolean
   showOutline: boolean
   showLabel: boolean
@@ -12,10 +14,11 @@ export type LayerViewOption = {
 
 export type LayerViewOptions = LayerViewOption[]
 
-export type BaseMapName = "osm" | "satellite" | "terrain"
-export const BASE_MAP_SOURCES: Record<
-  BaseMapName,
-  maplibregl.SourceSpecification
+export type BaseMapName = "osm" | "satellite" | "terrain" | "dark" | "none"
+
+/** Sources that require a raster tile entry. "none" has no source — the background is transparent. */
+export const BASE_MAP_SOURCES: Partial<
+  Record<BaseMapName, maplibregl.SourceSpecification>
 > = {
   osm: {
     type: "raster",
@@ -42,4 +45,14 @@ export const BASE_MAP_SOURCES: Record<
       "https://c.tile.opentopomap.org/{z}/{x}/{y}.png",
     ],
   },
+  dark: {
+    type: "raster",
+    tileSize: 256,
+    tiles: [
+      "https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+      "https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+      "https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png",
+    ],
+  },
+  // "none" intentionally omitted — no source needed
 }

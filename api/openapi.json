@@ -647,6 +647,127 @@
             }
           }
         }
+      },
+      "delete": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "Bulk Delete Nodes",
+        "description": "Bulk delete nodes, orphaning or reparenting their children first.\n\nchild_action='orphan'   \u2192 children lose their parent assignment.\nchild_action='reparent' \u2192 children are moved to reparent_node_id (same layer).\nOnly valid for order>=1 layers. Use PUT /zip-assignments/{layer_id}/bulk to\nunassign zip codes instead.",
+        "operationId": "bulk_delete_nodes_nodes_bulk_delete",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkDeleteNodes"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/bulk/reparent": {
+      "put": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "Bulk Reparent Nodes",
+        "description": "Bulk reparent nodes to a new parent (or orphan them).\n\nAll nodes must be in the same layer. parent_node_id must be in the layer\ndirectly above, or null to remove the parent assignment.",
+        "operationId": "bulk_reparent_nodes_nodes_bulk_reparent_put",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ReparentNodes"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Node"
+                  },
+                  "type": "array",
+                  "title": "Response Bulk Reparent Nodes Nodes Bulk Reparent Put"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/nodes/merge": {
+      "post": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "Merge Nodes",
+        "description": "Merge multiple nodes into a new node in the same layer.\n\nCreates a new node with the given name/parent, reparents all children\nto the new node, and deletes the originals. Only valid for order>=1 layers.",
+        "operationId": "merge_nodes_nodes_merge_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MergeNodes"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Node"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
       }
     },
     "/zip-assignments": {
@@ -711,6 +832,61 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/PaginatedZipAssignments"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/zip-assignments/{layer_id}/bulk": {
+      "put": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "Bulk Assign Zips",
+        "description": "Bulk assign or unassign zip codes to a territory.\n\nPrimary operation after lasso selection. Passing parent_node_id=null\nunassigns all provided zip codes (preserves rows and colors).\nEnqueues a geometry recompute for the affected territories after commit.",
+        "operationId": "bulk_assign_zips_zip_assignments__layer_id__bulk_put",
+        "parameters": [
+          {
+            "name": "layer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Layer Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkAssignZips"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Bulk Assign Zips Zip Assignments  Layer Id  Bulk Put"
                 }
               }
             }
@@ -883,44 +1059,67 @@
         }
       }
     },
-    "/zip-assignments/{layer_id}/bulk": {
-      "put": {
+    "/search": {
+      "get": {
         "tags": [
           "Graph"
         ],
-        "summary": "Bulk Assign Zips",
-        "description": "Bulk assign or unassign zip codes to a territory.\n\nPrimary operation after lasso selection. Passing parent_node_id=null\nunassigns all provided zip codes (preserves rows and colors).",
-        "operationId": "bulk_assign_zips_zip_assignments__layer_id__bulk_put",
+        "summary": "Search Map",
+        "description": "Search nodes and zip codes within a map by name / zip code prefix.\n\nResults are ordered alphabetically and capped at `limit`. Pass `layer_id`\nto restrict the search to a single layer; omit to search all layers.\nZip codes are matched by prefix (e.g. \"902\" \u2192 \"90210\"). Node names are\nmatched as a substring (case-insensitive).",
+        "operationId": "search_map_search_get",
         "parameters": [
           {
-            "name": "layer_id",
-            "in": "path",
+            "name": "map_id",
+            "in": "query",
             "required": true,
             "schema": {
               "type": "integer",
+              "title": "Map Id"
+            }
+          },
+          {
+            "name": "q",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Q"
+            }
+          },
+          {
+            "name": "layer_id",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "title": "Layer Id"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "title": "Limit"
             }
           }
         ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BulkAssignZips"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "description": "Successful Response",
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Bulk Assign Zips Zip Assignments  Layer Id  Bulk Put"
+                  "$ref": "#/components/schemas/SearchResults"
                 }
               }
             }
@@ -1152,7 +1351,7 @@
           "Maps"
         ],
         "summary": "List Maps",
-        "description": "List maps.",
+        "description": "List maps for the current user, each with its latest active job if any.",
         "operationId": "list_maps_maps_get",
         "responses": {
           "200": {
@@ -1176,7 +1375,7 @@
           "Maps"
         ],
         "summary": "Create Map",
-        "description": "Create map.\n\nTODO:\n    - Return errors for zip codes we don't have data for\n    - Validate no duplicate layer names\n    - Validate no duplicate parents and raise error if so",
+        "description": "Create map.\n\nSynchronously inserts all nodes and zip assignments, then enqueues a\nbackground task to compute geometry and data aggregations.  Returns 202\nwith the new map and an ``active_job`` tracking the pending computation.\n\nTODO:\n    - Return errors for zip codes we don't have data for\n    - Validate no duplicate layer names\n    - Validate no duplicate parents and raise error if so",
         "operationId": "create_map_maps_post",
         "requestBody": {
           "content": {
@@ -1188,6 +1387,49 @@
           },
           "required": true
         },
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Map"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/maps/{map_id}": {
+      "get": {
+        "tags": [
+          "Maps"
+        ],
+        "summary": "Get Map",
+        "description": "Get a single map with its latest active job.",
+        "operationId": "get_map_maps__map_id__get",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Map Id"
+            }
+          }
+        ],
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -1328,6 +1570,43 @@
         ],
         "title": "BulkAssignZips",
         "description": "Bulk assign or unassign a list of zip codes to a territory.\n\nPrimary operation after lasso selection: select zips on map, assign to territory.\nparent_node_id=null unassigns all provided zip codes (preserves rows and colors)."
+      },
+      "BulkDeleteNodes": {
+        "properties": {
+          "node_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Node Ids"
+          },
+          "child_action": {
+            "type": "string",
+            "enum": [
+              "orphan",
+              "reparent"
+            ],
+            "title": "Child Action"
+          },
+          "reparent_node_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reparent Node Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "node_ids",
+          "child_action"
+        ],
+        "title": "BulkDeleteNodes",
+        "description": "Bulk delete nodes, with a declared strategy for their children.\n\nAll node_ids must belong to the same layer (order >= 1).\nchild_action='orphan'   \u2192 children's parent_node_id set to null.\nchild_action='reparent' \u2192 children moved to reparent_node_id (same layer, not in delete set)."
       },
       "BulkUpdateNode": {
         "properties": {
@@ -1668,6 +1947,11 @@
             "type": "string",
             "title": "Name"
           },
+          "tile_version": {
+            "type": "integer",
+            "title": "Tile Version",
+            "default": 0
+          },
           "data_field_config": {
             "anyOf": [
               {
@@ -1681,6 +1965,16 @@
               }
             ],
             "title": "Data Field Config"
+          },
+          "active_job": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MapJob"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "type": "object",
@@ -1690,6 +1984,96 @@
         ],
         "title": "Map",
         "description": "Map."
+      },
+      "MapJob": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "job_type": {
+            "type": "string",
+            "enum": [
+              "import",
+              "recompute"
+            ],
+            "title": "Job Type"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "processing",
+              "complete",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "job_type",
+          "status"
+        ],
+        "title": "MapJob",
+        "description": "Background job for a map."
+      },
+      "MergeNodes": {
+        "properties": {
+          "node_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Node Ids"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "parent_node_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Node Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "node_ids",
+          "name",
+          "parent_node_id"
+        ],
+        "title": "MergeNodes",
+        "description": "Merge multiple nodes into a single new node.\n\nAll node_ids must belong to the same layer (order >= 1).\nChildren (child nodes or zip assignments) are reparented to the new node.\nparent_node_id must be in the layer directly above, or null."
       },
       "Node": {
         "properties": {
@@ -1958,6 +2342,121 @@
         ],
         "title": "RegisterDTO",
         "description": "POST model for creating a new user."
+      },
+      "ReparentNodes": {
+        "properties": {
+          "node_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Node Ids"
+          },
+          "parent_node_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Node Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "node_ids",
+          "parent_node_id"
+        ],
+        "title": "ReparentNodes",
+        "description": "Bulk reparent nodes to a new parent (or no parent).\n\nAll node_ids must belong to the same layer.\nparent_node_id must be in the layer directly above, or null to orphan."
+      },
+      "SearchResultItem": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "node",
+              "zip"
+            ],
+            "title": "Type"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "string"
+              }
+            ],
+            "title": "Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "layer_id": {
+            "type": "integer",
+            "title": "Layer Id"
+          },
+          "layer_name": {
+            "type": "string",
+            "title": "Layer Name"
+          },
+          "color": {
+            "type": "string",
+            "title": "Color"
+          },
+          "centroid": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "number"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Centroid"
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "id",
+          "name",
+          "layer_id",
+          "layer_name",
+          "color"
+        ],
+        "title": "SearchResultItem",
+        "description": "A single search result \u2014 either a territory node or a zip code."
+      },
+      "SearchResults": {
+        "properties": {
+          "results": {
+            "items": {
+              "$ref": "#/components/schemas/SearchResultItem"
+            },
+            "type": "array",
+            "title": "Results"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          }
+        },
+        "type": "object",
+        "required": [
+          "results",
+          "total"
+        ],
+        "title": "SearchResults",
+        "description": "Search results grouped from nodes and zip codes across a map."
       },
       "SpatialSelectRequest": {
         "properties": {

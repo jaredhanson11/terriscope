@@ -18,8 +18,7 @@ services:
         source: ./openapi.json
         target: /app/openapi.json
     healthcheck:
-      test:
-        ["CMD", "/app/.venv/bin/httpx", "http://localhost:8000/v1.0/heartbeat"]
+      test: ["CMD", "/app/.venv/bin/httpx", "http://localhost:8000/heartbeat"]
       interval: 10s
       timeout: 10s
       retries: 6
@@ -28,6 +27,57 @@ services:
         condition: service_healthy
       migrations:
         condition: service_completed_successfully
+      rabbitmq:
+        condition: service_started
+  worker:
+    image: terriscope/worker-local:latest
+    build:
+      context: ..
+      dockerfile: api/Dockerfile
+      target: worker-local
+    env_file:
+      - .env.docker-compose
+      - .env.local
+    volumes:
+      - ./src:/app/src
+    command:
+      - "auto-restart"
+      - "--directory"
+      - "/app/src/"
+      - "--recursive"
+      - "--pattern"
+      - "*.py"
+      - "--"
+      - "/app/.venv/bin/celery"
+      - "--app"
+      - "src.workers:celery_app"
+      - "worker"
+      - "--queues"
+      - "terriscope"
+      - "--loglevel"
+      - "info"
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        ["CMD-SHELL", "/app/.venv/bin/celery inspect ping -d celery@$$HOSTNAME"]
+      interval: 30s
+      retries: 6
+      timeout: 10s
+      start_period: 10s
+  flower:
+    image: mher/flower
+    command: ["celery", "flower"]
+    ports:
+      - "5557:5555"
+    environment:
+      FLOWER_PORT: 5555
+      FLOWER_BASIC_AUTH: "admin:admin"
+      CELERY_BROKER_URL: amqp://rabbitmq:5672
+    depends_on:
+      worker:
+        condition: service_healthy
   db:
     image: terriscope/postgres:latest
     build:
@@ -60,5 +110,14 @@ services:
     depends_on:
       db:
         condition: service_healthy
+  rabbitmq:
+    image: rabbitmq:3.13-management
+    ports:
+      - "15672:15672"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
 volumes:
   minio_data:

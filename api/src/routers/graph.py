@@ -1,21 +1,61 @@
 """Graph router."""
 
+import uuid
 from collections.abc import Sequence
 
 from fastapi import APIRouter, HTTPException
+from geoalchemy2.functions import ST_Centroid, ST_X, ST_Y
 from sqlalchemy import delete, func, select
 
 from src.app.database import DatabaseSession
 from src.exceptions import TerriscopeException
 from src.models.geography import ZipCodeGeography
 from src.models.graph import LayerModel, NodeModel, ZipAssignmentModel
-from src.schemas.dtos.graph import AssignZip, BulkAssignZips, BulkUpdateNode, CreateLayer, CreateNode, UpdateNode
-from src.schemas.graph import Layer, Node, PaginatedNodes, PaginatedZipAssignments, ZipAssignment
+from src.models.jobs import MapJobModel
+from src.schemas.dtos.graph import (
+    AssignZip,
+    BulkAssignZips,
+    BulkDeleteNodes,
+    BulkUpdateNode,
+    CreateLayer,
+    CreateNode,
+    MergeNodes,
+    ReparentNodes,
+    UpdateNode,
+)
+from src.schemas.graph import Layer, Node, PaginatedNodes, PaginatedZipAssignments, SearchResultItem, SearchResults, ZipAssignment
 from src.services.auth import CurrentUserDependency
 from src.services.graph import GraphServiceDependency
 from src.services.permissions import PermissionsServiceDependency
 
 graph_router = APIRouter(prefix="", tags=["Graph"])
+
+
+def _enqueue_recompute(db: DatabaseSession, map_id: int) -> str:
+    """Stage a recompute job record in the current session and return its ID.
+
+    The caller MUST commit before dispatching the Celery task so the worker
+    always sees both the structural changes and the job row.
+
+    Usage pattern::
+
+        <service call that mutates nodes/zips>
+        job_id = _enqueue_recompute(db, map_id)
+        db.commit()                                           # persists everything
+        from src.workers.tasks.maps import recompute_map_task
+        recompute_map_task.delay(job_id, map_id)
+    """
+    job_id = str(uuid.uuid4())
+    job = MapJobModel(
+        id=job_id,
+        map_id=map_id,
+        job_type="recompute",
+        status="pending",
+        step=None,
+        error=None,
+    )
+    db.add(job)
+    return job_id
 
 
 # ---------------------------------------------------------------------------
@@ -193,7 +233,8 @@ def get_node(
 ):
     """Get node by id."""
     result = (
-        db.execute(
+        db
+        .execute(
             select(NodeModel, LayerModel)
             .join(LayerModel, NodeModel.layer_id == LayerModel.id)
             .filter(NodeModel.id == node_id)
@@ -231,7 +272,8 @@ def update_node(
 ):
     """Update node."""
     result = (
-        db.execute(
+        db
+        .execute(
             select(NodeModel, LayerModel)
             .join(LayerModel, NodeModel.layer_id == LayerModel.id)
             .filter(NodeModel.id == node_id)
@@ -272,7 +314,8 @@ def delete_node(
 ):
     """Delete a node (order>=1 only). Cascades to child nodes via FK."""
     result = (
-        db.execute(
+        db
+        .execute(
             select(NodeModel, LayerModel)
             .join(LayerModel, NodeModel.layer_id == LayerModel.id)
             .filter(NodeModel.id == node_id)
@@ -304,7 +347,8 @@ def bulk_update_node(
 ):
     """Bulk update nodes."""
     nodes_and_layers = (
-        db.execute(
+        db
+        .execute(
             select(NodeModel, LayerModel)
             .join(target=LayerModel, onclause=NodeModel.layer_id == LayerModel.id)
             .filter(NodeModel.id.in_([n.id for n in node_datas]))
@@ -333,6 +377,152 @@ def bulk_update_node(
         )
     db.commit()
     return updated
+
+
+@graph_router.put("/nodes/bulk/reparent", response_model=list[Node])
+def bulk_reparent_nodes(
+    data: ReparentNodes,
+    db: DatabaseSession,
+    graph_service: GraphServiceDependency,
+    current_user: CurrentUserDependency,
+    permission_service: PermissionsServiceDependency,
+):
+    """Bulk reparent nodes to a new parent (or orphan them).
+
+    All nodes must be in the same layer. parent_node_id must be in the layer
+    directly above, or null to remove the parent assignment.
+    """
+    # Permission check — all nodes must be in the same layer (validated by service),
+    # so check map access once we know the layer.
+    nodes_and_layers = (
+        db
+        .execute(
+            select(NodeModel, LayerModel)
+            .join(LayerModel, NodeModel.layer_id == LayerModel.id)
+            .where(NodeModel.id.in_(data.node_ids))
+        )
+        .tuples()
+        .all()
+    )
+
+    map_ids = {layer.map_id for _, layer in nodes_and_layers}
+    for map_id in map_ids:
+        if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER"]):
+            raise HTTPException(403)
+
+    map_id = next(iter(map_ids))
+    try:
+        updated = graph_service.reparent_nodes(data)
+    except TerriscopeException as e:
+        raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
+    job_id = _enqueue_recompute(db, map_id)
+    db.commit()
+    from src.workers.tasks.maps import recompute_map_task  # noqa: PLC0415
+
+    recompute_map_task.delay(job_id, map_id)
+    return [
+        Node(
+            id=n.id,
+            layer_id=n.layer_id,
+            name=n.name,
+            color=n.color,
+            parent_node_id=n.parent_node_id,
+            child_count=n.child_count,
+        )
+        for n in updated
+    ]
+
+
+@graph_router.post("/nodes/merge", response_model=Node)
+def merge_nodes(
+    data: MergeNodes,
+    db: DatabaseSession,
+    graph_service: GraphServiceDependency,
+    current_user: CurrentUserDependency,
+    permission_service: PermissionsServiceDependency,
+):
+    """Merge multiple nodes into a new node in the same layer.
+
+    Creates a new node with the given name/parent, reparents all children
+    to the new node, and deletes the originals. Only valid for order>=1 layers.
+    """
+    nodes_and_layers = (
+        db
+        .execute(
+            select(NodeModel, LayerModel)
+            .join(LayerModel, NodeModel.layer_id == LayerModel.id)
+            .where(NodeModel.id.in_(data.node_ids))
+        )
+        .tuples()
+        .all()
+    )
+
+    map_ids = {layer.map_id for _, layer in nodes_and_layers}
+    for map_id in map_ids:
+        if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER"]):
+            raise HTTPException(403)
+
+    map_id = next(iter(map_ids))
+    try:
+        new_node = graph_service.merge_nodes(data)
+    except TerriscopeException as e:
+        raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
+    job_id = _enqueue_recompute(db, map_id)
+    db.commit()
+    from src.workers.tasks.maps import recompute_map_task  # noqa: PLC0415
+
+    recompute_map_task.delay(job_id, map_id)
+    return Node(
+        id=new_node.id,
+        layer_id=new_node.layer_id,
+        name=new_node.name,
+        color=new_node.color,
+        parent_node_id=new_node.parent_node_id,
+        child_count=new_node.child_count,
+    )
+
+
+@graph_router.delete("/nodes/bulk", status_code=204)
+def bulk_delete_nodes(
+    data: BulkDeleteNodes,
+    db: DatabaseSession,
+    graph_service: GraphServiceDependency,
+    current_user: CurrentUserDependency,
+    permission_service: PermissionsServiceDependency,
+):
+    """Bulk delete nodes, orphaning or reparenting their children first.
+
+    child_action='orphan'   → children lose their parent assignment.
+    child_action='reparent' → children are moved to reparent_node_id (same layer).
+    Only valid for order>=1 layers. Use PUT /zip-assignments/{layer_id}/bulk to
+    unassign zip codes instead.
+    """
+    nodes_and_layers = (
+        db
+        .execute(
+            select(NodeModel, LayerModel)
+            .join(LayerModel, NodeModel.layer_id == LayerModel.id)
+            .where(NodeModel.id.in_(data.node_ids))
+        )
+        .tuples()
+        .all()
+    )
+
+    map_ids = {layer.map_id for _, layer in nodes_and_layers}
+    for map_id in map_ids:
+        if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER"]):
+            raise HTTPException(403)
+
+    map_id = next(iter(map_ids))
+    try:
+        graph_service.bulk_delete_nodes(data)
+    except TerriscopeException as e:
+        raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
+    job_id = _enqueue_recompute(db, map_id)
+    db.commit()
+    from src.workers.tasks.maps import recompute_map_task  # noqa: PLC0415
+
+    recompute_map_task.delay(job_id, map_id)
 
 
 # ---------------------------------------------------------------------------
@@ -376,18 +566,12 @@ def list_zip_assignments(
     if parent_node_id is not None:
         filter_conditions.append(ZipAssignmentModel.parent_node_id == parent_node_id)
 
-    total = (
-        db.execute(select(func.count(ZipAssignmentModel.id)).where(*filter_conditions)).scalar() or 0
-    )
+    total = db.execute(select(func.count(ZipAssignmentModel.id)).where(*filter_conditions)).scalar() or 0
     total_pages = (total + page_size - 1) // page_size if total > 0 else 0
     offset = (page - 1) * page_size
 
     assignments = (
-        db.execute(
-            select(ZipAssignmentModel).where(*filter_conditions).offset(offset).limit(page_size)
-        )
-        .scalars()
-        .all()
+        db.execute(select(ZipAssignmentModel).where(*filter_conditions).offset(offset).limit(page_size)).scalars().all()
     )
 
     return PaginatedZipAssignments(
@@ -405,6 +589,34 @@ def list_zip_assignments(
         page_size=page_size,
         total_pages=total_pages,
     )
+
+
+@graph_router.put("/zip-assignments/{layer_id}/bulk", response_model=dict)
+def bulk_assign_zips(
+    layer_id: int,
+    data: BulkAssignZips,
+    db: DatabaseSession,
+    graph_service: GraphServiceDependency,
+    current_user: CurrentUserDependency,
+    permission_service: PermissionsServiceDependency,
+):
+    """Bulk assign or unassign zip codes to a territory.
+
+    Primary operation after lasso selection. Passing parent_node_id=null
+    unassigns all provided zip codes (preserves rows and colors).
+    Enqueues a geometry recompute for the affected territories after commit.
+    """
+    layer = _check_layer_access(db, layer_id, current_user.id, permission_service)
+    try:
+        count = graph_service.bulk_assign_zips(layer_id=layer_id, data=data)
+    except TerriscopeException as e:
+        raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
+    job_id = _enqueue_recompute(db, layer.map_id)
+    db.commit()
+    from src.workers.tasks.maps import recompute_map_task  # noqa: PLC0415
+
+    recompute_map_task.delay(job_id, layer.map_id)
+    return {"updated": count}
 
 
 @graph_router.put("/zip-assignments/{layer_id}/{zip_code}", response_model=ZipAssignment)
@@ -433,29 +645,6 @@ def assign_zip(
         parent_node_id=za.parent_node_id,
         color=za.color,
     )
-
-
-@graph_router.put("/zip-assignments/{layer_id}/bulk", response_model=dict)
-def bulk_assign_zips(
-    layer_id: int,
-    data: BulkAssignZips,
-    db: DatabaseSession,
-    graph_service: GraphServiceDependency,
-    current_user: CurrentUserDependency,
-    permission_service: PermissionsServiceDependency,
-):
-    """Bulk assign or unassign zip codes to a territory.
-
-    Primary operation after lasso selection. Passing parent_node_id=null
-    unassigns all provided zip codes (preserves rows and colors).
-    """
-    _check_layer_access(db, layer_id, current_user.id, permission_service)
-    try:
-        count = graph_service.bulk_assign_zips(layer_id=layer_id, data=data)
-    except TerriscopeException as e:
-        raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
-    db.commit()
-    return {"updated": count}
 
 
 @graph_router.delete("/zip-assignments/{layer_id}/{zip_code}", status_code=204)
@@ -502,6 +691,99 @@ def get_zip_assignment(
     )
 
 
+@graph_router.get("/search", response_model=SearchResults)
+def search_map(
+    map_id: int,
+    q: str,
+    db: DatabaseSession,
+    current_user: CurrentUserDependency,
+    permission_service: PermissionsServiceDependency,
+    layer_id: int | None = None,
+    limit: int = 20,
+):
+    """Search nodes and zip codes within a map by name / zip code prefix.
+
+    Results are ordered alphabetically and capped at `limit`. Pass `layer_id`
+    to restrict the search to a single layer; omit to search all layers.
+    Zip codes are matched by prefix (e.g. "902" → "90210"). Node names are
+    matched as a substring (case-insensitive).
+    """
+    if not permission_service.check_for_map_access(
+        user_id=current_user.id,
+        map_id=map_id,
+        map_roles=["OWNER"],
+    ):
+        raise HTTPException(403)
+
+    layers = db.execute(select(LayerModel).where(LayerModel.map_id == map_id)).scalars().all()
+    if layer_id is not None:
+        layers = [la for la in layers if la.id == layer_id]
+
+    layer_map = {la.id: la for la in layers}
+    results: list[SearchResultItem] = []
+
+    # ── Node search (order >= 1) ──────────────────────────────────────────────
+    node_layer_ids = [la.id for la in layers if la.order >= 1]
+    if node_layer_ids and q:
+        rows = db.execute(  # type: ignore[arg-type]
+            select(
+                NodeModel.id,
+                NodeModel.layer_id,
+                NodeModel.name,
+                NodeModel.color,
+                ST_X(ST_Centroid(NodeModel.geom)).label("lng"),  # type: ignore[arg-type]
+                ST_Y(ST_Centroid(NodeModel.geom)).label("lat"),  # type: ignore[arg-type]
+            )
+            .where(NodeModel.layer_id.in_(node_layer_ids))
+            .where(NodeModel.name.ilike(f"%{q}%"))
+            .order_by(NodeModel.name)
+            .limit(limit)
+        ).all()
+        for row in rows:
+            layer = layer_map[row.layer_id]
+            centroid = [row.lng, row.lat] if row.lng is not None and row.lat is not None else None
+            results.append(
+                SearchResultItem(
+                    type="node",
+                    id=row.id,
+                    name=row.name,
+                    layer_id=row.layer_id,
+                    layer_name=layer.name,
+                    color=row.color,
+                    centroid=centroid,
+                )
+            )
+
+    # ── Zip code search (order = 0) ───────────────────────────────────────────
+    zip_layer = next((la for la in layers if la.order == 0), None)
+    if zip_layer and q:
+        zip_rows = db.execute(  # type: ignore[arg-type]
+            select(
+                ZipCodeGeography.zip_code,
+                ST_X(ST_Centroid(ZipCodeGeography.geom)).label("lng"),  # type: ignore[arg-type]
+                ST_Y(ST_Centroid(ZipCodeGeography.geom)).label("lat"),  # type: ignore[arg-type]
+            )
+            .where(ZipCodeGeography.zip_code.like(f"{q}%"))
+            .order_by(ZipCodeGeography.zip_code)
+            .limit(limit // 2 or 10)
+        ).all()
+        for row in zip_rows:
+            centroid = [row.lng, row.lat] if row.lng is not None and row.lat is not None else None
+            results.append(
+                SearchResultItem(
+                    type="zip",
+                    id=row.zip_code,
+                    name=row.zip_code,
+                    layer_id=zip_layer.id,
+                    layer_name=zip_layer.name,
+                    color="#FFFFFF",
+                    centroid=centroid,
+                )
+            )
+
+    return SearchResults(results=results, total=len(results))
+
+
 @graph_router.get(
     "/zip-assignments/{layer_id}/{zip_code}/geography",
     response_model=ZipAssignment,
@@ -529,7 +811,9 @@ def get_zip_with_geography_default(
     ).scalar_one_or_none()
 
     if za:
-        return ZipAssignment(zip_code=za.zip_code, layer_id=za.layer_id, parent_node_id=za.parent_node_id, color=za.color)
+        return ZipAssignment(
+            zip_code=za.zip_code, layer_id=za.layer_id, parent_node_id=za.parent_node_id, color=za.color
+        )
 
     # Implicit state — verify zip exists in geography
     geo = db.get(ZipCodeGeography, padded)

@@ -19,13 +19,11 @@ if TYPE_CHECKING:
 else:
     op = _op  # type: ignore[assignment]
 
-import sqlalchemy as sa
-from geoalchemy2 import Geometry
 from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
 revision: str = "bd9a96a540db"
-down_revision: str | None = "700f9e50e2e7"
+down_revision: str | None = "8ebb75405815"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -40,9 +38,10 @@ _GEOM_KWARGS = {
 }
 
 _COPY_SQL = text("""
-    INSERT INTO geography_zip_codes (zip_code, geom, geom_z3, geom_z7, geom_z11, geom_z15)
+    INSERT INTO geography_zip_codes (zip_code, color, geom, geom_z3, geom_z7, geom_z11, geom_z15)
     SELECT DISTINCT ON (lpad(zip, 5, '0'))
         lpad(zip, 5, '0'),
+        COALESCE(color, '#000000'),
         geom,
         ST_Transform(ST_MakeValid(ST_SnapToGrid(ST_Transform(geom, 3857), 19568.0)), 4326),
         ST_Transform(ST_MakeValid(ST_SnapToGrid(ST_Transform(geom, 3857),  1223.0)), 4326),
@@ -59,45 +58,6 @@ _COPY_SQL = text("""
 
 def upgrade() -> None:
     """Upgrade revisions: 700f9e50e2e7 to bd9a96a540db."""
-    op.create_geospatial_table(
-        "geography_zip_codes",
-        sa.Column("zip_code", sa.String(length=5), nullable=False),
-        sa.Column(
-            "geom",
-            Geometry(srid=4326, dimension=2, spatial_index=False, from_text="ST_GeomFromEWKT", name="geometry"),
-            nullable=True,
-        ),
-        sa.Column(
-            "geom_z3",
-            Geometry(srid=4326, dimension=2, spatial_index=False, from_text="ST_GeomFromEWKT", name="geometry"),
-            nullable=True,
-        ),
-        sa.Column(
-            "geom_z7",
-            Geometry(srid=4326, dimension=2, spatial_index=False, from_text="ST_GeomFromEWKT", name="geometry"),
-            nullable=True,
-        ),
-        sa.Column(
-            "geom_z11",
-            Geometry(srid=4326, dimension=2, spatial_index=False, from_text="ST_GeomFromEWKT", name="geometry"),
-            nullable=True,
-        ),
-        sa.Column(
-            "geom_z15",
-            Geometry(srid=4326, dimension=2, spatial_index=False, from_text="ST_GeomFromEWKT", name="geometry"),
-            nullable=True,
-        ),
-        sa.PrimaryKeyConstraint("zip_code", name=op.f("pk_geography_zip_codes")),
-    )
-    op.create_geospatial_index(
-        "idx_geography_zip_codes_geom",
-        "geography_zip_codes",
-        ["geom"],
-        unique=False,
-        postgresql_using="gist",
-        postgresql_ops={},
-    )
-
     connection = op.get_bind()
 
     # Load Boundary_Data from the vendor SQL dump (creates the table + inserts all rows).
@@ -117,10 +77,4 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade revisions: bd9a96a540db to 700f9e50e2e7."""
-    op.drop_geospatial_index(
-        "idx_geography_zip_codes_geom",
-        table_name="geography_zip_codes",
-        postgresql_using="gist",
-        column_name="geom",
-    )
-    op.drop_geospatial_table("geography_zip_codes")
+    op.execute("TRUNCATE TABLE geography_zip_codes RESTART IDENTITY CASCADE")

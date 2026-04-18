@@ -92,3 +92,9 @@ CMD [ "upgrade", "head" ]
 ### Migrations local development image ###
 FROM migrations AS migrations-local
 RUN poetry install --no-interaction --no-ansi --no-root --only=dev
+
+
+### Celery worker (local dev — auto-restarts on code changes via watchmedo) ###
+FROM api-extra-deps AS worker-local
+RUN poetry install --no-interaction --no-ansi --no-root --only=dev
+ENTRYPOINT ["/app/.venv/bin/watchmedo"]

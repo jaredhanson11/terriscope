@@ -39,6 +39,12 @@ class CORSSettings(BaseSettings, env_prefix="CORS_"):
     allowed_origins: list[HttpUrl] = Field(default_factory=lambda: cast(list[HttpUrl], []))
 
 
+class CelerySettings(BaseSettings, env_prefix="CELERY_"):
+    """Celery settings."""
+
+    broker_url: str = "amqp://rabbitmq:5672"
+
+
 class AppSettings(BaseSettings):
     """Application settings."""
 
@@ -46,6 +52,7 @@ class AppSettings(BaseSettings):
     database: DatabaseSettings = DatabaseSettings()
     jwt: JWTSettings = JWTSettings()
     cors: CORSSettings = CORSSettings()
+    celery: CelerySettings = CelerySettings()
     log_level: Literal["CRITICAL", "FATAL", "ERROR", "WARNING", "INFO", "DEBUG", "NOTSET"] = "INFO"
 
 

@@ -3,14 +3,14 @@
 from typing import Annotated, Literal, cast
 
 from fastapi import Depends
-from sqlalchemy import delete, select, text
+from sqlalchemy import delete, select, text, update
 from sqlalchemy.exc import NoResultFound
 
 from src.app.database import DatabaseSession
 from src.exceptions import TerriscopeException
 from src.models.geography import ZipCodeGeography
 from src.models.graph import LayerModel, MapModel, NodeModel, ZipAssignmentModel
-from src.schemas.dtos.graph import AssignZip, BulkAssignZips, CreateLayer, CreateNode, UpdateNode
+from src.schemas.dtos.graph import AssignZip, BulkAssignZips, BulkDeleteNodes, CreateLayer, CreateNode, MergeNodes, ReparentNodes, UpdateNode
 from src.services.base import BaseService
 
 
@@ -107,6 +107,174 @@ class GraphService(BaseService):
         node.name = node_data.name
         self.db.flush()
         return node
+
+    # ------------------------------------------------------------------
+    # Bulk node operations
+    # ------------------------------------------------------------------
+
+    def reparent_nodes(self, data: ReparentNodes) -> list[NodeModel]:
+        """Bulk reparent nodes to a new parent (or orphan them).
+
+        All nodes must be in the same layer. If parent_node_id is provided it
+        must be in the layer directly above the current nodes' layer.
+
+        Raises:
+            TerriscopeException(400) if node_ids is empty or nodes span multiple layers
+            TerriscopeException(404) if any node_id is not found
+            TerriscopeException(402/403) if parent validation fails (via _propose_node_parent)
+        """
+        if not data.node_ids:
+            raise TerriscopeException(400, "node_ids must not be empty.")
+
+        nodes = self.db.execute(
+            select(NodeModel).where(NodeModel.id.in_(data.node_ids))
+        ).scalars().all()
+
+        if len(nodes) != len(set(data.node_ids)):
+            found = {n.id for n in nodes}
+            missing = set(data.node_ids) - found
+            raise TerriscopeException(404, f"Nodes not found: {missing}")
+
+        layer_ids = {n.layer_id for n in nodes}
+        if len(layer_ids) > 1:
+            raise TerriscopeException(400, "All nodes must be in the same layer.")
+
+        layer = cast(LayerModel, self.db.get(LayerModel, next(iter(layer_ids))))
+
+        if data.parent_node_id is not None:
+            self._propose_node_parent(layer, data.parent_node_id)
+
+        self.db.execute(
+            update(NodeModel)
+            .where(NodeModel.id.in_(data.node_ids))
+            .values(parent_node_id=data.parent_node_id)
+        )
+        self.db.flush()
+
+        for node in nodes:
+            node.parent_node_id = data.parent_node_id
+        return list(nodes)
+
+    def merge_nodes(self, data: MergeNodes) -> NodeModel:
+        """Merge multiple nodes into a single new node in the same layer.
+
+        Creates a new node with the given name and parent, reparents all children
+        (child nodes for order>1, zip assignments for order=1) to the new node,
+        then deletes the originals.
+
+        Raises:
+            TerriscopeException(400) if fewer than 2 nodes, nodes span layers, or layer is order=0
+            TerriscopeException(404) if any node_id is not found
+            TerriscopeException(402/403) if parent validation fails
+        """
+        if len(data.node_ids) < 2:
+            raise TerriscopeException(400, "At least 2 nodes are required to merge.")
+
+        nodes = self.db.execute(
+            select(NodeModel).where(NodeModel.id.in_(data.node_ids))
+        ).scalars().all()
+
+        if len(nodes) != len(set(data.node_ids)):
+            found = {n.id for n in nodes}
+            missing = set(data.node_ids) - found
+            raise TerriscopeException(404, f"Nodes not found: {missing}")
+
+        layer_ids = {n.layer_id for n in nodes}
+        if len(layer_ids) > 1:
+            raise TerriscopeException(400, "All nodes must be in the same layer.")
+
+        layer = cast(LayerModel, self.db.get(LayerModel, next(iter(layer_ids))))
+
+        if layer.order == 0:
+            raise TerriscopeException(400, "Cannot merge zip-layer entries.")
+
+        if data.parent_node_id is not None:
+            self._propose_node_parent(layer, data.parent_node_id)
+
+        new_node = NodeModel(
+            name=data.name,
+            layer_id=layer.id,
+            color="#CCCCCC",
+            parent_node_id=data.parent_node_id,
+            data=None,
+            data_cache_key="",
+            data_inputs_cache_key="",
+            geom_cache_key="",
+            geom_inputs_cache_key="",
+        )
+        self.db.add(new_node)
+        self.db.flush()  # obtain new_node.id before reparenting
+
+        if layer.order == 1:
+            self.db.execute(
+                update(ZipAssignmentModel)
+                .where(ZipAssignmentModel.parent_node_id.in_(data.node_ids))
+                .values(parent_node_id=new_node.id)
+            )
+        else:
+            self.db.execute(
+                update(NodeModel)
+                .where(NodeModel.parent_node_id.in_(data.node_ids))
+                .values(parent_node_id=new_node.id)
+            )
+
+        self.db.execute(delete(NodeModel).where(NodeModel.id.in_(data.node_ids)))
+        self.db.flush()
+        return new_node
+
+    def bulk_delete_nodes(self, data: BulkDeleteNodes) -> None:
+        """Delete multiple nodes, handling their children first.
+
+        Orphans or reparents children before deletion so FK constraints are not violated.
+        Works for both order=1 (zip children) and order>1 (node children).
+
+        Raises:
+            TerriscopeException(400) if node_ids is empty, nodes span layers, or reparent target is invalid
+            TerriscopeException(404) if any node_id is not found
+        """
+        if not data.node_ids:
+            raise TerriscopeException(400, "node_ids must not be empty.")
+
+        nodes = self.db.execute(
+            select(NodeModel).where(NodeModel.id.in_(data.node_ids))
+        ).scalars().all()
+
+        if len(nodes) != len(set(data.node_ids)):
+            found = {n.id for n in nodes}
+            missing = set(data.node_ids) - found
+            raise TerriscopeException(404, f"Nodes not found: {missing}")
+
+        layer_ids = {n.layer_id for n in nodes}
+        if len(layer_ids) > 1:
+            raise TerriscopeException(400, "All nodes must be in the same layer.")
+
+        layer = cast(LayerModel, self.db.get(LayerModel, next(iter(layer_ids))))
+
+        new_parent_id: int | None = None
+        if data.child_action == "reparent":
+            reparent_id = data.reparent_node_id  # model_validator guarantees non-None
+            if reparent_id in set(data.node_ids):
+                raise TerriscopeException(400, "reparent_node_id cannot be one of the nodes being deleted.")
+            reparent_node = self.db.get(NodeModel, reparent_id)
+            if not reparent_node or reparent_node.layer_id != layer.id:
+                raise TerriscopeException(400, "reparent_node_id must exist in the same layer as the deleted nodes.")
+            new_parent_id = reparent_id
+
+        if layer.order == 1:
+            self.db.execute(
+                update(ZipAssignmentModel)
+                .where(ZipAssignmentModel.parent_node_id.in_(data.node_ids))
+                .values(parent_node_id=new_parent_id)
+            )
+        else:
+            self.db.execute(
+                update(NodeModel)
+                .where(NodeModel.parent_node_id.in_(data.node_ids))
+                .values(parent_node_id=new_parent_id)
+            )
+
+        self.db.execute(delete(NodeModel).where(NodeModel.id.in_(data.node_ids)))
+        self.db.flush()
 
     # ------------------------------------------------------------------
     # Zip assignment methods

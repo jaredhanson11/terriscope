@@ -7,12 +7,13 @@ import {
   IconHome,
   IconInfoCircle,
   IconLasso,
+  IconLoader2,
   IconLogout,
   IconPlus,
   IconSettings,
   IconTrash,
 } from "@tabler/icons-react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import pluralize from "pluralize"
 import { useEffect, useMemo, useRef, useState } from "react"
 import { type MapRef } from "react-map-gl/maplibre"
@@ -35,7 +36,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { Input } from "@/components/ui/input"
 import {
   Popover,
   PopoverContent,
@@ -67,6 +67,11 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { Map } from "@/features/home/components/map"
+import { DeleteDialog } from "@/features/home/components/delete-dialog"
+import { MergeDialog } from "@/features/home/components/merge-dialog"
+import { MoveDialog } from "@/features/home/components/move-dialog"
+import { NodeDetailSheet } from "@/features/home/components/node-detail-sheet"
+import { SearchBar, type SearchResultItem } from "@/features/home/components/search-bar"
 import {
   useLogoutMutation,
   useSpatialSelectMutation,
@@ -74,7 +79,10 @@ import {
 import { queries } from "@/queries/queries"
 
 import type { BaseMapName } from "./components/map/config"
-import { updateSelectedFeatureStates } from "./components/map/utils"
+import {
+  updateSelectedNodeStates,
+  updateSelectedZipStates,
+} from "./components/map/utils"
 
 const BASE_MAPS = [
   { id: "osm", name: "OpenStreetMap" },
@@ -89,9 +97,14 @@ export default function HomePage() {
 
   // Track which label fields are active per layer (ordered list shown stacked on map)
   const [labelFields, setLabelFields] = useState<Record<number, string[]>>({})
+  const queryClient = useQueryClient()
   const maps = useMaps()
   const [currentMapId, setCurrentMapId] = useState<number>(maps[0]?.id ?? 0)
   const currentMap = maps.find((m) => m.id === currentMapId) ?? maps[0]
+  // Poll the current map for live job status updates (refetchInterval is 2s
+  // while a job is active, pauses automatically when idle).
+  const currentMapPolled = useQuery(queries.getMap(currentMap.id))
+  const activeJob = currentMapPolled.data?.active_job ?? currentMap.active_job
   const layersQuery = useQuery(queries.listLayers(currentMap.id))
   const [baseMap, setBaseMap] = useState<BaseMapName>("osm")
   const [fillLayerId, setFillLayerId] = useState<number | null>(null)
@@ -119,7 +132,61 @@ export default function HomePage() {
   const activeLayer = layersQuery.data?.find(
     (layer) => layer.id === activeLayerId,
   )
-  const [selectedNodes, setSelectedNodes] = useState<number[]>([])
+  const [selectedNodeIds, setSelectedNodeIds] = useState<number[]>([])
+  const [selectedZipCodes, setSelectedZipCodes] = useState<string[]>([])
+
+  // Dialog state
+  const [moveOpen, setMoveOpen] = useState(false)
+  const [mergeOpen, setMergeOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+
+  // Search / detail sheet state
+  const [detailResult, setDetailResult] = useState<SearchResultItem | null>(null)
+
+  const handleSearchSelect = (result: SearchResultItem) => {
+    // Fly map to the result's centroid if geometry is available
+    if (result.centroid && mapRef.current) {
+      mapRef.current.getMap().flyTo({
+        center: [result.centroid[0], result.centroid[1]],
+        zoom: result.type === "zip" ? 12 : 8,
+        duration: 1000,
+      })
+    }
+    setDetailResult(result)
+  }
+
+  // The layer one order above the active layer — used as the parent picker target
+  // for Move and Merge dialogs.
+  const parentLayer = useMemo(() => {
+    if (!activeLayer || !layersQuery.data) return null
+    return (
+      layersQuery.data.find((l) => l.order === activeLayer.order + 1) ?? null
+    )
+  }, [activeLayer, layersQuery.data])
+
+  const selectionCount =
+    activeLayer?.order === 0 ? selectedZipCodes.length : selectedNodeIds.length
+  const hasSelection = selectionCount > 0
+  const isZipLayer = activeLayer?.order === 0
+
+  // Clear selection and close all dialogs when switching layers or maps
+  const clearSelection = () => {
+    setSelectedNodeIds([])
+    setSelectedZipCodes([])
+    setMoveOpen(false)
+    setMergeOpen(false)
+    setDeleteOpen(false)
+  }
+
+  // Called after any bulk action that triggers a recompute job. Clears
+  // selection and immediately refreshes the current map so the "Recomputing…"
+  // status appears in the sidebar without waiting for the next poll cycle.
+  const onActionSuccess = () => {
+    clearSelection()
+    void queryClient.invalidateQueries({
+      queryKey: queries.getMap(currentMap.id).queryKey,
+    })
+  }
 
   if (
     layersQuery.isSuccess &&
@@ -134,6 +201,7 @@ export default function HomePage() {
       layersQuery.data
         ? layersQuery.data.map((_layer) => ({
             id: _layer.id,
+            order: _layer.order,
             showFill: fillLayerId === _layer.id,
             showOutline: borderLayerIds.has(_layer.id),
             showLabel: labelLayerIds.has(_layer.id),
@@ -166,7 +234,8 @@ export default function HomePage() {
   }
 
   return (
-    <PageLayout>
+    <>
+      <PageLayout>
       <PageLayout.SideNav>
         <Sidebar>
           <SidebarHeader className="border-border border-b p-4 gap-4">
@@ -181,9 +250,21 @@ export default function HomePage() {
                         {currentMap.name}
                       </div>
                       <div className="text-muted-foreground text-xs">
-                        Last edited TODO
+                        {activeJob
+                          ? activeJob.status === "failed"
+                            ? activeJob.job_type === "recompute"
+                              ? "Recompute failed"
+                              : "Import failed"
+                            : activeJob.step ??
+                              (activeJob.job_type === "recompute"
+                                ? "Recomputing…"
+                                : "Computing…")
+                          : "Last edited TODO"}
                       </div>
                     </div>
+                    {activeJob && activeJob.status !== "failed" && (
+                      <IconLoader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+                    )}
                     <IconChevronDown className="h-4 w-4 shrink-0" />
                   </div>
                 </SidebarMenuButton>
@@ -204,17 +285,29 @@ export default function HomePage() {
                       setBorderLayerIds(new Set())
                       setLabelLayerIds(new Set())
                       setLabelFields({})
-                      setSelectedNodes([])
+                      clearSelection()
                     }}
                   >
-                    <IconHome className="h-4 w-4" />
+                    <IconHome className="h-4 w-4 shrink-0" />
                     <div className="flex-1">
                       <div className="text-sm font-medium">{map.name}</div>
                       <div className="text-muted-foreground text-xs">
-                        Last edited TODO
+                        {map.active_job
+                          ? map.active_job.status === "failed"
+                            ? map.active_job.job_type === "recompute"
+                              ? "Recompute failed"
+                              : "Import failed"
+                            : map.active_job.step ??
+                              (map.active_job.job_type === "recompute"
+                                ? "Recomputing…"
+                                : "Computing…")
+                          : "Last edited TODO"}
                       </div>
                     </div>
-                    {map.id === currentMap.id && (
+                    {map.active_job && map.active_job.status !== "failed" && (
+                      <IconLoader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+                    )}
+                    {map.id === currentMap.id && !map.active_job && (
                       <IconCheck className="h-4 w-4" />
                     )}
                   </DropdownMenuItem>
@@ -266,13 +359,13 @@ export default function HomePage() {
                   value={activeLayerId?.toString()}
                   onValueChange={(val) => {
                     if (mapRef.current && activeLayerId) {
-                      updateSelectedFeatureStates(
-                        mapRef.current.getMap(),
-                        activeLayerId,
-                        selectedNodes,
-                        [],
-                      )
-                      setSelectedNodes([])
+                      if (activeLayer?.order === 0) {
+                        updateSelectedZipStates(mapRef.current.getMap(), activeLayerId, selectedZipCodes, [])
+                        setSelectedZipCodes([])
+                      } else {
+                        updateSelectedNodeStates(mapRef.current.getMap(), activeLayerId, selectedNodeIds, [])
+                        setSelectedNodeIds([])
+                      }
                     }
                     setActiveLayerId(parseInt(val))
                   }}
@@ -335,34 +428,49 @@ export default function HomePage() {
                 <div className="bg-muted rounded-lg p-3">
                   <div className="mb-3 text-center">
                     <div className="text-foreground text-2xl font-bold">
-                      {selectedNodes.length}
+                      {activeLayer?.order === 0 ? selectedZipCodes.length : selectedNodeIds.length}
                     </div>
                     <div className="text-muted-foreground text-xs">
                       {pluralize(activeLayer?.name ?? "")} selected
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">
-                    <Button variant="outline" size="sm" disabled>
-                      <IconPlus className="h-4 w-4" />
-                      Assign
-                    </Button>
-                    <Button variant="outline" size="sm" disabled>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={!hasSelection}
+                      onClick={() => setMoveOpen(true)}
+                      className="col-span-2"
+                    >
                       Move
                     </Button>
-                    <Button variant="outline" size="sm" disabled>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={isZipLayer || selectionCount < 2}
+                      title={
+                        isZipLayer
+                          ? "Cannot merge zip codes"
+                          : selectionCount < 2
+                            ? "Select 2 or more to merge"
+                            : undefined
+                      }
+                      onClick={() => setMergeOpen(true)}
+                    >
                       Merge
                     </Button>
-                    <Button variant="outline" size="sm" disabled>
+                    <Button variant="outline" size="sm" disabled title="Coming soon">
                       Split
                     </Button>
                     <Button
                       variant="destructive"
                       size="sm"
-                      disabled
+                      disabled={!hasSelection}
                       className="col-span-2"
+                      onClick={() => setDeleteOpen(true)}
                     >
                       <IconTrash className="h-4 w-4" />
-                      Remove
+                      {isZipLayer ? "Unassign" : "Delete"}
                     </Button>
                   </div>
                 </div>
@@ -643,7 +751,11 @@ export default function HomePage() {
       <PageLayout.TopNav>
         <div className="flex w-full items-center gap-4">
           <SidebarTrigger />
-          <Input type="search" className="max-w-80" />
+          <SearchBar
+            mapId={currentMap.id}
+            onSelect={handleSearchSelect}
+            className="max-w-80 w-full"
+          />
         </div>
       </PageLayout.TopNav>
 
@@ -654,33 +766,29 @@ export default function HomePage() {
             baseMap={baseMap}
             layers={layers}
             currentTool={currentTool}
+            tileVersion={currentMapPolled.data?.tile_version ?? currentMap.tile_version}
             onLassoComplete={(geojson) => {
               if (activeLayerId != null) {
                 spatialSelectMutation.mutate(
                   { lasso: geojson, layerId: activeLayerId },
                   {
                     onSuccess: (response) => {
-                      console.log(
-                        mapRef,
-                        activeLayerId,
-                        selectedNodes,
-                        response.nodes,
-                      )
-                      if (mapRef.current) {
-                        updateSelectedFeatureStates(
-                          mapRef.current.getMap(),
-                          activeLayerId,
-                          selectedNodes,
-                          response.nodes,
-                        )
-                        setSelectedNodes(response.nodes)
+                      if (!mapRef.current) return
+                      const map = mapRef.current.getMap()
+                      if (activeLayer?.order === 0) {
+                        updateSelectedZipStates(map, activeLayerId, selectedZipCodes, response.zip_codes ?? [])
+                        setSelectedZipCodes(response.zip_codes ?? [])
+                      } else {
+                        updateSelectedNodeStates(map, activeLayerId, selectedNodeIds, response.nodes)
+                        setSelectedNodeIds(response.nodes)
                       }
                     },
                   },
                 )
               }
             }}
-            selectedNodes={selectedNodes}
+            selectedNodeIds={selectedNodeIds}
+            selectedZipCodes={selectedZipCodes}
           />
 
           <div className="absolute bottom-4 left-4 flex flex-col gap-0.5 rounded-lg border bg-background/90 p-1 shadow-md backdrop-blur-sm">
@@ -727,5 +835,40 @@ export default function HomePage() {
         </div>
       </PageLayout.FullScreenBody>
     </PageLayout>
+    {activeLayer && (
+      <>
+        <MoveDialog
+          open={moveOpen}
+          onOpenChange={setMoveOpen}
+          activeLayer={activeLayer}
+          parentLayer={parentLayer}
+          selectedNodeIds={selectedNodeIds}
+          selectedZipCodes={selectedZipCodes}
+          onSuccess={onActionSuccess}
+        />
+        <MergeDialog
+          open={mergeOpen}
+          onOpenChange={setMergeOpen}
+          activeLayer={activeLayer}
+          parentLayer={parentLayer}
+          selectedNodeIds={selectedNodeIds}
+          onSuccess={onActionSuccess}
+        />
+        <DeleteDialog
+          open={deleteOpen}
+          onOpenChange={setDeleteOpen}
+          activeLayer={activeLayer}
+          selectedNodeIds={selectedNodeIds}
+          selectedZipCodes={selectedZipCodes}
+          onSuccess={onActionSuccess}
+        />
+      </>
+    )}
+    <NodeDetailSheet
+      result={detailResult}
+      layers={layersQuery.data ?? []}
+      onClose={() => setDetailResult(null)}
+    />
+    </>
   )
 }

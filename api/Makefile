@@ -22,7 +22,7 @@ dev: ## Run the api in docker compose
 	@echo "🚀 Running api: running docker compose up"
 	@docker compose up -d --remove-orphans
 	@echo "🚀 Starting to tail api logs"
-	@docker compose logs -f api
+	@docker compose logs -f api worker
 
 .PHONY: debug
 debug: ## Run the api in docker compose with a debugger exposed

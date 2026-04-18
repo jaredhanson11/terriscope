@@ -11,18 +11,22 @@ import { queries } from "./queries"
 
 export const useImportMapMutation = () => {
   const queryClient = useQueryClient()
-  const navigate = useNavigate()
   return useMutation({
     mutationFn: async (variables: {
       import_data: paths["/maps"]["post"]["requestBody"]["content"]["application/json"]
     }) => {
-      return await fetchClient.POST("/maps", {
+      const response = await fetchClient.POST("/maps", {
         body: variables.import_data,
       })
+      if (!response.data || (response.response.status !== 200 && response.response.status !== 202)) {
+        throw new Error("Failed to create map")
+      }
+      return response.data
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
+      // Seed the detail cache so polling starts immediately with the pending job
+      queryClient.setQueryData(queries.getMap(data.id).queryKey, data)
       void queryClient.invalidateQueries({ queryKey: queries._maps() })
-      void navigate(AppRoutes.getRoute(PageName.Home))
     },
   })
 }
@@ -100,6 +104,136 @@ export const useLogoutMutation = () => {
     },
     onSuccess: () => {
       void queryClient.resetQueries()
+    },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Bulk node / zip operations (Move, Merge, Delete, Unassign)
+// ---------------------------------------------------------------------------
+
+export const useBulkAssignZipsMutation = () => {
+  return useMutation({
+    mutationFn: async (vars: {
+      layerId: number
+      zipCodes: string[]
+      parentNodeId: number | null
+      color?: string | null
+    }) => {
+      const response = await fetchClient.PUT(
+        "/zip-assignments/{layer_id}/bulk",
+        {
+          params: { path: { layer_id: vars.layerId } },
+          body: {
+            zip_codes: vars.zipCodes,
+            parent_node_id: vars.parentNodeId,
+            color: vars.color ?? null,
+          },
+        },
+      )
+      if (response.response.status !== 200 || !response.data) {
+        throw new Error("Failed to update zip assignments")
+      }
+      return response.data
+    },
+  })
+}
+
+export const useMoveNodesMutation = () => {
+  return useMutation({
+    mutationFn: async (vars: {
+      nodeIds: number[]
+      parentNodeId: number | null
+    }) => {
+      const response = await fetchClient.PUT("/nodes/bulk/reparent", {
+        body: {
+          node_ids: vars.nodeIds,
+          parent_node_id: vars.parentNodeId,
+        },
+      })
+      if (response.response.status !== 200 || !response.data) {
+        throw new Error("Failed to move nodes")
+      }
+      return response.data
+    },
+  })
+}
+
+export const useMergeNodesMutation = () => {
+  return useMutation({
+    mutationFn: async (vars: {
+      nodeIds: number[]
+      name: string
+      parentNodeId: number | null
+    }) => {
+      const response = await fetchClient.POST("/nodes/merge", {
+        body: {
+          node_ids: vars.nodeIds,
+          name: vars.name,
+          parent_node_id: vars.parentNodeId,
+        },
+      })
+      if (response.response.status !== 200 || !response.data) {
+        throw new Error("Failed to merge nodes")
+      }
+      return response.data
+    },
+  })
+}
+
+export const useBulkDeleteNodesMutation = () => {
+  return useMutation({
+    mutationFn: async (
+      vars:
+        | { nodeIds: number[]; childAction: "orphan" }
+        | { nodeIds: number[]; childAction: "reparent"; reparentNodeId: number },
+    ) => {
+      const response = await fetchClient.DELETE("/nodes/bulk", {
+        body:
+          vars.childAction === "reparent"
+            ? {
+                node_ids: vars.nodeIds,
+                child_action: "reparent",
+                reparent_node_id: vars.reparentNodeId,
+              }
+            : {
+                node_ids: vars.nodeIds,
+                child_action: "orphan",
+                reparent_node_id: null,
+              },
+      })
+      if (response.response.status !== 204) {
+        throw new Error("Failed to delete nodes")
+      }
+    },
+  })
+}
+
+export const useUpdateNodeMutation = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (vars: {
+      nodeId: number
+      name: string
+      color: string
+      parentNodeId: number | null
+    }) => {
+      const response = await fetchClient.PUT("/nodes/{node_id}", {
+        params: { path: { node_id: vars.nodeId } },
+        body: {
+          name: vars.name,
+          color: vars.color,
+          parent_node_id: vars.parentNodeId,
+        },
+      })
+      if (response.response.status !== 200 || !response.data) {
+        throw new Error("Failed to update node")
+      }
+      return response.data
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(queries.getNode(data.id as number).queryKey, data)
+      void queryClient.invalidateQueries({ queryKey: queries._nodes() })
     },
   })
 }

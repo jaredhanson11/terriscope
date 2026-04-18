@@ -18,6 +18,8 @@ class MapModel(Base):
 
     id: Mapped[intpk] = mapped_column(init=False)
     name: Mapped[str]
+    tile_version: Mapped[int] = mapped_column(default=0, server_default="0")
+    """Incremented after each successful geometry recompute. Used by the frontend to cache-bust MVT tile URLs."""
     data_field_config: Mapped[list[dict[str, Any]] | None] = mapped_column(
         JSONB,
         nullable=True,

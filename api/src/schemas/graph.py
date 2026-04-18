@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 from typing import Any, Literal
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, field_validator, model_validator
 
 
 class DataFieldConfig(BaseModel):
@@ -14,12 +14,24 @@ class DataFieldConfig(BaseModel):
     aggregations: list[Literal["sum", "avg"]]
 
 
+class MapJob(BaseModel):
+    """Background job for a map."""
+
+    id: str
+    job_type: Literal["import", "recompute"]
+    status: Literal["pending", "processing", "complete", "failed"]
+    step: str | None = None
+    error: str | None = None
+
+
 class Map(BaseModel):
     """Map."""
 
     id: int
     name: str
+    tile_version: int = 0
     data_field_config: list[DataFieldConfig] | None = None
+    active_job: MapJob | None = None
 
 
 class Layer(BaseModel):
@@ -80,3 +92,32 @@ class PaginatedZipAssignments(BaseModel):
     page: int
     page_size: int
     total_pages: int
+
+
+class SearchResultItem(BaseModel):
+    """A single search result — either a territory node or a zip code."""
+
+    type: Literal["node", "zip"]
+    id: int | str
+    """Node id (int) or zip_code string."""
+    name: str
+    layer_id: int
+    layer_name: str
+    color: str
+    centroid: list[float] | None = None
+    """[lng, lat] derived from PostGIS geometry centroid. Null if geometry not yet computed."""
+
+    @model_validator(mode="after")
+    def _validate_id_type(self) -> "SearchResultItem":
+        if self.type == "node" and not isinstance(self.id, int):
+            raise ValueError("node results must have an integer id")
+        if self.type == "zip" and not isinstance(self.id, str):
+            raise ValueError("zip results must have a string id")
+        return self
+
+
+class SearchResults(BaseModel):
+    """Search results grouped from nodes and zip codes across a map."""
+
+    results: list[SearchResultItem]
+    total: int

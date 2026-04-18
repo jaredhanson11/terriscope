@@ -179,3 +179,53 @@ pnpm dev     # starts on http://localhost:5173
 - `app/src/features/initialize/page.tsx` — import wizard
 - `app/src/queries/mutations.ts` — all API mutations
 - `app/src/app/providers/me-provider/index.tsx` — auth guard logic
+
+---
+
+## Geometry Recomputation
+
+### When geometry must be recomputed
+Any operation that changes which zip codes belong to which territory, or which nodes belong to which parent, invalidates the pre-computed PostGIS geometry on affected nodes. This includes:
+- **Bulk zip assign/unassign** (`PUT /zip-assignments/{layer_id}/bulk`) — changes territory shape
+- **Node reparent** (`PUT /nodes/bulk/reparent`) — changes parent node's child set
+- **Node merge** (`POST /nodes/merge`) — creates new node with inherited children
+- **Bulk delete** (`DELETE /nodes/bulk`) — orphans or reparents children
+- Single-node edits (not yet triggering recompute — TODO)
+
+### How to trigger recompute from a router endpoint
+```python
+# 1. Run the service call (mutates nodes/zips in session)
+graph_service.some_operation(data)
+
+# 2. Stage the job record (do NOT commit yet)
+job_id = _enqueue_recompute(db, map_id)   # helper in routers/graph.py
+
+# 3. Commit changes + job record together
+db.commit()
+
+# 4. Dispatch the Celery task AFTER commit (worker must see committed rows)
+from src.workers.tasks.maps import recompute_map_task
+recompute_map_task.delay(job_id, map_id)
+```
+
+### Celery tasks
+- `import_map_task` — full recompute with `force=True`; used on initial import
+- `recompute_map_task` — incremental recompute with `force=False`; used after edits.
+  Skips nodes whose input signature (child zip set or child geom hashes) hasn't changed.
+  Both tasks are defined in `api/src/workers/tasks/maps.py` and share `_run_map_computation()`.
+
+### Job types and frontend display
+`MapJobModel.job_type` is `"import"` or `"recompute"`. The home page sidebar polls
+`GET /maps/{id}` every 2 s while a job is active (`refetchInterval` in `queries.getMap`)
+and shows job-type-aware labels:
+- Pending/processing: step string, or `"Computing…"` (import) / `"Recomputing…"` (recompute)
+- Failed: `"Import failed"` or `"Recompute failed"`
+
+After any bulk mutation, the frontend calls `queryClient.invalidateQueries` on the
+`getMap` query key so the "Recomputing…" status appears immediately without waiting
+for the next poll cycle.
+
+### TODO — single-node operations not yet triggering recompute
+`PUT /nodes/{node_id}`, `DELETE /nodes/{node_id}`, `PUT /zip-assignments/{layer_id}/{zip_code}`
+do not yet enqueue a recompute. Add `_enqueue_recompute` + `recompute_map_task.delay`
+following the same pattern above when implementing those.

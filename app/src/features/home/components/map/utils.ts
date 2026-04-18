@@ -24,7 +24,7 @@ function buildLabelExpression(
   const parts: maplibregl.ExpressionSpecification[] = []
   for (let i = 0; i < fields.length; i++) {
     const key = fields[i]
-    if (i > 0) parts.push("\n")
+    if (i > 0) parts.push("\n" as unknown as maplibregl.ExpressionSpecification)
     if (key === "name") {
       parts.push(["get", "name"])
     } else {
@@ -33,7 +33,7 @@ function buildLabelExpression(
         lastUs !== -1
           ? `${key.slice(0, lastUs)} (${key.slice(lastUs + 1)}): `
           : `${key}: `
-      parts.push(prefix, ["coalesce", ["to-string", ["get", key]], "—"])
+      parts.push(prefix as unknown as maplibregl.ExpressionSpecification, ["coalesce", ["to-string", ["get", key]], "—"])
     }
   }
 
@@ -87,8 +87,8 @@ function ensureLabelBackground(map: maplibregl.Map): void {
   })
 }
 
-export function updateSources(map: maplibregl.Map, layers: LayerViewOptions) {
-  // Basemap source
+export function updateSources(map: maplibregl.Map, layers: LayerViewOptions, tileVersion = 0) {
+  // Basemap sources
   Object.entries(BASE_MAP_SOURCES).forEach(([name, source]) => {
     const sourceId = `base-map-${name}`
     if (!map.getSource(sourceId)) {
@@ -96,26 +96,29 @@ export function updateSources(map: maplibregl.Map, layers: LayerViewOptions) {
     }
   })
 
-  // Basemap layers
+  // Data layer sources
   layers.forEach((layerOption) => {
-    const { id } = layerOption
+    const { id, order } = layerOption
+    const rev = `?rev=${tileVersion.toString()}`
     const sourceId = `layer-${id.toString()}`
     const labelSourceId = `layer-${id.toString()}-labels`
     if (!map.getSource(sourceId)) {
       map.addSource(sourceId, {
         type: "vector",
         tiles: [
-          `${config.get("api_base_url")}/tiles/${id.toString()}/{z}/{x}/{y}.pbf`,
+          `${config.get("api_base_url")}/tiles/${id.toString()}/{z}/{x}/{y}.pbf${rev}`,
         ],
         minzoom: 0,
         maxzoom: 14,
+        // For zip layers, use zip_code as the feature ID so setFeatureState works with string keys
+        ...(order === 0 ? { promoteId: { zips: "zip_code" } } : {}),
       })
     }
     if (!map.getSource(labelSourceId)) {
       map.addSource(labelSourceId, {
         type: "vector",
         tiles: [
-          `${config.get("api_base_url")}/tiles/${id.toString()}/{z}/{x}/{y}/labels.pbf`,
+          `${config.get("api_base_url")}/tiles/${id.toString()}/{z}/{x}/{y}/labels.pbf${rev}`,
         ],
         minzoom: 0,
         maxzoom: 14,
@@ -132,17 +135,10 @@ export function updateLayers(
   Object.keys(BASE_MAP_SOURCES).forEach((name) => {
     const layerId = `base-map-${name}-layer`
     const sourceId = `base-map-${name}`
-    const isActive = baseMap == name
+    const isActive = baseMap === name
     const isInLayers = map.getLayer(layerId)
     if (isActive && !isInLayers) {
-      map.addLayer(
-        {
-          id: layerId,
-          type: "raster",
-          source: sourceId,
-        },
-        undefined,
-      )
+      map.addLayer({ id: layerId, type: "raster", source: sourceId }, undefined)
     } else if (!isActive && isInLayers) {
       map.removeLayer(layerId)
     }
@@ -151,7 +147,8 @@ export function updateLayers(
   ensureLabelBackground(map)
 
   layers.forEach((layerOption) => {
-    const { id, showFill, showOutline, showLabel, labelFields } = layerOption
+    const { id, order, showFill, showOutline, showLabel, labelFields } = layerOption
+    const sourceLayer = order === 0 ? "zips" : "nodes"
     const fillLayerId = `layer-${id.toString()}-fill`
     const selectionLayerId = `layer-${id.toString()}-selection`
     const outlineLayerId = `layer-${id.toString()}-outline`
@@ -159,7 +156,7 @@ export function updateLayers(
     const sourceId = `layer-${id.toString()}`
     const labelSourceId = `layer-${id.toString()}-labels`
 
-    // Fill layer — inserted below the selection layer so selection always renders on top
+    // Fill layer — color driven by the `color` MVT property set by the backend
     const fillLayerExists = map.getLayer(fillLayerId)
     if (showFill && !fillLayerExists) {
       map.addLayer(
@@ -167,10 +164,10 @@ export function updateLayers(
           id: fillLayerId,
           type: "fill",
           source: sourceId,
-          "source-layer": "nodes",
+          "source-layer": sourceLayer,
           paint: {
-            "fill-color": "#888888",
-            "fill-opacity": 0.4,
+            "fill-color": ["coalesce", ["get", "color"], "#888888"],
+            "fill-opacity": 0.7,
           },
         },
         map.getLayer(selectionLayerId) ? selectionLayerId : undefined,
@@ -179,15 +176,14 @@ export function updateLayers(
       map.removeLayer(fillLayerId)
     }
 
-    // Selection highlight — always present, transparent until features are selected.
-    // This ensures lasso feedback is visible regardless of which layer has fill enabled.
+    // Selection highlight — always present, transparent until features are selected
     if (!map.getLayer(selectionLayerId)) {
       map.addLayer(
         {
           id: selectionLayerId,
           type: "fill",
           source: sourceId,
-          "source-layer": "nodes",
+          "source-layer": sourceLayer,
           paint: {
             "fill-color": "#2563eb",
             "fill-opacity": [
@@ -202,7 +198,7 @@ export function updateLayers(
       )
     }
 
-    // Outline layer — inserted below the label layer
+    // Outline layer
     const outlineLayerExists = map.getLayer(outlineLayerId)
     if (showOutline && !outlineLayerExists) {
       map.addLayer(
@@ -210,10 +206,10 @@ export function updateLayers(
           id: outlineLayerId,
           type: "line",
           source: sourceId,
-          "source-layer": "nodes",
+          "source-layer": sourceLayer,
           paint: {
             "line-color": "#000000",
-            "line-width": 2,
+            "line-width": order === 0 ? 1 : 2,
           },
         },
         map.getLayer(labelLayerId) ? labelLayerId : undefined,
@@ -231,7 +227,7 @@ export function updateLayers(
           id: labelLayerId,
           type: "symbol",
           source: labelSourceId,
-          "source-layer": "nodes",
+          "source-layer": order === 0 ? "zips" : "nodes",
           layout: {
             "icon-image": LABEL_BG_IMAGE,
             "icon-text-fit": "both",
@@ -257,7 +253,29 @@ export function updateLayers(
   })
 }
 
-export function updateSelectedFeatureStates(
+/**
+ * Forces MapLibre to re-fetch all tile data for every data layer source by
+ * updating the tile URLs with a cache-busting revision parameter.  Call this
+ * after a recompute job completes so the new geometries are shown immediately.
+ */
+export function refreshTileSources(
+  map: maplibregl.Map,
+  layers: LayerViewOptions,
+  tileVersion: number,
+): void {
+  layers.forEach(({ id }) => {
+    const tileUrl = `${config.get("api_base_url")}/tiles/${id.toString()}/{z}/{x}/{y}.pbf?rev=${tileVersion.toString()}`
+    const labelUrl = `${config.get("api_base_url")}/tiles/${id.toString()}/{z}/{x}/{y}/labels.pbf?rev=${tileVersion.toString()}`
+
+    const source = map.getSource(`layer-${id.toString()}`)
+    if (source?.type === "vector") (source as maplibregl.VectorTileSource).setTiles([tileUrl])
+
+    const labelSource = map.getSource(`layer-${id.toString()}-labels`)
+    if (labelSource?.type === "vector") (labelSource as maplibregl.VectorTileSource).setTiles([labelUrl])
+  })
+}
+
+export function updateSelectedNodeStates(
   map: maplibregl.Map,
   layerId: number,
   previousSelection: number[],
@@ -267,7 +285,6 @@ export function updateSelectedFeatureStates(
   const prevSet = new Set(previousSelection)
   const newSet = new Set(newSelection)
 
-  // Clear features no longer selected
   previousSelection.forEach((nodeId) => {
     if (!newSet.has(nodeId)) {
       map.setFeatureState(
@@ -277,11 +294,39 @@ export function updateSelectedFeatureStates(
     }
   })
 
-  // Add newly selected features
   newSelection.forEach((nodeId) => {
     if (!prevSet.has(nodeId)) {
       map.setFeatureState(
         { source: sourceId, sourceLayer: "nodes", id: nodeId },
+        { selected: true },
+      )
+    }
+  })
+}
+
+export function updateSelectedZipStates(
+  map: maplibregl.Map,
+  layerId: number,
+  previousSelection: string[],
+  newSelection: string[],
+) {
+  const sourceId = `layer-${layerId.toString()}`
+  const prevSet = new Set(previousSelection)
+  const newSet = new Set(newSelection)
+
+  previousSelection.forEach((zipCode) => {
+    if (!newSet.has(zipCode)) {
+      map.setFeatureState(
+        { source: sourceId, sourceLayer: "zips", id: zipCode },
+        { selected: false },
+      )
+    }
+  })
+
+  newSelection.forEach((zipCode) => {
+    if (!prevSet.has(zipCode)) {
+      map.setFeatureState(
+        { source: sourceId, sourceLayer: "zips", id: zipCode },
         { selected: true },
       )
     }

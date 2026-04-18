@@ -276,6 +276,61 @@ export interface paths {
          */
         put: operations["bulk_update_node_nodes_bulk_put"];
         post?: never;
+        /**
+         * Bulk Delete Nodes
+         * @description Bulk delete nodes, orphaning or reparenting their children first.
+         *
+         *     child_action='orphan'   → children lose their parent assignment.
+         *     child_action='reparent' → children are moved to reparent_node_id (same layer).
+         *     Only valid for order>=1 layers. Use PUT /zip-assignments/{layer_id}/bulk to
+         *     unassign zip codes instead.
+         */
+        delete: operations["bulk_delete_nodes_nodes_bulk_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/nodes/bulk/reparent": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Bulk Reparent Nodes
+         * @description Bulk reparent nodes to a new parent (or orphan them).
+         *
+         *     All nodes must be in the same layer. parent_node_id must be in the layer
+         *     directly above, or null to remove the parent assignment.
+         */
+        put: operations["bulk_reparent_nodes_nodes_bulk_reparent_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/nodes/merge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Merge Nodes
+         * @description Merge multiple nodes into a new node in the same layer.
+         *
+         *     Creates a new node with the given name/parent, reparents all children
+         *     to the new node, and deletes the originals. Only valid for order>=1 layers.
+         */
+        post: operations["merge_nodes_nodes_merge_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -295,6 +350,30 @@ export interface paths {
          */
         get: operations["list_zip_assignments_zip_assignments_get"];
         put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/zip-assignments/{layer_id}/bulk": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Bulk Assign Zips
+         * @description Bulk assign or unassign zip codes to a territory.
+         *
+         *     Primary operation after lasso selection. Passing parent_node_id=null
+         *     unassigns all provided zip codes (preserves rows and colors).
+         *     Enqueues a geometry recompute for the affected territories after commit.
+         */
+        put: operations["bulk_assign_zips_zip_assignments__layer_id__bulk_put"];
         post?: never;
         delete?: never;
         options?: never;
@@ -334,22 +413,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/zip-assignments/{layer_id}/bulk": {
+    "/search": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
         /**
-         * Bulk Assign Zips
-         * @description Bulk assign or unassign zip codes to a territory.
+         * Search Map
+         * @description Search nodes and zip codes within a map by name / zip code prefix.
          *
-         *     Primary operation after lasso selection. Passing parent_node_id=null
-         *     unassigns all provided zip codes (preserves rows and colors).
+         *     Results are ordered alphabetically and capped at `limit`. Pass `layer_id`
+         *     to restrict the search to a single layer; omit to search all layers.
+         *     Zip codes are matched by prefix (e.g. "902" → "90210"). Node names are
+         *     matched as a substring (case-insensitive).
          */
-        put: operations["bulk_assign_zips_zip_assignments__layer_id__bulk_put"];
+        get: operations["search_map_search_get"];
+        put?: never;
         post?: never;
         delete?: never;
         options?: never;
@@ -458,7 +539,7 @@ export interface paths {
         };
         /**
          * List Maps
-         * @description List maps.
+         * @description List maps for the current user, each with its latest active job if any.
          */
         get: operations["list_maps_maps_get"];
         put?: never;
@@ -466,12 +547,36 @@ export interface paths {
          * Create Map
          * @description Create map.
          *
+         *     Synchronously inserts all nodes and zip assignments, then enqueues a
+         *     background task to compute geometry and data aggregations.  Returns 202
+         *     with the new map and an ``active_job`` tracking the pending computation.
+         *
          *     TODO:
          *         - Return errors for zip codes we don't have data for
          *         - Validate no duplicate layer names
          *         - Validate no duplicate parents and raise error if so
          */
         post: operations["create_map_maps_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/maps/{map_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Map
+         * @description Get a single map with its latest active job.
+         */
+        get: operations["get_map_maps__map_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -532,6 +637,25 @@ export interface components {
             parent_node_id: number | null;
             /** Color */
             color?: string | null;
+        };
+        /**
+         * BulkDeleteNodes
+         * @description Bulk delete nodes, with a declared strategy for their children.
+         *
+         *     All node_ids must belong to the same layer (order >= 1).
+         *     child_action='orphan'   → children's parent_node_id set to null.
+         *     child_action='reparent' → children moved to reparent_node_id (same layer, not in delete set).
+         */
+        BulkDeleteNodes: {
+            /** Node Ids */
+            node_ids: number[];
+            /**
+             * Child Action
+             * @enum {string}
+             */
+            child_action: "orphan" | "reparent";
+            /** Reparent Node Id */
+            reparent_node_id?: number | null;
         };
         /**
          * BulkUpdateNode
@@ -689,8 +813,52 @@ export interface components {
             id: number;
             /** Name */
             name: string;
+            /**
+             * Tile Version
+             * @default 0
+             */
+            tile_version: number;
             /** Data Field Config */
             data_field_config?: components["schemas"]["DataFieldConfig"][] | null;
+            active_job?: components["schemas"]["MapJob"] | null;
+        };
+        /**
+         * MapJob
+         * @description Background job for a map.
+         */
+        MapJob: {
+            /** Id */
+            id: string;
+            /**
+             * Job Type
+             * @enum {string}
+             */
+            job_type: "import" | "recompute";
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "processing" | "complete" | "failed";
+            /** Step */
+            step?: string | null;
+            /** Error */
+            error?: string | null;
+        };
+        /**
+         * MergeNodes
+         * @description Merge multiple nodes into a single new node.
+         *
+         *     All node_ids must belong to the same layer (order >= 1).
+         *     Children (child nodes or zip assignments) are reparented to the new node.
+         *     parent_node_id must be in the layer directly above, or null.
+         */
+        MergeNodes: {
+            /** Node Ids */
+            node_ids: number[];
+            /** Name */
+            name: string;
+            /** Parent Node Id */
+            parent_node_id: number | null;
         };
         /**
          * Node
@@ -793,6 +961,52 @@ export interface components {
             email: string;
             /** Password */
             password: string;
+        };
+        /**
+         * ReparentNodes
+         * @description Bulk reparent nodes to a new parent (or no parent).
+         *
+         *     All node_ids must belong to the same layer.
+         *     parent_node_id must be in the layer directly above, or null to orphan.
+         */
+        ReparentNodes: {
+            /** Node Ids */
+            node_ids: number[];
+            /** Parent Node Id */
+            parent_node_id: number | null;
+        };
+        /**
+         * SearchResultItem
+         * @description A single search result — either a territory node or a zip code.
+         */
+        SearchResultItem: {
+            /**
+             * Type
+             * @enum {string}
+             */
+            type: "node" | "zip";
+            /** Id */
+            id: number | string;
+            /** Name */
+            name: string;
+            /** Layer Id */
+            layer_id: number;
+            /** Layer Name */
+            layer_name: string;
+            /** Color */
+            color: string;
+            /** Centroid */
+            centroid?: number[] | null;
+        };
+        /**
+         * SearchResults
+         * @description Search results grouped from nodes and zip codes across a map.
+         */
+        SearchResults: {
+            /** Results */
+            results: components["schemas"]["SearchResultItem"][];
+            /** Total */
+            total: number;
         };
         /** SpatialSelectRequest */
         SpatialSelectRequest: {
@@ -1360,6 +1574,103 @@ export interface operations {
             };
         };
     };
+    bulk_delete_nodes_nodes_bulk_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkDeleteNodes"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_reparent_nodes_nodes_bulk_reparent_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ReparentNodes"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Node"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    merge_nodes_nodes_merge_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MergeNodes"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Node"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_zip_assignments_zip_assignments_get: {
         parameters: {
             query: {
@@ -1381,6 +1692,43 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PaginatedZipAssignments"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bulk_assign_zips_zip_assignments__layer_id__bulk_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                layer_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BulkAssignZips"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -1492,20 +1840,19 @@ export interface operations {
             };
         };
     };
-    bulk_assign_zips_zip_assignments__layer_id__bulk_put: {
+    search_map_search_get: {
         parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                layer_id: number;
+            query: {
+                map_id: number;
+                q: string;
+                layer_id?: number | null;
+                limit?: number;
             };
+            header?: never;
+            path?: never;
             cookie?: never;
         };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BulkAssignZips"];
-            };
-        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
@@ -1513,9 +1860,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
+                    "application/json": components["schemas"]["SearchResults"];
                 };
             };
             /** @description Validation Error */
@@ -1681,6 +2026,37 @@ export interface operations {
                 "application/json": components["schemas"]["ImportMap"];
             };
         };
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Map"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_map_maps__map_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                map_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
         responses: {
             /** @description Successful Response */
             200: {
