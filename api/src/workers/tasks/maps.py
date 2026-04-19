@@ -101,7 +101,7 @@ def _run_map_computation(
     logger.info("[%s]: complete", job_id)
 
 
-@celery_app.task(base=DatabaseTask, bind=True, queue="terriscope", name="src.workers.tasks.maps.import_map_task")
+@celery_app.task(base=DatabaseTask, bind=True, queue="terramaps", name="src.workers.tasks.maps.import_map_task")
 def import_map_task(self: DatabaseTask, job_id: str, map_id: int) -> None:  # type: ignore[misc]
     """Compute geometry and data aggregations for a newly imported map.
 
@@ -129,7 +129,7 @@ def import_map_task(self: DatabaseTask, job_id: str, map_id: int) -> None:  # ty
         raise
 
 
-@celery_app.task(base=DatabaseTask, bind=True, queue="terriscope", name="src.workers.tasks.maps.recompute_map_task")
+@celery_app.task(base=DatabaseTask, bind=True, queue="terramaps", name="src.workers.tasks.maps.recompute_map_task")
 def recompute_map_task(self: DatabaseTask, job_id: str, map_id: int) -> None:  # type: ignore[misc]
     """Incrementally recompute geometry and data after structural edits.
 

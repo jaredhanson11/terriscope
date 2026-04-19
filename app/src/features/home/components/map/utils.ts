@@ -33,7 +33,11 @@ function buildLabelExpression(
         lastUs !== -1
           ? `${key.slice(0, lastUs)} (${key.slice(lastUs + 1)}): `
           : `${key}: `
-      parts.push(prefix as unknown as maplibregl.ExpressionSpecification, ["coalesce", ["to-string", ["get", key]], "—"])
+      parts.push(prefix as unknown as maplibregl.ExpressionSpecification, [
+        "coalesce",
+        ["to-string", ["get", key]],
+        "—",
+      ])
     }
   }
 
@@ -42,7 +46,7 @@ function buildLabelExpression(
     : (["concat", ...parts] as maplibregl.ExpressionSpecification)
 }
 
-const LABEL_BG_IMAGE = "terriscope-label-bg"
+const LABEL_BG_IMAGE = "terramaps-label-bg"
 
 /**
  * Registers a stretchable rounded-rect image with the map (once) that is used
@@ -87,7 +91,11 @@ function ensureLabelBackground(map: maplibregl.Map): void {
   })
 }
 
-export function updateSources(map: maplibregl.Map, layers: LayerViewOptions, tileVersion = 0) {
+export function updateSources(
+  map: maplibregl.Map,
+  layers: LayerViewOptions,
+  tileVersion = 0,
+) {
   // Basemap sources
   Object.entries(BASE_MAP_SOURCES).forEach(([name, source]) => {
     const sourceId = `base-map-${name}`
@@ -147,7 +155,8 @@ export function updateLayers(
   ensureLabelBackground(map)
 
   layers.forEach((layerOption) => {
-    const { id, order, showFill, showOutline, showLabel, labelFields } = layerOption
+    const { id, order, showFill, showOutline, showLabel, labelFields } =
+      layerOption
     const sourceLayer = order === 0 ? "zips" : "nodes"
     const fillLayerId = `layer-${id.toString()}-fill`
     const selectionLayerId = `layer-${id.toString()}-selection`
@@ -268,10 +277,12 @@ export function refreshTileSources(
     const labelUrl = `${config.get("api_base_url")}/tiles/${id.toString()}/{z}/{x}/{y}/labels.pbf?rev=${tileVersion.toString()}`
 
     const source = map.getSource(`layer-${id.toString()}`)
-    if (source?.type === "vector") (source as maplibregl.VectorTileSource).setTiles([tileUrl])
+    if (source?.type === "vector")
+      (source as maplibregl.VectorTileSource).setTiles([tileUrl])
 
     const labelSource = map.getSource(`layer-${id.toString()}-labels`)
-    if (labelSource?.type === "vector") (labelSource as maplibregl.VectorTileSource).setTiles([labelUrl])
+    if (labelSource?.type === "vector")
+      (labelSource as maplibregl.VectorTileSource).setTiles([labelUrl])
   })
 }
 

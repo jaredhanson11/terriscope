@@ -1,7 +1,7 @@
 name: terramaps
 services:
   api:
-    image: terriscope/api-debug:latest
+    image: terramaps/api-debug:latest
     command: !reset []
     build:
       context: ..

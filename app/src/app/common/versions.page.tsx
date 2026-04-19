@@ -92,7 +92,7 @@ const Version = (
               {commitLabel}
             </span>
             <a
-              href={`https://github.com/jaredhanson11/terriscope/commit/${commitHash}`}
+              href={`https://github.com/terrmaps/terramaps-app/commit/${commitHash}`}
               target="_blank"
               rel="noopener noreferrer"
               className="font-mono text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 hover:underline transition-colors"

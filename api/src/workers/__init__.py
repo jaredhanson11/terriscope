@@ -25,12 +25,12 @@ celery_app = Celery(
 )
 
 celery_app.conf.task_queues = [
-    Queue("terriscope", routing_key="terriscope"),
+    Queue("terramaps", routing_key="terramaps"),
 ]
 
-celery_app.conf.task_default_queue = "terriscope"
-celery_app.conf.task_default_exchange = "terriscope"
-celery_app.conf.task_default_routing_key = "terriscope"
+celery_app.conf.task_default_queue = "terramaps"
+celery_app.conf.task_default_exchange = "terramaps"
+celery_app.conf.task_default_routing_key = "terramaps"
 celery_app.conf.task_acks_late = True
 
 # Auto-discover tasks — looks for a `tasks` submodule in each listed package

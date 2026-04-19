@@ -17,7 +17,7 @@ from .config import app_settings
 from .cors import configure_cors
 from .logging import configure_logging
 
-app = FastAPI(title="Terriscope API", debug=app_settings.debug)
+app = FastAPI(title="Terramaps API", debug=app_settings.debug)
 
 # Trust the X-Forwarded-* headers from your proxies/load balancers
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=["*"])

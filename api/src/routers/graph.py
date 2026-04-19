@@ -4,11 +4,11 @@ import uuid
 from collections.abc import Sequence
 
 from fastapi import APIRouter, HTTPException
-from geoalchemy2.functions import ST_Centroid, ST_X, ST_Y
+from geoalchemy2.functions import ST_X, ST_Y, ST_Centroid
 from sqlalchemy import delete, func, select
 
 from src.app.database import DatabaseSession
-from src.exceptions import TerriscopeException
+from src.exceptions import TerramapsException
 from src.models.geography import ZipCodeGeography
 from src.models.graph import LayerModel, NodeModel, ZipAssignmentModel
 from src.models.jobs import MapJobModel
@@ -23,7 +23,15 @@ from src.schemas.dtos.graph import (
     ReparentNodes,
     UpdateNode,
 )
-from src.schemas.graph import Layer, Node, PaginatedNodes, PaginatedZipAssignments, SearchResultItem, SearchResults, ZipAssignment
+from src.schemas.graph import (
+    Layer,
+    Node,
+    PaginatedNodes,
+    PaginatedZipAssignments,
+    SearchResultItem,
+    SearchResults,
+    ZipAssignment,
+)
 from src.services.auth import CurrentUserDependency
 from src.services.graph import GraphServiceDependency
 from src.services.permissions import PermissionsServiceDependency
@@ -144,7 +152,7 @@ def create_node(
         raise HTTPException(403)
     try:
         new_node = graph_service.create_node(node_data=node_data)
-    except TerriscopeException as e:
+    except TerramapsException as e:
         if e.code == 400 or e.code == 402:
             raise HTTPException(404, e.msg) from e
         raise HTTPException(400, e.msg) from e
@@ -292,7 +300,7 @@ def update_node(
         raise HTTPException(403)
     try:
         graph_service.update_node(node=node, node_data=node_data, layer=layer)
-    except TerriscopeException as e:
+    except TerramapsException as e:
         raise HTTPException(400, e.msg) from e
     db.commit()
     return Node(
@@ -413,7 +421,7 @@ def bulk_reparent_nodes(
     map_id = next(iter(map_ids))
     try:
         updated = graph_service.reparent_nodes(data)
-    except TerriscopeException as e:
+    except TerramapsException as e:
         raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
     job_id = _enqueue_recompute(db, map_id)
     db.commit()
@@ -465,7 +473,7 @@ def merge_nodes(
     map_id = next(iter(map_ids))
     try:
         new_node = graph_service.merge_nodes(data)
-    except TerriscopeException as e:
+    except TerramapsException as e:
         raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
     job_id = _enqueue_recompute(db, map_id)
     db.commit()
@@ -516,7 +524,7 @@ def bulk_delete_nodes(
     map_id = next(iter(map_ids))
     try:
         graph_service.bulk_delete_nodes(data)
-    except TerriscopeException as e:
+    except TerramapsException as e:
         raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
     job_id = _enqueue_recompute(db, map_id)
     db.commit()
@@ -609,7 +617,7 @@ def bulk_assign_zips(
     layer = _check_layer_access(db, layer_id, current_user.id, permission_service)
     try:
         count = graph_service.bulk_assign_zips(layer_id=layer_id, data=data)
-    except TerriscopeException as e:
+    except TerramapsException as e:
         raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
     job_id = _enqueue_recompute(db, layer.map_id)
     db.commit()
@@ -636,7 +644,7 @@ def assign_zip(
     _check_layer_access(db, layer_id, current_user.id, permission_service)
     try:
         za = graph_service.assign_zip(layer_id=layer_id, zip_code=zip_code.zfill(5), data=data)
-    except TerriscopeException as e:
+    except TerramapsException as e:
         raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
     db.commit()
     return ZipAssignment(

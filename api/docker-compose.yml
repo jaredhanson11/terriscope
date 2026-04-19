@@ -1,7 +1,7 @@
 name: terramaps
 services:
   api:
-    image: terriscope/api:latest
+    image: terramaps/api:latest
     build:
       context: ..
       dockerfile: api/Dockerfile
@@ -30,7 +30,7 @@ services:
       rabbitmq:
         condition: service_started
   worker:
-    image: terriscope/worker-local:latest
+    image: terramaps/worker-local:latest
     build:
       context: ..
       dockerfile: api/Dockerfile
@@ -53,7 +53,7 @@ services:
       - "src.workers:celery_app"
       - "worker"
       - "--queues"
-      - "terriscope"
+      - "terramaps"
       - "--loglevel"
       - "info"
     depends_on:
@@ -79,24 +79,24 @@ services:
       worker:
         condition: service_healthy
   db:
-    image: terriscope/postgres:latest
+    image: terramaps/postgres:latest
     build:
       dockerfile: Dockerfile.postgres
     hostname: postgres
     environment:
-      POSTGRES_USER: terriscope
-      POSTGRES_PASSWORD: terriscope
+      POSTGRES_USER: terramaps
+      POSTGRES_PASSWORD: terramaps
       POSTGRES_DB: app
     ports:
       - "15432:5432"
     healthcheck:
-      test: ["CMD", "pg_isready", "-d", "app", "-U", "terriscope"]
+      test: ["CMD", "pg_isready", "-d", "app", "-U", "terramaps"]
       interval: 30s
       timeout: 60s
       retries: 5
       start_period: 10s
   migrations:
-    image: terriscope/migrations-local:latest
+    image: terramaps/migrations-local:latest
     build:
       context: ..
       dockerfile: api/Dockerfile

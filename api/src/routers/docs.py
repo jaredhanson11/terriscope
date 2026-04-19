@@ -16,7 +16,7 @@ def docs():
     """This route is used to get the Scalar API docs."""
     return get_scalar_api_reference(
         openapi_url="/openapi.json",
-        title="Terriscope API",
+        title="Terramaps API",
     )
 
 
@@ -43,7 +43,7 @@ def public_docs():
     """This route is used to get the public facing Scalar API docs."""
     return get_scalar_api_reference(
         openapi_url="/public-openapi.json",
-        title="Terriscope - API Docs",
+        title="Terramaps - API Docs",
         default_open_all_tags=False,
         hide_download_button=True,
         hide_models=True,

@@ -7,10 +7,19 @@ from sqlalchemy import delete, select, text, update
 from sqlalchemy.exc import NoResultFound
 
 from src.app.database import DatabaseSession
-from src.exceptions import TerriscopeException
+from src.exceptions import TerramapsException
 from src.models.geography import ZipCodeGeography
 from src.models.graph import LayerModel, MapModel, NodeModel, ZipAssignmentModel
-from src.schemas.dtos.graph import AssignZip, BulkAssignZips, BulkDeleteNodes, CreateLayer, CreateNode, MergeNodes, ReparentNodes, UpdateNode
+from src.schemas.dtos.graph import (
+    AssignZip,
+    BulkAssignZips,
+    BulkDeleteNodes,
+    CreateLayer,
+    CreateNode,
+    MergeNodes,
+    ReparentNodes,
+    UpdateNode,
+)
 from src.services.base import BaseService
 
 
@@ -27,11 +36,8 @@ class GraphService(BaseService):
     def create_layer(self, layer_data: CreateLayer) -> LayerModel:
         """Create layer."""
         child_layer = (
-            self.db.execute(
-                select(LayerModel)
-                .where(LayerModel.map_id == layer_data.map_id)
-                .order_by(LayerModel.order.desc())
-            )
+            self.db
+            .execute(select(LayerModel).where(LayerModel.map_id == layer_data.map_id).order_by(LayerModel.order.desc()))
             .scalars()
             .first()
         )
@@ -50,15 +56,15 @@ class GraphService(BaseService):
         """Create node.
 
         Raises:
-            TerriscopeError(400) layer doesn't exist or is order=0 (zip layer — use assign_zip instead)
-            TerriscopeError(402) parent node doesn't exist
-            TerriscopeError(403) parent node is in invalid layer
+            TerramapsError(400) layer doesn't exist or is order=0 (zip layer — use assign_zip instead)
+            TerramapsError(402) parent node doesn't exist
+            TerramapsError(403) parent node is in invalid layer
         """
         layer = self.db.get(LayerModel, node_data.layer_id)
         if not layer:
-            raise TerriscopeException(400, f"Can't create node in layer: {node_data.layer_id}. Layer doesn't exist.")
+            raise TerramapsException(400, f"Can't create node in layer: {node_data.layer_id}. Layer doesn't exist.")
         if layer.order == 0:
-            raise TerriscopeException(
+            raise TerramapsException(
                 400,
                 f"Can't create node in layer {node_data.layer_id}: layer order is 0. "
                 "Zip-level entries are managed via zip assignments, not nodes.",
@@ -95,8 +101,8 @@ class GraphService(BaseService):
         """Update node.
 
         Raises:
-            TerriscopeError(402) parent node doesn't exist
-            TerriscopeError(403) parent node is in invalid layer
+            TerramapsError(402) parent node doesn't exist
+            TerramapsError(403) parent node is in invalid layer
         """
         if node.parent_node_id != node_data.parent_node_id and node_data.parent_node_id is not None:
             if not layer:
@@ -119,25 +125,23 @@ class GraphService(BaseService):
         must be in the layer directly above the current nodes' layer.
 
         Raises:
-            TerriscopeException(400) if node_ids is empty or nodes span multiple layers
-            TerriscopeException(404) if any node_id is not found
-            TerriscopeException(402/403) if parent validation fails (via _propose_node_parent)
+            TerramapsException(400) if node_ids is empty or nodes span multiple layers
+            TerramapsException(404) if any node_id is not found
+            TerramapsException(402/403) if parent validation fails (via _propose_node_parent)
         """
         if not data.node_ids:
-            raise TerriscopeException(400, "node_ids must not be empty.")
+            raise TerramapsException(400, "node_ids must not be empty.")
 
-        nodes = self.db.execute(
-            select(NodeModel).where(NodeModel.id.in_(data.node_ids))
-        ).scalars().all()
+        nodes = self.db.execute(select(NodeModel).where(NodeModel.id.in_(data.node_ids))).scalars().all()
 
         if len(nodes) != len(set(data.node_ids)):
             found = {n.id for n in nodes}
             missing = set(data.node_ids) - found
-            raise TerriscopeException(404, f"Nodes not found: {missing}")
+            raise TerramapsException(404, f"Nodes not found: {missing}")
 
         layer_ids = {n.layer_id for n in nodes}
         if len(layer_ids) > 1:
-            raise TerriscopeException(400, "All nodes must be in the same layer.")
+            raise TerramapsException(400, "All nodes must be in the same layer.")
 
         layer = cast(LayerModel, self.db.get(LayerModel, next(iter(layer_ids))))
 
@@ -145,9 +149,7 @@ class GraphService(BaseService):
             self._propose_node_parent(layer, data.parent_node_id)
 
         self.db.execute(
-            update(NodeModel)
-            .where(NodeModel.id.in_(data.node_ids))
-            .values(parent_node_id=data.parent_node_id)
+            update(NodeModel).where(NodeModel.id.in_(data.node_ids)).values(parent_node_id=data.parent_node_id)
         )
         self.db.flush()
 
@@ -163,30 +165,28 @@ class GraphService(BaseService):
         then deletes the originals.
 
         Raises:
-            TerriscopeException(400) if fewer than 2 nodes, nodes span layers, or layer is order=0
-            TerriscopeException(404) if any node_id is not found
-            TerriscopeException(402/403) if parent validation fails
+            TerramapsException(400) if fewer than 2 nodes, nodes span layers, or layer is order=0
+            TerramapsException(404) if any node_id is not found
+            TerramapsException(402/403) if parent validation fails
         """
         if len(data.node_ids) < 2:
-            raise TerriscopeException(400, "At least 2 nodes are required to merge.")
+            raise TerramapsException(400, "At least 2 nodes are required to merge.")
 
-        nodes = self.db.execute(
-            select(NodeModel).where(NodeModel.id.in_(data.node_ids))
-        ).scalars().all()
+        nodes = self.db.execute(select(NodeModel).where(NodeModel.id.in_(data.node_ids))).scalars().all()
 
         if len(nodes) != len(set(data.node_ids)):
             found = {n.id for n in nodes}
             missing = set(data.node_ids) - found
-            raise TerriscopeException(404, f"Nodes not found: {missing}")
+            raise TerramapsException(404, f"Nodes not found: {missing}")
 
         layer_ids = {n.layer_id for n in nodes}
         if len(layer_ids) > 1:
-            raise TerriscopeException(400, "All nodes must be in the same layer.")
+            raise TerramapsException(400, "All nodes must be in the same layer.")
 
         layer = cast(LayerModel, self.db.get(LayerModel, next(iter(layer_ids))))
 
         if layer.order == 0:
-            raise TerriscopeException(400, "Cannot merge zip-layer entries.")
+            raise TerramapsException(400, "Cannot merge zip-layer entries.")
 
         if data.parent_node_id is not None:
             self._propose_node_parent(layer, data.parent_node_id)
@@ -213,9 +213,7 @@ class GraphService(BaseService):
             )
         else:
             self.db.execute(
-                update(NodeModel)
-                .where(NodeModel.parent_node_id.in_(data.node_ids))
-                .values(parent_node_id=new_node.id)
+                update(NodeModel).where(NodeModel.parent_node_id.in_(data.node_ids)).values(parent_node_id=new_node.id)
             )
 
         self.db.execute(delete(NodeModel).where(NodeModel.id.in_(data.node_ids)))
@@ -229,24 +227,22 @@ class GraphService(BaseService):
         Works for both order=1 (zip children) and order>1 (node children).
 
         Raises:
-            TerriscopeException(400) if node_ids is empty, nodes span layers, or reparent target is invalid
-            TerriscopeException(404) if any node_id is not found
+            TerramapsException(400) if node_ids is empty, nodes span layers, or reparent target is invalid
+            TerramapsException(404) if any node_id is not found
         """
         if not data.node_ids:
-            raise TerriscopeException(400, "node_ids must not be empty.")
+            raise TerramapsException(400, "node_ids must not be empty.")
 
-        nodes = self.db.execute(
-            select(NodeModel).where(NodeModel.id.in_(data.node_ids))
-        ).scalars().all()
+        nodes = self.db.execute(select(NodeModel).where(NodeModel.id.in_(data.node_ids))).scalars().all()
 
         if len(nodes) != len(set(data.node_ids)):
             found = {n.id for n in nodes}
             missing = set(data.node_ids) - found
-            raise TerriscopeException(404, f"Nodes not found: {missing}")
+            raise TerramapsException(404, f"Nodes not found: {missing}")
 
         layer_ids = {n.layer_id for n in nodes}
         if len(layer_ids) > 1:
-            raise TerriscopeException(400, "All nodes must be in the same layer.")
+            raise TerramapsException(400, "All nodes must be in the same layer.")
 
         layer = cast(LayerModel, self.db.get(LayerModel, next(iter(layer_ids))))
 
@@ -254,10 +250,10 @@ class GraphService(BaseService):
         if data.child_action == "reparent":
             reparent_id = data.reparent_node_id  # model_validator guarantees non-None
             if reparent_id in set(data.node_ids):
-                raise TerriscopeException(400, "reparent_node_id cannot be one of the nodes being deleted.")
+                raise TerramapsException(400, "reparent_node_id cannot be one of the nodes being deleted.")
             reparent_node = self.db.get(NodeModel, reparent_id)
             if not reparent_node or reparent_node.layer_id != layer.id:
-                raise TerriscopeException(400, "reparent_node_id must exist in the same layer as the deleted nodes.")
+                raise TerramapsException(400, "reparent_node_id must exist in the same layer as the deleted nodes.")
             new_parent_id = reparent_id
 
         if layer.order == 1:
@@ -293,9 +289,9 @@ class GraphService(BaseService):
         If a row already exists, updates parent_node_id and optionally color.
 
         Raises:
-            TerriscopeException(404) zip code not in geography table
-            TerriscopeException(404) parent node not found
-            TerriscopeException(400) parent node is not in an order=1 layer
+            TerramapsException(404) zip code not in geography table
+            TerramapsException(404) parent node not found
+            TerramapsException(400) parent node is not in an order=1 layer
         """
         if data.parent_node_id is not None:
             self._validate_zip_parent(data.parent_node_id)
@@ -316,7 +312,7 @@ class GraphService(BaseService):
 
         geography = self.db.get(ZipCodeGeography, zip_code)
         if not geography:
-            raise TerriscopeException(404, f"Zip code {zip_code} not found in geography data.")
+            raise TerramapsException(404, f"Zip code {zip_code} not found in geography data.")
 
         new_assignment = ZipAssignmentModel(
             layer_id=layer_id,
@@ -415,8 +411,8 @@ class GraphService(BaseService):
         """Validate that a proposed parent node exists and is in an order=1 layer.
 
         Raises:
-            TerriscopeException(404) node not found
-            TerriscopeException(400) node's layer order is not 1
+            TerramapsException(404) node not found
+            TerramapsException(400) node's layer order is not 1
         """
         result = self.db.execute(
             select(LayerModel.order)
@@ -425,9 +421,9 @@ class GraphService(BaseService):
         ).scalar_one_or_none()
 
         if result is None:
-            raise TerriscopeException(404, f"Parent node {parent_node_id} not found.")
+            raise TerramapsException(404, f"Parent node {parent_node_id} not found.")
         if result != 1:
-            raise TerriscopeException(
+            raise TerramapsException(
                 400,
                 f"Parent node {parent_node_id} is in a layer with order={result}. "
                 "Zip assignments must have a parent in an order=1 layer.",
@@ -441,12 +437,13 @@ class GraphService(BaseService):
         """Raise exception if node parent invalid.
 
         Raises:
-            TerriscopeError(402) parent node doesn't exist
-            TerriscopeError(403) parent node is in invalid layer
+            TerramapsError(402) parent node doesn't exist
+            TerramapsError(403) parent node is in invalid layer
         """
         try:
             _, parent_layer = (
-                self.db.execute(
+                self.db
+                .execute(
                     select(NodeModel, LayerModel)
                     .join(target=LayerModel, onclause=LayerModel.id == NodeModel.layer_id)
                     .filter(NodeModel.id == proposed_parent_node_id)
@@ -455,11 +452,11 @@ class GraphService(BaseService):
                 .tuple()
             )
         except NoResultFound as nre:
-            raise TerriscopeException(
+            raise TerramapsException(
                 402, f"Can't create node with parent: {proposed_parent_node_id}. Parent node doesn't exist."
             ) from nre
         if parent_layer.order != current_layer.order + 1:
-            raise TerriscopeException(
+            raise TerramapsException(
                 403,
                 f"Can't create node with parent: {proposed_parent_node_id}. Parent layer order {parent_layer.order} needs to be one level higher than current layer order {current_layer.order}.",
             )

@@ -1,9 +1,9 @@
 [tool.poetry]
-name = "terriscope-api"
+name = "terramaps-api"
 version = "0.0.1"
-description = "Terriscope API"
+description = "Terramaps API"
 authors = ["Jared Hanson <jred0011@gmail.com>"]
-repository = "https://github.com/jaredhanson11/terriscope"
+repository = "https://github.com/jaredhanson11/terramaps"
 packages = [
   {include = "src"}
 ]
