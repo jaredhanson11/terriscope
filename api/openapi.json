@@ -1059,6 +1059,58 @@
         }
       }
     },
+    "/zip-assignments/{layer_id}/{zip_code}/geography": {
+      "get": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "Get Zip With Geography Default",
+        "description": "Get a zip's assignment state, falling back to geography defaults if no row exists.\n\nUnlike GET /zip-assignments/{layer_id}/{zip_code}, this never returns 404 for\nknown zip codes \u2014 it returns the implicit white/unassigned state.",
+        "operationId": "get_zip_with_geography_default_zip_assignments__layer_id___zip_code__geography_get",
+        "parameters": [
+          {
+            "name": "layer_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Layer Id"
+            }
+          },
+          {
+            "name": "zip_code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Zip Code"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ZipAssignment"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/search": {
       "get": {
         "tags": [
@@ -1137,58 +1189,6 @@
         }
       }
     },
-    "/zip-assignments/{layer_id}/{zip_code}/geography": {
-      "get": {
-        "tags": [
-          "Graph"
-        ],
-        "summary": "Get Zip With Geography Default",
-        "description": "Get a zip's assignment state, falling back to geography defaults if no row exists.\n\nUnlike GET /zip-assignments/{layer_id}/{zip_code}, this never returns 404 for\nknown zip codes \u2014 it returns the implicit white/unassigned state.",
-        "operationId": "get_zip_with_geography_default_zip_assignments__layer_id___zip_code__geography_get",
-        "parameters": [
-          {
-            "name": "layer_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Layer Id"
-            }
-          },
-          {
-            "name": "zip_code",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Zip Code"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ZipAssignment"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/tiles/{layer_id}/{z}/{x}/{y}.pbf": {
       "get": {
         "tags": [
@@ -1232,6 +1232,16 @@
             "schema": {
               "type": "integer",
               "title": "Y"
+            }
+          },
+          {
+            "name": "rev",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Rev"
             }
           }
         ],
@@ -1300,6 +1310,16 @@
             "schema": {
               "type": "integer",
               "title": "Y"
+            }
+          },
+          {
+            "name": "rev",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 0,
+              "title": "Rev"
             }
           }
         ],
@@ -1995,7 +2015,8 @@
             "type": "string",
             "enum": [
               "import",
-              "recompute"
+              "recompute_geometry",
+              "recompute_data"
             ],
             "title": "Job Type"
           },

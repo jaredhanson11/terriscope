@@ -12,6 +12,7 @@ import {
   IconPlus,
   IconSettings,
   IconTrash,
+  IconX,
 } from "@tabler/icons-react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import pluralize from "pluralize"
@@ -20,7 +21,7 @@ import { type MapRef } from "react-map-gl/maplibre"
 
 import { useMaps } from "@/app/providers/me-provider/context"
 import { AppRoutes } from "@/app/routes"
-import Logo from "@/assets/logoipsum.svg?react"
+import { BrandLogo } from "@/components/brand-logo"
 import { PageLayout } from "@/components/layout"
 import { Button } from "@/components/ui/button"
 import {
@@ -66,7 +67,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Map, type HoverHierarchyItem } from "@/features/home/components/map"
+import { Map, type HoverHierarchyItem, type ClickSelectResult } from "@/features/home/components/map"
 import { DeleteDialog } from "@/features/home/components/delete-dialog"
 import { MergeDialog } from "@/features/home/components/merge-dialog"
 import { MoveDialog } from "@/features/home/components/move-dialog"
@@ -110,7 +111,7 @@ export default function HomePage() {
   const [fillLayerId, setFillLayerId] = useState<number | null>(null)
   const [borderLayerIds, setBorderLayerIds] = useState<Set<number>>(new Set())
   const [labelLayerIds, setLabelLayerIds] = useState<Set<number>>(new Set())
-  const [currentTool, setCurrentTool] = useState<"pan" | "lasso">("pan")
+  const [currentTool, setCurrentTool] = useState<"pan" | "select">("pan")
   const logoutMutation = useLogoutMutation()
 
   useEffect(() => {
@@ -118,13 +119,23 @@ export default function HomePage() {
       const tag = (e.target as HTMLElement).tagName
       if (tag === "INPUT" || tag === "TEXTAREA") return
       if (e.key === "v" || e.key === "V") setCurrentTool("pan")
-      if (e.key === "l" || e.key === "L") setCurrentTool("lasso")
+      if (e.key === "l" || e.key === "L") setCurrentTool("select")
     }
     window.addEventListener("keydown", handler)
     return () => {
       window.removeEventListener("keydown", handler)
     }
   }, [])
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const tag = (e.target as HTMLElement).tagName
+      if (tag === "INPUT" || tag === "TEXTAREA") return
+      if (e.key === "Escape") clearSelection()
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  })
+
   const spatialSelectMutation = useSpatialSelectMutation()
   const [activeLayerId, setActiveLayerId] = useState<number | undefined>(
     undefined,
@@ -171,13 +182,43 @@ export default function HomePage() {
   const hasSelection = selectionCount > 0
   const isZipLayer = activeLayer?.order === 0
 
-  // Clear selection and close all dialogs when switching layers or maps
+  // Clear selection, reset MapLibre visual state, and close all dialogs
   const clearSelection = () => {
+    if (mapRef.current && activeLayerId != null) {
+      const map = mapRef.current.getMap()
+      if (activeLayer?.order === 0) {
+        updateSelectedZipStates(map, activeLayerId, selectedZipCodes, [])
+      } else {
+        updateSelectedNodeStates(map, activeLayerId, selectedNodeIds, [])
+      }
+    }
     setSelectedNodeIds([])
     setSelectedZipCodes([])
     setMoveOpen(false)
     setMergeOpen(false)
     setDeleteOpen(false)
+  }
+
+  const handleClickSelect = (result: ClickSelectResult, additive: boolean) => {
+    if (!mapRef.current || activeLayerId == null) return
+    const map = mapRef.current.getMap()
+    if ("zipCode" in result) {
+      const next = additive
+        ? selectedZipCodes.includes(result.zipCode)
+          ? selectedZipCodes.filter((z) => z !== result.zipCode)
+          : [...selectedZipCodes, result.zipCode]
+        : [result.zipCode]
+      updateSelectedZipStates(map, activeLayerId, selectedZipCodes, next)
+      setSelectedZipCodes(next)
+    } else {
+      const next = additive
+        ? selectedNodeIds.includes(result.nodeId)
+          ? selectedNodeIds.filter((id) => id !== result.nodeId)
+          : [...selectedNodeIds, result.nodeId]
+        : [result.nodeId]
+      updateSelectedNodeStates(map, activeLayerId, selectedNodeIds, next)
+      setSelectedNodeIds(next)
+    }
   }
 
   // Called after any bulk action that triggers a recompute job. Clears
@@ -241,7 +282,7 @@ export default function HomePage() {
       <PageLayout.SideNav>
         <Sidebar>
           <SidebarHeader className="border-border border-b p-4 gap-4">
-            <Logo className="h-8" />
+            <BrandLogo />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <SidebarMenuButton className="h-auto w-full py-2">
@@ -254,13 +295,13 @@ export default function HomePage() {
                       <div className="text-muted-foreground text-xs">
                         {activeJob
                           ? activeJob.status === "failed"
-                            ? activeJob.job_type === "recompute"
-                              ? "Recompute failed"
-                              : "Import failed"
+                            ? activeJob.job_type === "import"
+                              ? "Import failed"
+                              : "Recompute failed"
                             : activeJob.step ??
-                              (activeJob.job_type === "recompute"
-                                ? "Recomputing…"
-                                : "Computing…")
+                              (activeJob.job_type === "import"
+                                ? "Computing…"
+                                : "Recomputing…")
                           : "Last edited TODO"}
                       </div>
                     </div>
@@ -296,13 +337,13 @@ export default function HomePage() {
                       <div className="text-muted-foreground text-xs">
                         {map.active_job
                           ? map.active_job.status === "failed"
-                            ? map.active_job.job_type === "recompute"
-                              ? "Recompute failed"
-                              : "Import failed"
+                            ? map.active_job.job_type === "import"
+                              ? "Import failed"
+                              : "Recompute failed"
                             : map.active_job.step ??
-                              (map.active_job.job_type === "recompute"
-                                ? "Recomputing…"
-                                : "Computing…")
+                              (map.active_job.job_type === "import"
+                                ? "Computing…"
+                                : "Recomputing…")
                           : "Last edited TODO"}
                       </div>
                     </div>
@@ -428,7 +469,16 @@ export default function HomePage() {
               </SidebarGroupLabel>
               <SidebarGroupContent>
                 <div className="bg-muted rounded-lg p-3">
-                  <div className="mb-3 text-center">
+                  <div className="mb-3 text-center relative">
+                    {hasSelection && (
+                      <button
+                        onClick={clearSelection}
+                        className="absolute right-0 top-0 text-muted-foreground hover:text-foreground transition-colors"
+                        title="Clear selection (Esc)"
+                      >
+                        <IconX className="h-3.5 w-3.5" />
+                      </button>
+                    )}
                     <div className="text-foreground text-2xl font-bold">
                       {activeLayer?.order === 0 ? selectedZipCodes.length : selectedNodeIds.length}
                     </div>
@@ -768,8 +818,10 @@ export default function HomePage() {
             baseMap={baseMap}
             layers={layers}
             currentTool={currentTool}
+            activeLayerId={activeLayerId}
             tileVersion={currentMapPolled.data?.tile_version ?? currentMap.tile_version}
-            onLassoComplete={(geojson) => {
+            onClickSelect={handleClickSelect}
+            onLassoComplete={(geojson, additive) => {
               if (activeLayerId != null) {
                 spatialSelectMutation.mutate(
                   { lasso: geojson, layerId: activeLayerId },
@@ -778,11 +830,19 @@ export default function HomePage() {
                       if (!mapRef.current) return
                       const map = mapRef.current.getMap()
                       if (activeLayer?.order === 0) {
-                        updateSelectedZipStates(map, activeLayerId, selectedZipCodes, response.zip_codes ?? [])
-                        setSelectedZipCodes(response.zip_codes ?? [])
+                        const incoming = response.zip_codes ?? []
+                        const next = additive
+                          ? [...new Set([...selectedZipCodes, ...incoming])]
+                          : incoming
+                        updateSelectedZipStates(map, activeLayerId, selectedZipCodes, next)
+                        setSelectedZipCodes(next)
                       } else {
-                        updateSelectedNodeStates(map, activeLayerId, selectedNodeIds, response.nodes)
-                        setSelectedNodeIds(response.nodes)
+                        const incoming = response.nodes
+                        const next = additive
+                          ? [...new Set([...selectedNodeIds, ...incoming])]
+                          : incoming
+                        updateSelectedNodeStates(map, activeLayerId, selectedNodeIds, next)
+                        setSelectedNodeIds(next)
                       }
                     },
                   },
@@ -795,25 +855,25 @@ export default function HomePage() {
             onHoverEnd={() => setHoveredHierarchy([])}
           />
 
-          {hoveredHierarchy.length > 0 && (
+          {hoveredHierarchy.length > 0 && layersQuery.data && (
             <div className="absolute top-4 right-4 rounded-lg border bg-background/90 px-3 py-2 shadow-md backdrop-blur-sm pointer-events-none">
               <div className="space-y-0.5">
-                {[...hoveredHierarchy]
-                  .sort((a, b) => {
-                    const aOrder = layersQuery.data?.find((l) => l.id === a.layerId)?.order ?? 0
-                    const bOrder = layersQuery.data?.find((l) => l.id === b.layerId)?.order ?? 0
-                    return bOrder - aOrder
-                  })
-                  .map(({ layerId, name }) => {
-                    const layer = layersQuery.data?.find((l) => l.id === layerId)
+                {[...layersQuery.data]
+                  .sort((a, b) => b.order - a.order)
+                  .map((layer) => {
+                    const hit = hoveredHierarchy.find((h) => h.layerId === layer.id)
                     return (
-                      <div key={layerId} className="flex items-baseline gap-2">
+                      <div key={layer.id} className="flex items-baseline gap-2">
                         <span className="text-muted-foreground text-xs w-16 shrink-0 truncate text-right">
-                          {layer?.name ?? ""}
+                          {layer.name}
                         </span>
-                        <span className="text-foreground text-xs font-medium truncate max-w-40">
-                          {name}
-                        </span>
+                        {hit ? (
+                          <span className="text-foreground text-xs font-medium truncate max-w-40">
+                            {hit.name}
+                          </span>
+                        ) : (
+                          <span className="text-muted-foreground/50 text-xs">—</span>
+                        )}
                       </div>
                     )
                   })}
@@ -831,9 +891,9 @@ export default function HomePage() {
                   shortcut: "V",
                 },
                 {
-                  tool: "lasso",
+                  tool: "select",
                   icon: IconLasso,
-                  label: "Lasso",
+                  label: "Select",
                   shortcut: "L",
                 },
               ] as const

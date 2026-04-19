@@ -1,10 +1,10 @@
-import { IconCheck, IconLoader2 } from "@tabler/icons-react"
+import { IconCheck } from "@tabler/icons-react"
 import { useFormik } from "formik"
 import * as React from "react"
 import { useNavigate } from "react-router-dom"
 
 import { AppRoutes, PageName } from "@/app/routes"
-import Logo from "@/assets/logoipsum.svg?react"
+import { BrandLogo } from "@/components/brand-logo"
 import { PageLayout } from "@/components/layout"
 import {
   Sidebar,
@@ -190,7 +190,7 @@ export default function InitializePage() {
       <PageLayout.SideNav>
         <Sidebar>
           <SidebarHeader className="p-4 gap-4">
-            <Logo className="h-8" />
+            <BrandLogo />
           </SidebarHeader>
           <SidebarContent>
             <SidebarGroup>
@@ -298,20 +298,29 @@ export default function InitializePage() {
 
       <PageLayout.ScrollableBody>
         {isProcessing ? (
-          <div className="flex flex-col items-center justify-center gap-6 py-24 text-center">
+          <div className="flex flex-col items-center justify-center gap-8 py-24 text-center">
             {processingFailed ? (
               <>
-                <p className="text-destructive text-lg font-medium">Import failed</p>
-                <p className="text-muted-foreground text-sm max-w-sm">
-                  {mapQuery.data?.active_job?.error ?? "An unexpected error occurred."}
-                </p>
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
+                  <span className="text-destructive text-2xl font-bold">!</span>
+                </div>
+                <div className="space-y-2">
+                  <p className="text-lg font-semibold">Import failed</p>
+                  <p className="text-muted-foreground text-sm max-w-sm">
+                    {mapQuery.data?.active_job?.error ?? "An unexpected error occurred."}
+                  </p>
+                </div>
               </>
             ) : (
               <>
-                <IconLoader2 className="h-10 w-10 animate-spin text-primary" />
-                <div className="space-y-1">
-                  <p className="text-lg font-medium">Building your map…</p>
+                <div className="relative size-16">
+                  <div className="absolute inset-0 rounded-full border-4 border-muted" />
+                  <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+                </div>
+                <div className="space-y-2">
+                  <p className="text-lg font-semibold">Building your map…</p>
                   <p className="text-muted-foreground text-sm">{processingStep}</p>
+                  <p className="text-muted-foreground/60 text-xs">This may take a minute</p>
                 </div>
               </>
             )}

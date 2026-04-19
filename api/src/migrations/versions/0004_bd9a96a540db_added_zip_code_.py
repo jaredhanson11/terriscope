@@ -1,7 +1,7 @@
 """added zip code geography.
 
 Revision ID: bd9a96a540db
-Revises: 700f9e50e2e7
+Revises: dc2613846b7f
 Create Date: 2025-12-28 09:59:24.701614-08:00
 
 """
@@ -23,7 +23,7 @@ from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
 revision: str = "bd9a96a540db"
-down_revision: str | None = "8ebb75405815"
+down_revision: str | None = "dc2613846b7f"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -42,7 +42,7 @@ _COPY_SQL = text("""
     SELECT DISTINCT ON (lpad(zip, 5, '0'))
         lpad(zip, 5, '0'),
         COALESCE(color, '#000000'),
-        geom,
+        ST_MakeValid(geom),
         ST_Transform(ST_MakeValid(ST_SnapToGrid(ST_Transform(geom, 3857), 19568.0)), 4326),
         ST_Transform(ST_MakeValid(ST_SnapToGrid(ST_Transform(geom, 3857),  1223.0)), 4326),
         ST_Transform(ST_MakeValid(ST_SnapToGrid(ST_Transform(geom, 3857),    76.0)), 4326),
@@ -57,7 +57,7 @@ _COPY_SQL = text("""
 
 
 def upgrade() -> None:
-    """Upgrade revisions: 700f9e50e2e7 to bd9a96a540db."""
+    """Upgrade revisions: dc2613846b7f to bd9a96a540db."""
     connection = op.get_bind()
 
     # Load Boundary_Data from the vendor SQL dump (creates the table + inserts all rows).
@@ -76,5 +76,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Downgrade revisions: bd9a96a540db to 700f9e50e2e7."""
+    """Downgrade revisions: bd9a96a540db to dc2613846b7f."""
     op.execute("TRUNCATE TABLE geography_zip_codes RESTART IDENTITY CASCADE")

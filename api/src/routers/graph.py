@@ -40,7 +40,7 @@ graph_router = APIRouter(prefix="", tags=["Graph"])
 
 
 def _enqueue_recompute(db: DatabaseSession, map_id: int) -> str:
-    """Stage a recompute job record in the current session and return its ID.
+    """Stage a recompute_geometry job record in the current session and return its ID.
 
     The caller MUST commit before dispatching the Celery task so the worker
     always sees both the structural changes and the job row.
@@ -50,14 +50,14 @@ def _enqueue_recompute(db: DatabaseSession, map_id: int) -> str:
         <service call that mutates nodes/zips>
         job_id = _enqueue_recompute(db, map_id)
         db.commit()                                           # persists everything
-        from src.workers.tasks.maps import recompute_map_task
-        recompute_map_task.delay(job_id, map_id)
+        from src.workers.tasks.maps import recompute_geometry_task
+        recompute_geometry_task.delay(job_id, map_id)
     """
     job_id = str(uuid.uuid4())
     job = MapJobModel(
         id=job_id,
         map_id=map_id,
-        job_type="recompute",
+        job_type="recompute_geometry",
         status="pending",
         step=None,
         error=None,
@@ -241,8 +241,7 @@ def get_node(
 ):
     """Get node by id."""
     result = (
-        db
-        .execute(
+        db.execute(
             select(NodeModel, LayerModel)
             .join(LayerModel, NodeModel.layer_id == LayerModel.id)
             .filter(NodeModel.id == node_id)
@@ -280,8 +279,7 @@ def update_node(
 ):
     """Update node."""
     result = (
-        db
-        .execute(
+        db.execute(
             select(NodeModel, LayerModel)
             .join(LayerModel, NodeModel.layer_id == LayerModel.id)
             .filter(NodeModel.id == node_id)
@@ -322,8 +320,7 @@ def delete_node(
 ):
     """Delete a node (order>=1 only). Cascades to child nodes via FK."""
     result = (
-        db
-        .execute(
+        db.execute(
             select(NodeModel, LayerModel)
             .join(LayerModel, NodeModel.layer_id == LayerModel.id)
             .filter(NodeModel.id == node_id)
@@ -355,8 +352,7 @@ def bulk_update_node(
 ):
     """Bulk update nodes."""
     nodes_and_layers = (
-        db
-        .execute(
+        db.execute(
             select(NodeModel, LayerModel)
             .join(target=LayerModel, onclause=NodeModel.layer_id == LayerModel.id)
             .filter(NodeModel.id.in_([n.id for n in node_datas]))
@@ -403,8 +399,7 @@ def bulk_reparent_nodes(
     # Permission check — all nodes must be in the same layer (validated by service),
     # so check map access once we know the layer.
     nodes_and_layers = (
-        db
-        .execute(
+        db.execute(
             select(NodeModel, LayerModel)
             .join(LayerModel, NodeModel.layer_id == LayerModel.id)
             .where(NodeModel.id.in_(data.node_ids))
@@ -425,9 +420,9 @@ def bulk_reparent_nodes(
         raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
     job_id = _enqueue_recompute(db, map_id)
     db.commit()
-    from src.workers.tasks.maps import recompute_map_task  # noqa: PLC0415
+    from src.workers.tasks.maps import recompute_geometry_task
 
-    recompute_map_task.delay(job_id, map_id)
+    recompute_geometry_task.delay(job_id, map_id)
     return [
         Node(
             id=n.id,
@@ -455,8 +450,7 @@ def merge_nodes(
     to the new node, and deletes the originals. Only valid for order>=1 layers.
     """
     nodes_and_layers = (
-        db
-        .execute(
+        db.execute(
             select(NodeModel, LayerModel)
             .join(LayerModel, NodeModel.layer_id == LayerModel.id)
             .where(NodeModel.id.in_(data.node_ids))
@@ -477,9 +471,9 @@ def merge_nodes(
         raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
     job_id = _enqueue_recompute(db, map_id)
     db.commit()
-    from src.workers.tasks.maps import recompute_map_task  # noqa: PLC0415
+    from src.workers.tasks.maps import recompute_geometry_task
 
-    recompute_map_task.delay(job_id, map_id)
+    recompute_geometry_task.delay(job_id, map_id)
     return Node(
         id=new_node.id,
         layer_id=new_node.layer_id,
@@ -506,8 +500,7 @@ def bulk_delete_nodes(
     unassign zip codes instead.
     """
     nodes_and_layers = (
-        db
-        .execute(
+        db.execute(
             select(NodeModel, LayerModel)
             .join(LayerModel, NodeModel.layer_id == LayerModel.id)
             .where(NodeModel.id.in_(data.node_ids))
@@ -528,9 +521,9 @@ def bulk_delete_nodes(
         raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
     job_id = _enqueue_recompute(db, map_id)
     db.commit()
-    from src.workers.tasks.maps import recompute_map_task  # noqa: PLC0415
+    from src.workers.tasks.maps import recompute_geometry_task
 
-    recompute_map_task.delay(job_id, map_id)
+    recompute_geometry_task.delay(job_id, map_id)
 
 
 # ---------------------------------------------------------------------------
@@ -621,9 +614,9 @@ def bulk_assign_zips(
         raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
     job_id = _enqueue_recompute(db, layer.map_id)
     db.commit()
-    from src.workers.tasks.maps import recompute_map_task  # noqa: PLC0415
+    from src.workers.tasks.maps import recompute_geometry_task
 
-    recompute_map_task.delay(job_id, layer.map_id)
+    recompute_geometry_task.delay(job_id, layer.map_id)
     return {"updated": count}
 
 
@@ -697,6 +690,44 @@ def get_zip_assignment(
         parent_node_id=za.parent_node_id,
         color=za.color,
     )
+
+
+@graph_router.get(
+    "/zip-assignments/{layer_id}/{zip_code}/geography",
+    response_model=ZipAssignment,
+)
+def get_zip_with_geography_default(
+    layer_id: int,
+    zip_code: str,
+    db: DatabaseSession,
+    current_user: CurrentUserDependency,
+    permission_service: PermissionsServiceDependency,
+):
+    """Get a zip's assignment state, falling back to geography defaults if no row exists.
+
+    Unlike GET /zip-assignments/{layer_id}/{zip_code}, this never returns 404 for
+    known zip codes — it returns the implicit white/unassigned state.
+    """
+    _check_layer_access(db, layer_id, current_user.id, permission_service)
+    padded = zip_code.zfill(5)
+
+    za = db.execute(
+        select(ZipAssignmentModel).where(
+            ZipAssignmentModel.layer_id == layer_id,
+            ZipAssignmentModel.zip_code == padded,
+        )
+    ).scalar_one_or_none()
+
+    if za:
+        return ZipAssignment(
+            zip_code=za.zip_code, layer_id=za.layer_id, parent_node_id=za.parent_node_id, color=za.color
+        )
+
+    # Implicit state — verify zip exists in geography
+    geo = db.get(ZipCodeGeography, padded)
+    if not geo:
+        raise HTTPException(404, f"Zip code {padded} not found.")
+    return ZipAssignment(zip_code=padded, layer_id=layer_id, parent_node_id=None, color="#FFFFFF")
 
 
 @graph_router.get("/search", response_model=SearchResults)
@@ -790,41 +821,3 @@ def search_map(
             )
 
     return SearchResults(results=results, total=len(results))
-
-
-@graph_router.get(
-    "/zip-assignments/{layer_id}/{zip_code}/geography",
-    response_model=ZipAssignment,
-)
-def get_zip_with_geography_default(
-    layer_id: int,
-    zip_code: str,
-    db: DatabaseSession,
-    current_user: CurrentUserDependency,
-    permission_service: PermissionsServiceDependency,
-):
-    """Get a zip's assignment state, falling back to geography defaults if no row exists.
-
-    Unlike GET /zip-assignments/{layer_id}/{zip_code}, this never returns 404 for
-    known zip codes — it returns the implicit white/unassigned state.
-    """
-    _check_layer_access(db, layer_id, current_user.id, permission_service)
-    padded = zip_code.zfill(5)
-
-    za = db.execute(
-        select(ZipAssignmentModel).where(
-            ZipAssignmentModel.layer_id == layer_id,
-            ZipAssignmentModel.zip_code == padded,
-        )
-    ).scalar_one_or_none()
-
-    if za:
-        return ZipAssignment(
-            zip_code=za.zip_code, layer_id=za.layer_id, parent_node_id=za.parent_node_id, color=za.color
-        )
-
-    # Implicit state — verify zip exists in geography
-    geo = db.get(ZipCodeGeography, padded)
-    if not geo:
-        raise HTTPException(404, f"Zip code {padded} not found.")
-    return ZipAssignment(zip_code=padded, layer_id=layer_id, parent_node_id=None, color="#FFFFFF")

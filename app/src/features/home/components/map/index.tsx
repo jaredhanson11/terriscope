@@ -31,20 +31,24 @@ const INITIAL_VIEW_STATE = {
 
 export type HoverHierarchyItem = { layerId: number; name: string }
 
+export type ClickSelectResult = { nodeId: number } | { zipCode: string }
+
 export const Map = forwardRef<
   MapRef | null,
   {
     baseMap: BaseMapName
     layers: LayerViewOptions
-    currentTool: "lasso" | "pan"
+    currentTool: "select" | "pan"
+    activeLayerId: number | undefined
     selectedNodeIds: number[]
     selectedZipCodes: string[]
     tileVersion: number
-    onLassoComplete: (points: Polygon) => void
+    onLassoComplete: (points: Polygon, additive: boolean) => void
+    onClickSelect: (result: ClickSelectResult, additive: boolean) => void
     onHover?: (items: HoverHierarchyItem[]) => void
     onHoverEnd?: () => void
   }
->(({ baseMap, layers, onLassoComplete, currentTool, tileVersion, onHover, onHoverEnd }, ref) => {
+>(({ baseMap, layers, onLassoComplete, onClickSelect, currentTool, activeLayerId, tileVersion, onHover, onHoverEnd }, ref) => {
   const mapRef = useRef<MapRef | null>(null)
   useImperativeHandle(ref, () => mapRef.current as MapRef)
 
@@ -71,9 +75,9 @@ export const Map = forwardRef<
     refreshTileSources(map, layersRef.current, tileVersion)
   }, [tileVersion])
 
-  // State stays the same
   const [isDrawing, setIsDrawing] = useState(false)
   const [lassoPoints, setLassoPoints] = useState<[number, number][]>([])
+  const mouseDownPixel = useRef<{ x: number; y: number } | null>(null)
 
   // Update lasso visualization as it's being drawn
   useEffect(() => {
@@ -134,10 +138,11 @@ export const Map = forwardRef<
     }
   }, [lassoPoints])
 
-  // Mouse DOWN - start the lasso
+  // Mouse DOWN - start the select/lasso
   const handleMouseDown = (e: maplibregl.MapMouseEvent) => {
-    if (currentTool === "lasso") {
-      e.preventDefault() // Prevent map from panning
+    if (currentTool === "select") {
+      e.preventDefault()
+      mouseDownPixel.current = { x: e.point.x, y: e.point.y }
       setIsDrawing(true)
       const point: [number, number] = [e.lngLat.lng, e.lngLat.lat]
       setLassoPoints([point])
@@ -146,7 +151,7 @@ export const Map = forwardRef<
 
   // Mouse MOVE - only adds points while drawing (button held)
   const handleMouseMove = (e: maplibregl.MapMouseEvent) => {
-    if (isDrawing && currentTool === "lasso") {
+    if (isDrawing && currentTool === "select") {
       const point: [number, number] = [e.lngLat.lng, e.lngLat.lat]
       const newPoints = [...lassoPoints, point]
       setLassoPoints(newPoints)
@@ -180,21 +185,47 @@ export const Map = forwardRef<
     }
   }
 
-  // Mouse UP - complete the lasso
-  const handleMouseUp = () => {
-    if (isDrawing && currentTool === "lasso") {
+  // Mouse UP - click = single select, drag = lasso
+  const handleMouseUp = (e: maplibregl.MapMouseEvent) => {
+    if (isDrawing && currentTool === "select") {
       setIsDrawing(false)
 
-      // Create closed polygon
-      const closedPoints: number[][] = [...lassoPoints, lassoPoints[0]]
-      const lassoPolygon = polygon([closedPoints])
-      const simplified = simplify<Feature<Polygon>>(lassoPolygon, {
-        tolerance: 0.001,
-        highQuality: true,
-      })
-      onLassoComplete(simplified.geometry)
-      // Clear the lasso
-      setLassoPoints([])
+      const down = mouseDownPixel.current
+      const dx = down ? e.point.x - down.x : 999
+      const dy = down ? e.point.y - down.y : 999
+      mouseDownPixel.current = null
+
+      const additive = e.originalEvent.shiftKey
+
+      if (Math.sqrt(dx * dx + dy * dy) < 5) {
+        // Click — single select via point query
+        setLassoPoints([])
+        const map = mapRef.current?.getMap()
+        if (!map || activeLayerId == null) return
+        const selectionLayerId = `layer-${activeLayerId}-selection`
+        if (!map.getLayer(selectionLayerId)) return
+        const features = map.queryRenderedFeatures(e.point, { layers: [selectionLayerId] })
+        if (features.length === 0) return
+        const feature = features[0]
+        const layerOption = layers.find((l) => l.id === activeLayerId)
+        if (layerOption?.order === 0) {
+          const zipCode = feature.properties?.zip_code as string | undefined
+          if (zipCode) onClickSelect({ zipCode }, additive)
+        } else {
+          const nodeId = feature.properties?.id as number | undefined
+          if (nodeId != null) onClickSelect({ nodeId }, additive)
+        }
+      } else {
+        // Drag — lasso polygon
+        const closedPoints: number[][] = [...lassoPoints, lassoPoints[0]]
+        const lassoPolygon = polygon([closedPoints])
+        const simplified = simplify<Feature<Polygon>>(lassoPolygon, {
+          tolerance: 0.001,
+          highQuality: true,
+        })
+        onLassoComplete(simplified.geometry, additive)
+        setLassoPoints([])
+      }
     }
   }
 
@@ -206,7 +237,7 @@ export const Map = forwardRef<
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseOut={onHoverEnd}
-        cursor={currentTool === "lasso" ? "crosshair" : "grab"}
+        cursor={currentTool === "select" ? "crosshair" : "grab"}
         initialViewState={INITIAL_VIEW_STATE}
         mapStyle={EMPTY_STYLE}
         ref={mapRef}

@@ -18,7 +18,7 @@ class MapJob(BaseModel):
     """Background job for a map."""
 
     id: str
-    job_type: Literal["import", "recompute"]
+    job_type: Literal["import", "recompute_geometry", "recompute_data"]
     status: Literal["pending", "processing", "complete", "failed"]
     step: str | None = None
     error: str | None = None

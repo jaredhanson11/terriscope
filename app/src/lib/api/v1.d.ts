@@ -413,6 +413,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/zip-assignments/{layer_id}/{zip_code}/geography": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Zip With Geography Default
+         * @description Get a zip's assignment state, falling back to geography defaults if no row exists.
+         *
+         *     Unlike GET /zip-assignments/{layer_id}/{zip_code}, this never returns 404 for
+         *     known zip codes — it returns the implicit white/unassigned state.
+         */
+        get: operations["get_zip_with_geography_default_zip_assignments__layer_id___zip_code__geography_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/search": {
         parameters: {
             query?: never;
@@ -430,29 +453,6 @@ export interface paths {
          *     matched as a substring (case-insensitive).
          */
         get: operations["search_map_search_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/zip-assignments/{layer_id}/{zip_code}/geography": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Zip With Geography Default
-         * @description Get a zip's assignment state, falling back to geography defaults if no row exists.
-         *
-         *     Unlike GET /zip-assignments/{layer_id}/{zip_code}, this never returns 404 for
-         *     known zip codes — it returns the implicit white/unassigned state.
-         */
-        get: operations["get_zip_with_geography_default_zip_assignments__layer_id___zip_code__geography_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -833,7 +833,7 @@ export interface components {
              * Job Type
              * @enum {string}
              */
-            job_type: "import" | "recompute";
+            job_type: "import" | "recompute_geometry" | "recompute_data";
             /**
              * Status
              * @enum {string}
@@ -1840,6 +1840,38 @@ export interface operations {
             };
         };
     };
+    get_zip_with_geography_default_zip_assignments__layer_id___zip_code__geography_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                layer_id: number;
+                zip_code: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ZipAssignment"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     search_map_search_get: {
         parameters: {
             query: {
@@ -1874,41 +1906,11 @@ export interface operations {
             };
         };
     };
-    get_zip_with_geography_default_zip_assignments__layer_id___zip_code__geography_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                layer_id: number;
-                zip_code: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ZipAssignment"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     get_tile_tiles__layer_id___z___x___y__pbf_get: {
         parameters: {
-            query?: never;
+            query?: {
+                rev?: number;
+            };
             header?: never;
             path: {
                 layer_id: number;
@@ -1942,7 +1944,9 @@ export interface operations {
     };
     get_label_tile_tiles__layer_id___z___x___y__labels_pbf_get: {
         parameters: {
-            query?: never;
+            query?: {
+                rev?: number;
+            };
             header?: never;
             path: {
                 layer_id: number;

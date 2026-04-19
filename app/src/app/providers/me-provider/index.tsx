@@ -6,6 +6,7 @@ import { AppRoutes, PageName } from "@/app/routes"
 import { queries } from "@/queries/queries"
 
 import { MeContext } from "./context"
+import { AppLoadingScreen } from "./loading-screen"
 
 export const AuthProvider = (props: PropsWithChildren) => {
   const navigate = useNavigate()
@@ -19,7 +20,7 @@ export const AuthProvider = (props: PropsWithChildren) => {
     (!userQuery.data && userQuery.isLoading) ||
     (!mapsQuery.data && mapsQuery.isLoading)
   ) {
-    return <div>Loading...</div>
+    return <AppLoadingScreen />
   }
 
   if (userQuery.isSuccess && mapsQuery.isSuccess) {

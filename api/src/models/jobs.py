@@ -2,8 +2,8 @@
 
 from typing import Literal
 
-from sqlalchemy import ForeignKey, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import ForeignKey, Index, String, Text
+from sqlalchemy.orm import Mapped, declared_attr, mapped_column
 
 from src.models.base import Base, TimestampMixin
 
@@ -15,7 +15,12 @@ class MapJobModel(Base, TimestampMixin):
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
     map_id: Mapped[int] = mapped_column(ForeignKey("maps.id"))
-    job_type: Mapped[Literal["import", "recompute"]]
+    job_type: Mapped[Literal["import", "recompute_geometry", "recompute_data"]]
     status: Mapped[Literal["pending", "processing", "complete", "failed"]]
     step: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
     error: Mapped[str | None] = mapped_column(Text, nullable=True, default=None)
+
+    @declared_attr.directive
+    def __table_args__(cls):
+        """Table args for MapJobModel."""
+        return (Index("idx_map_jobs_map_id", "map_id"),)

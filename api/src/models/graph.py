@@ -4,7 +4,7 @@ from typing import Any
 
 from geoalchemy2 import Geometry
 from geoalchemy2.elements import WKBElement
-from sqlalchemy import ForeignKey, String, UniqueConstraint, func, select
+from sqlalchemy import ForeignKey, Index, String, UniqueConstraint, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, aliased, column_property, declared_attr, mapped_column
 
@@ -45,6 +45,7 @@ class LayerModel(Base):
         return (
             UniqueConstraint("order", "map_id"),
             UniqueConstraint("name", "map_id"),
+            Index("idx_layers_map_id", "map_id"),
         )
 
 
@@ -113,7 +114,11 @@ class NodeModel(Base):
     @declared_attr.directive
     def __table_args__(cls):
         """Table args for NodeModel."""
-        return (UniqueConstraint("layer_id", "name"),)
+        return (
+            UniqueConstraint("layer_id", "name"),
+            Index("idx_nodes_layer_id", "layer_id"),
+            Index("idx_nodes_parent_node_id", "parent_node_id"),
+        )
 
 
 class ZipAssignmentModel(Base):
@@ -147,4 +152,7 @@ class ZipAssignmentModel(Base):
     @declared_attr.directive
     def __table_args__(cls):
         """Table args for ZipAssignmentModel."""
-        return (UniqueConstraint("layer_id", "zip_code"),)
+        return (
+            UniqueConstraint("layer_id", "zip_code"),
+            Index("idx_zip_assignments_parent_node_id", "parent_node_id"),
+        )

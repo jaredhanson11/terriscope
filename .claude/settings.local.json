@@ -5,7 +5,9 @@
       "Bash(python3 -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('OK - paths:', list\\(d['paths'].keys\\(\\)\\)\\)\")",
       "Bash(python3 -c ' *)",
       "Bash(pnpm openapi:generate)",
-      "Bash(pnpm tsc *)"
+      "Bash(pnpm tsc *)",
+      "WebFetch(domain:terramaps.us)",
+      "Bash(curl -s \"https://terramaps.us/assets/logo.png\" -o \"/Users/jared/Documents/Misc/terramaps/terramaps-app/app/src/assets/terramaps-logo.png\")"
     ]
   }
 }

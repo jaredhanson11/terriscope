@@ -35,9 +35,12 @@ class ComputationService(BaseService):
         start = time.perf_counter()
 
         if layer.order == 1:
-            # Children live in zip_assignments; signature is sorted zip_codes (geography
-            # geometries are static so the zip set fully determines the inputs hash).
-            grouping_sql = text("""
+            # Union pre-simplified zip geometries directly from geography_zip_codes.
+            # Each zoom level unions the already-simplified column (gz.geom_zN) rather than
+            # simplifying the full-res union result — avoids per-parent Transform+SnapToGrid+MakeValid.
+            # geom_cache_key uses md5(signature) instead of md5(ST_AsEWKB(geom)) since the union
+            # is deterministic: same zip set → identical geometry.
+            combined_sql = text("""
                 WITH child_groups AS (
                   SELECT za.parent_node_id AS pid,
                          STRING_AGG(za.zip_code, ';' ORDER BY za.zip_code) AS signature,
@@ -47,17 +50,54 @@ class ComputationService(BaseService):
                   WHERE p.layer_id = :layer_id
                     AND za.parent_node_id IS NOT NULL
                   GROUP BY za.parent_node_id
+                ), candidates AS (
+                  SELECT cg.pid,
+                         md5(cg.signature) AS inputs_hash,
+                         p.geom_inputs_cache_key AS existing_hash,
+                         cg.child_count
+                  FROM child_groups cg
+                  JOIN nodes p ON p.id = cg.pid
+                ), changed AS (
+                  SELECT pid, inputs_hash, child_count
+                  FROM candidates
+                  WHERE :force
+                     OR existing_hash IS DISTINCT FROM inputs_hash
+                     OR existing_hash IS NULL
+                ), calc AS (
+                  SELECT ch.pid,
+                         ch.inputs_hash AS signature_hash,
+                         -- TODO: re-enable geom and geom_z15 once perf baseline is confirmed
+                         -- ST_UnaryUnion(ST_Collect(gz.geom))     AS union_geom,
+                         ST_UnaryUnion(ST_Collect(gz.geom_z3))  AS union_z3,
+                         ST_UnaryUnion(ST_Collect(gz.geom_z7))  AS union_z7,
+                         ST_UnaryUnion(ST_Collect(gz.geom_z11)) AS union_z11
+                         -- ST_UnaryUnion(ST_Collect(gz.geom_z15)) AS union_z15
+                  FROM changed ch
+                  JOIN zip_assignments za ON za.parent_node_id = ch.pid
+                  JOIN geography_zip_codes gz ON gz.zip_code = za.zip_code
+                  GROUP BY ch.pid, ch.inputs_hash
+                ), upd AS (
+                  UPDATE nodes p
+                  SET -- geom                  = calc.union_geom,
+                      geom_z3               = calc.union_z3,
+                      geom_z7               = calc.union_z7,
+                      geom_z11              = calc.union_z11,
+                      -- geom_z15              = calc.union_z15,
+                      geom_inputs_cache_key = calc.signature_hash,
+                      geom_cache_key        = calc.signature_hash
+                  FROM calc
+                  WHERE p.id = calc.pid
+                  RETURNING p.id
                 )
-                SELECT cg.pid,
-                       md5(cg.signature) AS inputs_hash,
-                       p.geom_inputs_cache_key AS existing_hash,
-                       cg.child_count
-                FROM child_groups cg
-                JOIN nodes p ON p.id = cg.pid
+                SELECT
+                  (SELECT COUNT(*) FROM candidates) AS parents_considered,
+                  (SELECT COUNT(*) FROM upd)        AS updated_count;
             """)
         else:
             # Children are nodes; signature is node IDs + their geom_cache_keys.
-            grouping_sql = text("""
+            # order>1 nodes don't have pre-simplified zip columns to draw from, so we simplify
+            # the union result. geom_cache_key still uses md5(signature) for the same reason.
+            combined_sql = text("""
                 WITH child_groups AS (
                   SELECT c.parent_node_id AS pid,
                          STRING_AGG(c.id::text || ':' || COALESCE(c.geom_cache_key,'null'), ';' ORDER BY c.id) AS signature,
@@ -66,143 +106,64 @@ class ComputationService(BaseService):
                   JOIN nodes p ON p.id = c.parent_node_id
                   WHERE p.layer_id = :layer_id
                   GROUP BY c.parent_node_id
-                )
-                SELECT cg.pid,
-                       md5(cg.signature) AS inputs_hash,
-                       p.geom_inputs_cache_key AS existing_hash,
-                       cg.child_count
-                FROM child_groups cg
-                JOIN nodes p ON p.id = cg.pid
-            """)
-
-        rows = self.db.execute(grouping_sql, {"layer_id": layer_id}).mappings().all()
-        grouping_ms = (time.perf_counter() - start) * 1000.0
-
-        if force:
-            changed_parent_ids = [r["pid"] for r in rows]
-        else:
-            changed_parent_ids = [
-                r["pid"] for r in rows if r["existing_hash"] != r["inputs_hash"] or r["existing_hash"] is None
-            ]
-
-        if not changed_parent_ids:
-            total_ms = (time.perf_counter() - start) * 1000.0
-            return {
-                "layer_id": layer_id,
-                "parents_considered": len(rows),
-                "parents_recomputed": 0,
-                "timing_ms": {
-                    "grouping": round(grouping_ms, 2),
-                    "union_and_update": 0.0,
-                    "total": round(total_ms, 2),
-                    "avg_per_parent": 0.0,
-                },
-                "notes": {"message": "No parents needed recompute", "force": force},
-            }
-
-        union_start = time.perf_counter()
-
-        if layer.order == 1:
-            # Union geometries directly from geography_zip_codes via zip_assignments.
-            # md5(signature) is recomputed inline so the UPDATE condition is self-contained.
-            union_update_sql = text("""
-                WITH changed AS (
-                  SELECT p.id AS pid
-                  FROM nodes p
-                  WHERE p.id = ANY(:changed_ids)
+                ), candidates AS (
+                  SELECT cg.pid,
+                         md5(cg.signature) AS inputs_hash,
+                         p.geom_inputs_cache_key AS existing_hash,
+                         cg.child_count
+                  FROM child_groups cg
+                  JOIN nodes p ON p.id = cg.pid
+                ), changed AS (
+                  SELECT pid, inputs_hash, child_count
+                  FROM candidates
+                  WHERE :force
+                     OR existing_hash IS DISTINCT FROM inputs_hash
+                     OR existing_hash IS NULL
                 ), calc AS (
                   SELECT ch.pid,
-                         STRING_AGG(za.zip_code, ';' ORDER BY za.zip_code) AS signature,
-                         ST_UnaryUnion(ST_Collect(ST_MakeValid(gz.geom))) AS union_geom
+                         ch.inputs_hash AS signature_hash,
+                         ST_UnaryUnion(ST_Collect(n.geom)) AS union_geom
                   FROM changed ch
-                  JOIN zip_assignments za ON za.parent_node_id = ch.pid
-                  JOIN geography_zip_codes gz ON gz.zip_code = za.zip_code
-                  WHERE gz.geom IS NOT NULL
-                  GROUP BY ch.pid
+                  JOIN nodes n ON n.parent_node_id = ch.pid AND n.geom IS NOT NULL
+                  GROUP BY ch.pid, ch.inputs_hash
                 ), upd AS (
                   UPDATE nodes p
-                  SET geom     = calc.union_geom,
-                      geom_z3  = ST_Transform(ST_MakeValid(ST_SnapToGrid(ST_Transform(calc.union_geom, 3857), 19568.0)), 4326),
-                      geom_z7  = ST_Transform(ST_MakeValid(ST_SnapToGrid(ST_Transform(calc.union_geom, 3857),  1223.0)), 4326),
-                      geom_z11 = ST_Transform(ST_MakeValid(ST_SnapToGrid(ST_Transform(calc.union_geom, 3857),    76.0)), 4326),
-                      geom_z15 = ST_Transform(ST_MakeValid(ST_SnapToGrid(ST_Transform(calc.union_geom, 3857),     4.8)), 4326),
-                      geom_inputs_cache_key = md5(calc.signature),
-                      geom_cache_key        = md5(ST_AsEWKB(calc.union_geom)::text)
+                  SET geom                  = calc.union_geom,
+                      geom_z3               = CASE WHEN ST_IsEmpty(ST_MakeValid(ST_SnapToGrid(ST_Transform(calc.union_geom, 3857), 19568.0))) THEN NULL ELSE ST_Transform(ST_MakeValid(ST_SnapToGrid(ST_Transform(calc.union_geom, 3857), 19568.0)), 4326) END,
+                      geom_z7               = CASE WHEN ST_IsEmpty(ST_MakeValid(ST_SnapToGrid(ST_Transform(calc.union_geom, 3857),  1223.0))) THEN NULL ELSE ST_Transform(ST_MakeValid(ST_SnapToGrid(ST_Transform(calc.union_geom, 3857),  1223.0)), 4326) END,
+                      geom_z11              = CASE WHEN ST_IsEmpty(ST_MakeValid(ST_SnapToGrid(ST_Transform(calc.union_geom, 3857),    76.0))) THEN NULL ELSE ST_Transform(ST_MakeValid(ST_SnapToGrid(ST_Transform(calc.union_geom, 3857),    76.0)), 4326) END,
+                      geom_z15              = CASE WHEN ST_IsEmpty(ST_MakeValid(ST_SnapToGrid(ST_Transform(calc.union_geom, 3857),     4.8))) THEN NULL ELSE ST_Transform(ST_MakeValid(ST_SnapToGrid(ST_Transform(calc.union_geom, 3857),     4.8)), 4326) END,
+                      geom_inputs_cache_key = calc.signature_hash,
+                      geom_cache_key        = calc.signature_hash
                   FROM calc
                   WHERE p.id = calc.pid
                     AND calc.union_geom IS NOT NULL
-                    AND (
-                      p.geom_inputs_cache_key IS DISTINCT FROM md5(calc.signature)
-                      OR p.geom IS NULL
-                      OR :force
-                    )
                   RETURNING p.id
                 )
-                SELECT COUNT(*) AS updated_count FROM upd;
-            """)
-        else:
-            union_update_sql = text("""
-                WITH changed AS (
-                  SELECT p.id AS pid
-                  FROM nodes p
-                  WHERE p.id = ANY(:changed_ids)
-                ), child_data AS (
-                  SELECT ch.pid,
-                         STRING_AGG(c.id::text || ':' || COALESCE(c.geom_cache_key,'null'), ';' ORDER BY c.id) AS signature
-                  FROM changed ch
-                  JOIN nodes c ON c.parent_node_id = ch.pid
-                  GROUP BY ch.pid
-                ), calc AS (
-                  SELECT pid,
-                         md5(signature) AS inputs_hash,
-                         (
-                           SELECT ST_UnaryUnion(ST_Collect(ST_MakeValid(n.geom)))
-                           FROM nodes n WHERE n.parent_node_id = pid AND n.geom IS NOT NULL
-                         ) AS union_geom
-                  FROM child_data
-                ), upd AS (
-                  UPDATE nodes p
-                  SET geom     = calc.union_geom,
-                      geom_z3  = ST_Transform(ST_MakeValid(ST_SnapToGrid(ST_Transform(calc.union_geom, 3857), 19568.0)), 4326),
-                      geom_z7  = ST_Transform(ST_MakeValid(ST_SnapToGrid(ST_Transform(calc.union_geom, 3857),  1223.0)), 4326),
-                      geom_z11 = ST_Transform(ST_MakeValid(ST_SnapToGrid(ST_Transform(calc.union_geom, 3857),    76.0)), 4326),
-                      geom_z15 = ST_Transform(ST_MakeValid(ST_SnapToGrid(ST_Transform(calc.union_geom, 3857),     4.8)), 4326),
-                      geom_inputs_cache_key = calc.inputs_hash,
-                      geom_cache_key        = md5(ST_AsEWKB(calc.union_geom)::text)
-                  FROM calc
-                  WHERE p.id = calc.pid
-                    AND calc.union_geom IS NOT NULL
-                    AND (
-                      p.geom_inputs_cache_key IS DISTINCT FROM calc.inputs_hash
-                      OR p.geom IS NULL
-                      OR :force
-                    )
-                  RETURNING p.id
-                )
-                SELECT COUNT(*) AS updated_count FROM upd;
+                SELECT
+                  (SELECT COUNT(*) FROM candidates) AS parents_considered,
+                  (SELECT COUNT(*) FROM upd)        AS updated_count;
             """)
 
-        updated_count = (
-            self.db.execute(union_update_sql, {"changed_ids": changed_parent_ids, "force": force}).scalar() or 0
-        )
+        row = self.db.execute(combined_sql, {"layer_id": layer_id, "force": force}).mappings().one()
+        parents_considered = int(row["parents_considered"])
+        updated_count = int(row["updated_count"])
+
         if updated_count:
             self.db.flush()
 
-        union_ms = (time.perf_counter() - union_start) * 1000.0
         total_ms = (time.perf_counter() - start) * 1000.0
-        avg_per_parent = union_ms / updated_count if updated_count else 0.0
+        avg_per_parent = total_ms / updated_count if updated_count else 0.0
 
         return {
             "layer_id": layer_id,
-            "parents_considered": len(rows),
-            "parents_recomputed": int(updated_count),
+            "parents_considered": parents_considered,
+            "parents_recomputed": updated_count,
             "timing_ms": {
-                "grouping": round(grouping_ms, 2),
-                "union_and_update": round(union_ms, 2),
                 "total": round(total_ms, 2),
                 "avg_per_parent": round(avg_per_parent, 2),
             },
-            "notes": {"changed_parent_ids_sample": changed_parent_ids[:10], "force": force},
+            "notes": {"force": force},
         }
 
     def bulk_recompute_data_layer(
