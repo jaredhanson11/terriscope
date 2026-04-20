@@ -1,8 +1,10 @@
 import {
   IconCheck,
   IconChevronDown,
+  IconChevronRight,
   IconEye,
   IconEyeOff,
+  IconFileSpreadsheet,
   IconHandGrab,
   IconHome,
   IconInfoCircle,
@@ -10,19 +12,24 @@ import {
   IconLoader2,
   IconLogout,
   IconPlus,
+  IconPresentation,
   IconSettings,
-  IconTrash,
   IconX,
 } from "@tabler/icons-react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { differenceInDays, format, formatDistanceToNow } from "date-fns"
 import pluralize from "pluralize"
 import { useEffect, useMemo, useRef, useState } from "react"
+import { useNavigate, useParams } from "react-router-dom"
 import { type MapRef } from "react-map-gl/maplibre"
 
-import { useMaps } from "@/app/providers/me-provider/context"
-import { AppRoutes } from "@/app/routes"
+import { useMe, useMaps } from "@/app/providers/me-provider/context"
+import { AppRoutes, PageName } from "@/app/routes"
+
+const ACTIVE_MAP_KEY = "terramaps_active_map_id"
 import { BrandLogo } from "@/components/brand-logo"
 import { PageLayout } from "@/components/layout"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
   Collapsible,
@@ -61,6 +68,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import {
   Tooltip,
@@ -71,8 +79,10 @@ import { Map, type HoverHierarchyItem, type ClickSelectResult } from "@/features
 import { DeleteDialog } from "@/features/home/components/delete-dialog"
 import { MergeDialog } from "@/features/home/components/merge-dialog"
 import { MoveDialog } from "@/features/home/components/move-dialog"
+import { ExportZttDialog } from "@/features/home/components/export-ztt-dialog"
 import { NodeDetailSheet } from "@/features/home/components/node-detail-sheet"
 import { SearchBar, type SearchResultItem } from "@/features/home/components/search-bar"
+import { SelectionSheet } from "@/features/home/components/selection-sheet"
 import {
   useLogoutMutation,
   useSpatialSelectMutation,
@@ -93,6 +103,15 @@ const BASE_MAPS = [
   { id: "none", name: "None" },
 ]
 
+function formatLastEdited(isoDate: string | null | undefined): string {
+  if (!isoDate) return "Never edited"
+  const date = new Date(isoDate)
+  if (differenceInDays(new Date(), date) < 7) {
+    return `Edited ${formatDistanceToNow(date, { addSuffix: true })}`
+  }
+  return `Edited ${format(date, "MMM d, yyyy")}`
+}
+
 export default function HomePage() {
   const mapRef = useRef<MapRef | null>(null)
 
@@ -100,8 +119,10 @@ export default function HomePage() {
   const [labelFields, setLabelFields] = useState<Record<number, string[]>>({})
   const queryClient = useQueryClient()
   const maps = useMaps()
-  const [currentMapId, setCurrentMapId] = useState<number>(maps[0]?.id ?? 0)
-  const currentMap = maps.find((m) => m.id === currentMapId) ?? maps[0]
+  const me = useMe()
+  const navigate = useNavigate()
+  const { mapId } = useParams<{ mapId: string }>()
+  const currentMap = maps.find((m) => m.id === mapId) ?? maps[0]
   // Poll the current map for live job status updates (refetchInterval is 2s
   // while a job is active, pauses automatically when idle).
   const currentMapPolled = useQuery(queries.getMap(currentMap.id))
@@ -150,9 +171,17 @@ export default function HomePage() {
   const [moveOpen, setMoveOpen] = useState(false)
   const [mergeOpen, setMergeOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
+  const [exportZttOpen, setExportZttOpen] = useState(false)
 
   // Search / detail sheet state
   const [detailResult, setDetailResult] = useState<SearchResultItem | null>(null)
+
+  // Close search detail sheet when the user makes a lasso/click selection
+  const selectionCount =
+    activeLayer?.order === 0 ? selectedZipCodes.length : selectedNodeIds.length
+  useEffect(() => {
+    if (selectionCount > 0) setDetailResult(null)
+  }, [selectionCount])
 
   const [hoveredHierarchy, setHoveredHierarchy] = useState<HoverHierarchyItem[]>([])
 
@@ -177,8 +206,6 @@ export default function HomePage() {
     )
   }, [activeLayer, layersQuery.data])
 
-  const selectionCount =
-    activeLayer?.order === 0 ? selectedZipCodes.length : selectedNodeIds.length
   const hasSelection = selectionCount > 0
   const isZipLayer = activeLayer?.order === 0
 
@@ -302,7 +329,7 @@ export default function HomePage() {
                               (activeJob.job_type === "import"
                                 ? "Computing…"
                                 : "Recomputing…")
-                          : "Last edited TODO"}
+                          : formatLastEdited(currentMap.updated_at)}
                       </div>
                     </div>
                     {activeJob && activeJob.status !== "failed" && (
@@ -322,7 +349,8 @@ export default function HomePage() {
                     key={map.id}
                     className="gap-3"
                     onClick={() => {
-                      setCurrentMapId(map.id)
+                      localStorage.setItem(ACTIVE_MAP_KEY, map.id)
+                      void navigate(AppRoutes.getRoute(PageName.Home, { mapId: map.id }))
                       setActiveLayerId(undefined)
                       setFillLayerId(null)
                       setBorderLayerIds(new Set())
@@ -344,7 +372,7 @@ export default function HomePage() {
                               (map.active_job.job_type === "import"
                                 ? "Computing…"
                                 : "Recomputing…")
-                          : "Last edited TODO"}
+                          : formatLastEdited(map.updated_at)}
                       </div>
                     </div>
                     {map.active_job && map.active_job.status !== "failed" && (
@@ -429,103 +457,6 @@ export default function HomePage() {
                       : undefined}
                   </SelectContent>
                 </Select>
-              </SidebarGroupContent>
-            </SidebarGroup>
-
-            {/* Selection */}
-            <SidebarGroup>
-              <SidebarGroupLabel>
-                Selection
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button className="text-muted-foreground hover:text-foreground ml-auto">
-                      <IconInfoCircle className="h-3.5 w-3.5" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent side="right" className="w-80">
-                    <div className="space-y-2">
-                      <h4 className="font-semibold">Selection Tools</h4>
-                      <p className="text-muted-foreground text-sm">
-                        Perform actions on selected map features. Use the lasso
-                        tool or click to select features from the active layer.
-                      </p>
-                      <ul className="text-muted-foreground space-y-1 text-xs">
-                        <li>
-                          • <strong>Assign:</strong> Add to territory
-                        </li>
-                        <li>
-                          • <strong>Move:</strong> Transfer between territories
-                        </li>
-                        <li>
-                          • <strong>Merge:</strong> Combine features
-                        </li>
-                        <li>
-                          • <strong>Split:</strong> Divide features
-                        </li>
-                      </ul>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <div className="bg-muted rounded-lg p-3">
-                  <div className="mb-3 text-center relative">
-                    {hasSelection && (
-                      <button
-                        onClick={clearSelection}
-                        className="absolute right-0 top-0 text-muted-foreground hover:text-foreground transition-colors"
-                        title="Clear selection (Esc)"
-                      >
-                        <IconX className="h-3.5 w-3.5" />
-                      </button>
-                    )}
-                    <div className="text-foreground text-2xl font-bold">
-                      {activeLayer?.order === 0 ? selectedZipCodes.length : selectedNodeIds.length}
-                    </div>
-                    <div className="text-muted-foreground text-xs">
-                      {pluralize(activeLayer?.name ?? "")} selected
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={!hasSelection}
-                      onClick={() => setMoveOpen(true)}
-                      className="col-span-2"
-                    >
-                      Move
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={isZipLayer || selectionCount < 2}
-                      title={
-                        isZipLayer
-                          ? "Cannot merge zip codes"
-                          : selectionCount < 2
-                            ? "Select 2 or more to merge"
-                            : undefined
-                      }
-                      onClick={() => setMergeOpen(true)}
-                    >
-                      Merge
-                    </Button>
-                    <Button variant="outline" size="sm" disabled title="Coming soon">
-                      Split
-                    </Button>
-                    <Button
-                      variant="destructive"
-                      size="sm"
-                      disabled={!hasSelection}
-                      className="col-span-2"
-                      onClick={() => setDeleteOpen(true)}
-                    >
-                      <IconTrash className="h-4 w-4" />
-                      {isZipLayer ? "Unassign" : "Delete"}
-                    </Button>
-                  </div>
-                </div>
               </SidebarGroupContent>
             </SidebarGroup>
 
@@ -782,20 +713,96 @@ export default function HomePage() {
                 </div>
               </SidebarGroupContent>
             </SidebarGroup>
+
+            {/* Exports */}
+            <SidebarGroup>
+              <SidebarGroupLabel>Exports</SidebarGroupLabel>
+              <SidebarGroupContent>
+                <div className="space-y-1.5 px-0.5">
+                  <button
+                    onClick={() => { setExportZttOpen(true) }}
+                    className="group flex w-full items-center gap-3 rounded-md border bg-card p-2.5 text-left transition-colors hover:bg-accent hover:border-accent-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                      <IconFileSpreadsheet className="h-3.5 w-3.5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-medium leading-tight">Export to ZTT</div>
+                      <div className="text-muted-foreground mt-0.5 text-[11px] leading-tight">
+                        Zip-to-territory Excel file
+                      </div>
+                    </div>
+                    <IconChevronRight className="text-muted-foreground/40 h-3.5 w-3.5 shrink-0 transition-colors group-hover:text-muted-foreground" />
+                  </button>
+
+                  <div className="group flex w-full cursor-not-allowed items-center gap-3 rounded-md border border-dashed p-2.5 opacity-45">
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                      <IconPresentation className="h-3.5 w-3.5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <div className="text-xs font-medium leading-tight">Territory Report</div>
+                        <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-px text-[9px] font-semibold uppercase leading-none tracking-wide">
+                          Soon
+                        </span>
+                      </div>
+                      <div className="text-muted-foreground mt-0.5 text-[11px] leading-tight">
+                        PowerPoint slide deck
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </SidebarGroupContent>
+            </SidebarGroup>
           </SidebarContent>
 
-          <SidebarFooter className="border-border border-t p-4">
-            <Button
-              variant="ghost"
-              className="w-full justify-start"
-              onClick={() => {
-                logoutMutation.mutate()
-              }}
-              disabled={logoutMutation.isPending}
-            >
-              <IconLogout className="mr-2 h-4 w-4" />
-              {logoutMutation.isPending ? "Logging out..." : "Logout"}
-            </Button>
+          <SidebarFooter className="border-border border-t p-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-sidebar-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                  <Avatar size="default">
+                    <AvatarFallback>
+                      {me.name
+                        ? me.name.trim().split(/\s+/).map((w) => w[0]).join("").toUpperCase().slice(0, 2)
+                        : me.email[0].toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    {me.name && (
+                      <p className="text-sm font-medium leading-tight truncate">{me.name}</p>
+                    )}
+                    <p className={`text-muted-foreground truncate ${me.name ? "text-xs" : "text-sm"}`}>
+                      {me.email}
+                    </p>
+                  </div>
+                  <IconChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                </button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent side="top" align="start" className="w-56">
+                <DropdownMenuLabel className="font-normal">
+                  <div className="flex flex-col gap-0.5">
+                    {me.name && <span className="font-medium">{me.name}</span>}
+                    <span className="text-xs text-muted-foreground truncate">{me.email}</span>
+                  </div>
+                </DropdownMenuLabel>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => void navigate(AppRoutes.getRoute(PageName.Settings))}
+                >
+                  <IconSettings className="mr-2 h-4 w-4" />
+                  Account settings
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onClick={() => logoutMutation.mutate()}
+                  disabled={logoutMutation.isPending}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <IconLogout className="mr-2 h-4 w-4" />
+                  {logoutMutation.isPending ? "Logging out…" : "Log out"}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
           </SidebarFooter>
         </Sidebar>
       </PageLayout.SideNav>
@@ -856,7 +863,7 @@ export default function HomePage() {
           />
 
           {hoveredHierarchy.length > 0 && layersQuery.data && (
-            <div className="absolute top-4 right-4 rounded-lg border bg-background/90 px-3 py-2 shadow-md backdrop-blur-sm pointer-events-none">
+            <div className={`absolute top-4 rounded-lg border bg-background/90 px-3 py-2 shadow-md backdrop-blur-sm pointer-events-none transition-[right] duration-200 ease-in-out ${hasSelection ? "right-100" : "right-4"}`}>
               <div className="space-y-0.5">
                 {[...layersQuery.data]
                   .sort((a, b) => b.order - a.order)
@@ -922,6 +929,58 @@ export default function HomePage() {
               </Tooltip>
             ))}
           </div>
+
+          {/* Floating action bar — appears when something is selected */}
+          {hasSelection && activeLayer && (
+            <div className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2">
+              <div className="flex items-center gap-1 rounded-full border bg-background/95 px-3 py-1.5 shadow-lg backdrop-blur-sm">
+                <span className="text-sm font-medium px-1">
+                  {selectionCount} {pluralize(activeLayer.name, selectionCount)}
+                </span>
+                <Separator orientation="vertical" className="mx-1 h-4" />
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full"
+                  onClick={() => setMoveOpen(true)}
+                >
+                  Move
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full"
+                  disabled={isZipLayer || selectionCount < 2}
+                  title={
+                    isZipLayer
+                      ? "Cannot merge zip codes"
+                      : selectionCount < 2
+                        ? "Select 2 or more to merge"
+                        : undefined
+                  }
+                  onClick={() => setMergeOpen(true)}
+                >
+                  Merge
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full text-destructive hover:text-destructive"
+                  onClick={() => setDeleteOpen(true)}
+                >
+                  {isZipLayer ? "Unassign" : "Delete"}
+                </Button>
+                <Separator orientation="vertical" className="mx-1 h-4" />
+                <button
+                  onClick={clearSelection}
+                  className="text-muted-foreground hover:text-foreground p-1 transition-colors"
+                  title="Clear selection (Esc)"
+                >
+                  <IconX className="h-3.5 w-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </PageLayout.FullScreenBody>
     </PageLayout>
@@ -954,10 +1013,25 @@ export default function HomePage() {
         />
       </>
     )}
+    <ExportZttDialog
+      open={exportZttOpen}
+      onOpenChange={setExportZttOpen}
+      mapId={currentMap.id}
+      mapName={currentMap.name}
+      layers={layersQuery.data ?? []}
+    />
     <NodeDetailSheet
       result={detailResult}
       layers={layersQuery.data ?? []}
       onClose={() => setDetailResult(null)}
+    />
+    <SelectionSheet
+      selectedNodeIds={selectedNodeIds}
+      selectedZipCodes={selectedZipCodes}
+      activeLayer={activeLayer}
+      layers={layersQuery.data ?? []}
+      dataFieldConfig={currentMap.data_field_config ?? []}
+      onClose={clearSelection}
     />
     </>
   )

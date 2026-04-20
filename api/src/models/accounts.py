@@ -16,3 +16,5 @@ class UserModel(Base, TimestampMixin):
 
     # TODO replace with permissions and real password
     password: Mapped[str]
+
+    name: Mapped[str | None] = mapped_column(default=None)

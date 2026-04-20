@@ -1,8 +1,31 @@
-import { Outlet, Route, Routes } from "react-router-dom"
+import { useEffect } from "react"
+import { Outlet, Route, Routes, useNavigate } from "react-router-dom"
 
+import { AppLoadingScreen } from "./providers/me-provider/loading-screen"
+import { useMaps } from "./providers/me-provider/context"
 import { AppProviders } from "./providers"
 import { AuthProvider } from "./providers/me-provider"
-import { AppRoutes } from "./routes"
+import { AppRoutes, PageName } from "./routes"
+
+const ACTIVE_MAP_KEY = "terramaps_active_map_id"
+
+function RootRedirect() {
+  const maps = useMaps()
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const stored = localStorage.getItem(ACTIVE_MAP_KEY)
+    const target = maps.find((m) => m.id === stored) ?? maps[0]
+    if (target) {
+      localStorage.setItem(ACTIVE_MAP_KEY, target.id)
+      void navigate(AppRoutes.getRoute(PageName.Home, { mapId: target.id }), {
+        replace: true,
+      })
+    }
+  }, [maps, navigate])
+
+  return <AppLoadingScreen />
+}
 
 function App() {
   return (
@@ -23,6 +46,7 @@ function App() {
             </AuthProvider>
           }
         >
+          <Route index element={<RootRedirect />} />
           {AppRoutes.getProtectedRoutes().map((route) => (
             <Route
               key={route.name}

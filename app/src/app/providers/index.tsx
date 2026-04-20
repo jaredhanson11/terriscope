@@ -13,7 +13,7 @@ export const AppProviders = ({ children }: PropsWithChildren<object>) => {
         <QueryClientProvider client={queryClient}>
           <ReactQueryDevtools
             initialIsOpen={false}
-            buttonPosition="bottom-left"
+            buttonPosition="top-right"
           />
           {children}
         </QueryClientProvider>

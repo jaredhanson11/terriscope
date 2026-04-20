@@ -1,6 +1,7 @@
 """Graph schemas."""
 
 from collections.abc import Sequence
+from datetime import datetime
 from typing import Any, Literal
 
 from pydantic import BaseModel, field_validator, model_validator
@@ -27,20 +28,31 @@ class MapJob(BaseModel):
 class Map(BaseModel):
     """Map."""
 
-    id: int
+    id: str
     name: str
     tile_version: int = 0
     data_field_config: list[DataFieldConfig] | None = None
     active_job: MapJob | None = None
+    updated_at: datetime | None = None
 
 
 class Layer(BaseModel):
     """Layer."""
 
     id: int
-    map_id: int
+    map_id: str
     name: str
     order: int
+
+
+class NodeAncestor(BaseModel):
+    """One ancestor level in a node's hierarchy chain."""
+
+    layer_id: int
+    layer_name: str
+    node_id: int
+    node_name: str
+    node_color: str
 
 
 class Node(BaseModel):
@@ -52,6 +64,8 @@ class Node(BaseModel):
     color: str
     parent_node_id: int | None = None
     child_count: int = 0
+    data: dict[str, Any] | None = None
+    ancestors: list[NodeAncestor] | None = None
 
 
 class PaginatedNodes(BaseModel):

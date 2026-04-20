@@ -214,6 +214,7 @@ export const useUpdateNodeMutation = () => {
   return useMutation({
     mutationFn: async (vars: {
       nodeId: number
+      mapId: number
       name: string
       color: string
       parentNodeId: number | null
@@ -229,11 +230,41 @@ export const useUpdateNodeMutation = () => {
       if (response.response.status !== 200 || !response.data) {
         throw new Error("Failed to update node")
       }
-      return response.data
+      return { ...response.data, mapId: vars.mapId }
     },
     onSuccess: (data) => {
       queryClient.setQueryData(queries.getNode(data.id as number).queryKey, data)
       void queryClient.invalidateQueries({ queryKey: queries._nodes() })
+      void queryClient.invalidateQueries({ queryKey: queries.getMap(data.mapId).queryKey })
+    },
+  })
+}
+
+export const useUpdateMeMutation = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (vars: { name: string | null; avatar_url: string | null }) => {
+      const response = await fetchClient.PATCH("/me", {
+        body: { name: vars.name, avatar_url: vars.avatar_url },
+      })
+      if (response.response.status !== 200 || !response.data) {
+        throw new Error("Failed to update profile")
+      }
+      return response.data
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(queries.me().queryKey, data)
+    },
+  })
+}
+
+export const useRequestPasswordResetMutation = () => {
+  return useMutation({
+    mutationFn: async () => {
+      const response = await fetchClient.POST("/me/request-password-reset")
+      if (response.response.status !== 202) {
+        throw new Error("Failed to send password reset email")
+      }
     },
   })
 }

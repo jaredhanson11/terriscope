@@ -5,10 +5,10 @@ from geoalchemy2.elements import WKBElement
 from sqlalchemy import String
 from sqlalchemy.orm import Mapped, mapped_column
 
-from src.models.base import Base
+from src.models.base import Base, TimestampMixin
 
 
-class ZipCodeGeography(Base):
+class ZipCodeGeography(Base, TimestampMixin):
     """Zip code geography model."""
 
     __tablename__ = "geography_zip_codes"

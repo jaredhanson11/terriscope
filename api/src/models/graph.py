@@ -8,15 +8,15 @@ from sqlalchemy import ForeignKey, Index, String, UniqueConstraint, func, select
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, aliased, column_property, declared_attr, mapped_column
 
-from src.models.base import Base, intpk
+from src.models.base import Base, TimestampMixin, intpk, uuidpk
 
 
-class MapModel(Base):
+class MapModel(Base, TimestampMixin):
     """Map model."""
 
     __tablename__ = "maps"
 
-    id: Mapped[intpk] = mapped_column(init=False)
+    id: Mapped[uuidpk] = mapped_column(init=False)
     name: Mapped[str]
     tile_version: Mapped[int] = mapped_column(default=0, server_default="0")
     """Incremented after each successful geometry recompute. Used by the frontend to cache-bust MVT tile URLs."""
@@ -28,13 +28,13 @@ class MapModel(Base):
     """Per-field aggregation config. Each entry: {"field": str, "aggregations": ["sum"|"avg"]}"""
 
 
-class LayerModel(Base):
+class LayerModel(Base, TimestampMixin):
     """Defines a layer in the hierarchy (e.g., Territory, Region, Zip)."""
 
     __tablename__ = "layers"
 
     id: Mapped[intpk] = mapped_column(init=False)
-    map_id: Mapped[int] = mapped_column(ForeignKey("maps.id"))
+    map_id: Mapped[str] = mapped_column(ForeignKey("maps.id"))
     name: Mapped[str]
     order: Mapped[int]
     """Order of the layer (aka 0 will always be zip, 1 will usually be territory, etc.)"""
@@ -49,7 +49,7 @@ class LayerModel(Base):
         )
 
 
-class NodeModel(Base):
+class NodeModel(Base, TimestampMixin):
     """Node."""
 
     __tablename__ = "nodes"
@@ -121,7 +121,7 @@ class NodeModel(Base):
         )
 
 
-class ZipAssignmentModel(Base):
+class ZipAssignmentModel(Base, TimestampMixin):
     """Assignment of a zip code to a layer, optionally under a parent territory node.
 
     A row only exists when there is something meaningful to record — a parent territory,

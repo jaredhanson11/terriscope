@@ -9,7 +9,7 @@ class CreateLayer(BaseModel):
     """CreateLayer."""
 
     name: str
-    map_id: int
+    map_id: str
 
 
 class UpdateNode(BaseModel):
@@ -86,6 +86,37 @@ class BulkDeleteNodes(BaseModel):
         if self.child_action == "reparent" and self.reparent_node_id is None:
             raise ValueError("reparent_node_id is required when child_action is 'reparent'")
         return self
+
+
+class NodeQuery(BaseModel):
+    """Body for POST /nodes/query.
+
+    At least one of layer_id, parent_node_id, or ids must be provided.
+    All conditions are combined with AND.
+    """
+
+    layer_id: int | None = None
+    parent_node_id: int | None = None
+    ids: list[int] | None = None
+    search: str | None = None
+
+
+class ZipQuery(BaseModel):
+    """Body for POST /zip-assignments/query.
+
+    layer_id is always required. zip_codes narrows to a specific set (e.g. lasso selection).
+    search filters by zip code prefix/substring.
+    """
+
+    layer_id: int
+    zip_codes: list[str] | None = None
+    search: str | None = None
+
+    @field_validator("zip_codes")
+    @classmethod
+    def pad_zip_codes(cls, v: list[str] | None) -> list[str] | None:
+        """Ensure zip codes are always zero-padded to 5 characters."""
+        return [z.zfill(5) for z in v] if v else v
 
 
 class BulkAssignZips(BaseModel):

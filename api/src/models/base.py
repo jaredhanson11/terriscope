@@ -5,11 +5,13 @@ from datetime import UTC, datetime
 from typing import Annotated, ClassVar, Literal
 
 import sqlalchemy
-from sqlalchemy import DateTime, Integer, MetaData, func
+from sqlalchemy import DateTime, Integer, MetaData, func, text
+from sqlalchemy.dialects.postgresql import UUID as PgUUID
 from sqlalchemy.orm import DeclarativeBase, Mapped, MappedAsDataclass, mapped_column
 
 # Helper types for model colums
 intpk = Annotated[int, mapped_column(Integer, primary_key=True, autoincrement=True)]
+uuidpk = Annotated[str, mapped_column(PgUUID(as_uuid=False), primary_key=True, server_default=text("gen_random_uuid()"))]
 
 
 class Base(MappedAsDataclass, DeclarativeBase):

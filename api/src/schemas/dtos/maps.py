@@ -38,5 +38,5 @@ class ImportMap(BaseModel):
 class ImportMapResponse(BaseModel):
     """ImportMapResponse."""
 
-    map_id: int
+    map_id: str
     # TODO add warnings/errors

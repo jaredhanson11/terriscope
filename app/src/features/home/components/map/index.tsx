@@ -17,8 +17,7 @@ import { refreshTileSources, updateLayers, updateSources } from "./utils"
 
 const EMPTY_STYLE = {
   version: 8 as const,
-  glyphs:
-    "https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf",
+  glyphs: "https://fonts.openmaptiles.org/{fontstack}/{range}.pbf",
   sources: {},
   layers: [],
 }
@@ -212,7 +211,7 @@ export const Map = forwardRef<
           const zipCode = feature.properties?.zip_code as string | undefined
           if (zipCode) onClickSelect({ zipCode }, additive)
         } else {
-          const nodeId = feature.properties?.id as number | undefined
+          const nodeId = feature.id as number | undefined
           if (nodeId != null) onClickSelect({ nodeId }, additive)
         }
       } else {

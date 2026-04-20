@@ -66,23 +66,20 @@ class ComputationService(BaseService):
                 ), calc AS (
                   SELECT ch.pid,
                          ch.inputs_hash AS signature_hash,
-                         -- TODO: re-enable geom and geom_z15 once perf baseline is confirmed
-                         -- ST_UnaryUnion(ST_Collect(gz.geom))     AS union_geom,
+                         ST_UnaryUnion(ST_Collect(gz.geom))     AS union_geom,
                          ST_UnaryUnion(ST_Collect(gz.geom_z3))  AS union_z3,
                          ST_UnaryUnion(ST_Collect(gz.geom_z7))  AS union_z7,
                          ST_UnaryUnion(ST_Collect(gz.geom_z11)) AS union_z11
-                         -- ST_UnaryUnion(ST_Collect(gz.geom_z15)) AS union_z15
                   FROM changed ch
                   JOIN zip_assignments za ON za.parent_node_id = ch.pid
                   JOIN geography_zip_codes gz ON gz.zip_code = za.zip_code
                   GROUP BY ch.pid, ch.inputs_hash
                 ), upd AS (
                   UPDATE nodes p
-                  SET -- geom                  = calc.union_geom,
+                  SET geom                  = calc.union_geom,
                       geom_z3               = calc.union_z3,
                       geom_z7               = calc.union_z7,
                       geom_z11              = calc.union_z11,
-                      -- geom_z15              = calc.union_z15,
                       geom_inputs_cache_key = calc.signature_hash,
                       geom_cache_key        = calc.signature_hash
                   FROM calc

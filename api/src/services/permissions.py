@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class PermissionService(BaseService):
     """Permission service."""
 
-    def add_map_role(self, user_id: int, map_id: int, role: MapRole) -> UserMapRoleModel:
+    def add_map_role(self, user_id: int, map_id: str, role: MapRole) -> UserMapRoleModel:
         """Add a map role to a user."""
         user_map_role = UserMapRoleModel(
             role=role,
@@ -32,7 +32,7 @@ class PermissionService(BaseService):
         self.db.query(UserMapRoleModel).filter_by(user_id=user_id, map_id=map_id).delete()
         self.db.flush()
 
-    def update_map_role(self, user_id: int, map_id: int, role: MapRole) -> UserMapRoleModel:
+    def update_map_role(self, user_id: int, map_id: str, role: MapRole) -> UserMapRoleModel:
         """Update a map role for a user."""
         user_map_role = self.db.query(UserMapRoleModel).filter_by(user_id=user_id, map_id=map_id).one()
         user_map_role.role = role
@@ -42,7 +42,7 @@ class PermissionService(BaseService):
     def check_for_map_access(
         self,
         user_id: int,
-        map_id: int,
+        map_id: str,
         map_roles: list[MapRole],
     ) -> bool:
         """Check if the user has any of the roles in the list."""

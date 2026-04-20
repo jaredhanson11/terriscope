@@ -1,10 +1,16 @@
 import { queryOptions } from "@tanstack/react-query"
 
 import { fetchClient } from "@/fetch-client"
+import type { components } from "@/lib/api/v1"
+
+type NodeQuery = components["schemas"]["NodeQuery"]
+type ZipQuery = components["schemas"]["ZipQuery"]
 
 const ACTIVE_JOB_STATUSES = new Set(["pending", "processing", "failed"])
 
-function isJobActive(data: { active_job?: { status: string } | null } | undefined): boolean {
+function isJobActive(
+  data: { active_job?: { status: string } | null } | undefined,
+): boolean {
   return !!data?.active_job && ACTIVE_JOB_STATUSES.has(data.active_job.status)
 }
 
@@ -25,7 +31,7 @@ export const queries = {
         return response.data
       },
     }),
-  listLayers: (mapId: number) =>
+  listLayers: (mapId: string) =>
     queryOptions({
       queryKey: [...queries._layers(), "list", { mapId }],
       queryFn: async () => {
@@ -38,15 +44,16 @@ export const queries = {
         return response.data
       },
     }),
-  listNodes: (layerId: number, page = 1, pageSize = 100) =>
+  queryNodes: (body: NodeQuery, page = 1, pageSize = 50) =>
     queryOptions({
-      queryKey: [...queries._nodes(), "list", { layerId, page, pageSize }],
+      queryKey: [...queries._nodes(), "query", { body, page, pageSize }],
       queryFn: async () => {
-        const response = await fetchClient.GET("/nodes", {
-          params: { query: { layer_id: layerId, page, page_size: pageSize } },
+        const response = await fetchClient.POST("/nodes/query", {
+          body,
+          params: { query: { page, page_size: pageSize } },
         })
         if (!response.data || response.response.status !== 200) {
-          throw new Error("Failed to fetch nodes")
+          throw new Error("Failed to query nodes")
         }
         return response.data
       },
@@ -62,7 +69,7 @@ export const queries = {
         return response.data
       },
     }),
-  getMap: (mapId: number) =>
+  getMap: (mapId: string) =>
     queryOptions({
       queryKey: [...queries._maps(), "detail", mapId],
       queryFn: async () => {
@@ -75,9 +82,10 @@ export const queries = {
         return response.data
       },
       // Poll every 2s while a job is active; stop when idle or complete
-      refetchInterval: (query) => (isJobActive(query.state.data) ? 2000 : false),
+      refetchInterval: (query) =>
+        isJobActive(query.state.data) ? 2000 : false,
     }),
-  searchMap: (mapId: number, q: string) =>
+  searchMap: (mapId: string, q: string) =>
     queryOptions({
       queryKey: [...queries._root(), "search", { mapId, q }],
       queryFn: async () => {
@@ -100,6 +108,34 @@ export const queries = {
         })
         if (!response.data || response.response.status !== 200) {
           throw new Error("Failed to fetch node")
+        }
+        return response.data
+      },
+    }),
+  queryZipAssignments: (body: ZipQuery, page = 1, pageSize = 50) =>
+    queryOptions({
+      queryKey: [...queries._nodes(), "zip-query", { body, page, pageSize }],
+      queryFn: async () => {
+        const response = await fetchClient.POST("/zip-assignments/query", {
+          body,
+          params: { query: { page, page_size: pageSize } },
+        })
+        if (!response.data || response.response.status !== 200) {
+          throw new Error("Failed to query zip assignments")
+        }
+        return response.data
+      },
+    }),
+  getZipAssignment: (layerId: number, zipCode: string) =>
+    queryOptions({
+      queryKey: [...queries._root(), "zip-assignment", { layerId, zipCode }],
+      queryFn: async () => {
+        const response = await fetchClient.GET(
+          "/zip-assignments/{layer_id}/{zip_code}/geography",
+          { params: { path: { layer_id: layerId, zip_code: zipCode } } },
+        )
+        if (!response.data || response.response.status !== 200) {
+          throw new Error("Failed to fetch zip assignment")
         }
         return response.data
       },

@@ -7,7 +7,12 @@
       "Bash(pnpm openapi:generate)",
       "Bash(pnpm tsc *)",
       "WebFetch(domain:terramaps.us)",
-      "Bash(curl -s \"https://terramaps.us/assets/logo.png\" -o \"/Users/jared/Documents/Misc/terramaps/terramaps-app/app/src/assets/terramaps-logo.png\")"
+      "Bash(curl -s \"https://terramaps.us/assets/logo.png\" -o \"/Users/jared/Documents/Misc/terramaps/terramaps-app/app/src/assets/terramaps-logo.png\")",
+      "WebSearch",
+      "Bash(poetry run *)",
+      "Bash(pip show *)",
+      "Bash(poetry add *)",
+      "Bash(npx tsc *)"
     ]
   }
 }

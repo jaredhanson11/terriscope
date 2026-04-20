@@ -5,6 +5,7 @@ import LoginPage from "@/features/auth/login.page"
 import RegisterPage from "@/features/auth/register.page"
 import HomePage from "@/features/home/page"
 import InitializePage from "@/features/initialize/page"
+import SettingsPage from "@/features/settings/page"
 
 import { VersionsPage } from "./common/versions.page"
 
@@ -15,6 +16,7 @@ const PageName = {
   Home: "HomePage",
   Login: "LoginPage",
   Register: "RegisterPage",
+  Settings: "SettingsPage",
 } as const
 
 type PageName = (typeof PageName)[keyof typeof PageName]
@@ -34,6 +36,11 @@ export type RouteParamsType = {
       hello?: "world"
     }
   }
+  [PageName.Home]: {
+    path: {
+      mapId: string
+    }
+  }
 }
 
 export type ExtractPathParams<T extends PageName & keyof RouteParamsType> =
@@ -50,7 +57,7 @@ export type ExtractQueryParams<T extends PageName & keyof RouteParamsType> =
 
 const Routes: Record<PageName, Route> = {
   [PageName.Home]: {
-    route: "/",
+    route: "/maps/:mapId",
     component: <HomePage />,
     protected: true,
   },
@@ -76,6 +83,11 @@ const Routes: Record<PageName, Route> = {
   [PageName.Register]: {
     route: "/register",
     component: <RegisterPage />,
+  },
+  [PageName.Settings]: {
+    route: "/settings",
+    component: <SettingsPage />,
+    protected: true,
   },
 }
 

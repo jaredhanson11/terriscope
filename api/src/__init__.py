@@ -9,6 +9,7 @@ from .routers import (
     auth_router,
     common_router,
     docs_router,
+    exports_router,
     graph_router,
     maps_router,
     mvt_router,
@@ -23,3 +24,4 @@ app.include_router(graph_router)
 app.include_router(mvt_router)
 app.include_router(maps_router)
 app.include_router(spatial_router)
+app.include_router(exports_router)

@@ -145,11 +145,10 @@ def get_tile(
                     ST_AsMVTGeom(
                         ST_Transform(
                             CASE
-                                WHEN :z <= 3  THEN CASE WHEN n.geom_z3  IS NOT NULL AND NOT ST_IsEmpty(n.geom_z3)  THEN n.geom_z3  ELSE n.geom END
-                                WHEN :z <= 7  THEN CASE WHEN n.geom_z7  IS NOT NULL AND NOT ST_IsEmpty(n.geom_z7)  THEN n.geom_z7  ELSE n.geom END
-                                WHEN :z <= 11 THEN CASE WHEN n.geom_z11 IS NOT NULL AND NOT ST_IsEmpty(n.geom_z11) THEN n.geom_z11 ELSE n.geom END
-                                WHEN :z <= 15 THEN CASE WHEN n.geom_z15 IS NOT NULL AND NOT ST_IsEmpty(n.geom_z15) THEN n.geom_z15 ELSE n.geom END
-                                ELSE n.geom
+                                WHEN :z <= 3  THEN COALESCE(NULLIF(n.geom_z3,  ST_GeomFromText('GEOMETRYCOLLECTION EMPTY', 4326)), n.geom)
+                                WHEN :z <= 7  THEN COALESCE(NULLIF(n.geom_z7,  ST_GeomFromText('GEOMETRYCOLLECTION EMPTY', 4326)), n.geom)
+                                WHEN :z <= 11 THEN COALESCE(NULLIF(n.geom_z11, ST_GeomFromText('GEOMETRYCOLLECTION EMPTY', 4326)), n.geom)
+                                ELSE COALESCE(n.geom, n.geom_z11, n.geom_z7, n.geom_z3)
                             END,
                             3857
                         ),
@@ -160,8 +159,8 @@ def get_tile(
                     ) AS geom
                 FROM nodes n
                 WHERE n.layer_id = :layer_id
-                  AND n.geom IS NOT NULL
-                  AND ST_Intersects(n.geom, (SELECT geom FROM filter_bounds))
+                  AND COALESCE(n.geom, n.geom_z11, n.geom_z7, n.geom_z3) IS NOT NULL
+                  AND ST_Intersects(COALESCE(n.geom, n.geom_z11, n.geom_z7, n.geom_z3), (SELECT geom FROM filter_bounds))
             )
             SELECT ST_AsMVT(tile_data, 'nodes', 4096, 'geom', 'id')
             FROM tile_data
@@ -272,11 +271,11 @@ def get_label_tile(
                 SELECT
                     n.id,
                     n.name{extra_label_selects},
-                    ST_Transform(ST_PointOnSurface(n.geom), 3857) AS pt
+                    ST_Transform(ST_PointOnSurface(COALESCE(n.geom, n.geom_z11, n.geom_z7, n.geom_z3)), 3857) AS pt
                 FROM nodes n
                 WHERE n.layer_id = :layer_id
-                  AND n.geom IS NOT NULL
-                  AND ST_Intersects(n.geom, (SELECT geom FROM filter_bounds))
+                  AND COALESCE(n.geom, n.geom_z11, n.geom_z7, n.geom_z3) IS NOT NULL
+                  AND ST_Intersects(COALESCE(n.geom, n.geom_z11, n.geom_z7, n.geom_z3), (SELECT geom FROM filter_bounds))
             ),
             tile_data AS (
                 SELECT

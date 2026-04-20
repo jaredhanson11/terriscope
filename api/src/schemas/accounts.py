@@ -8,3 +8,4 @@ class User(BaseModel):
 
     id: int
     email: EmailStr
+    name: str | None = None

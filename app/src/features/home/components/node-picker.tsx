@@ -53,59 +53,41 @@ export function NodePicker({
   const [search, setSearch] = useState("")
   const [page, setPage] = useState(1)
 
-  const nodesQuery = useQuery(queries.listNodes(layerId, page, PAGE_SIZE))
+  const nodesQuery = useQuery(
+    queries.queryNodes(
+      { layer_id: layerId, search: search || undefined },
+      page,
+      PAGE_SIZE,
+    ),
+  )
 
   const excludeSet = new Set(excludeNodeIds)
   const hintSet = new Set(hintNodeIds)
 
-  const allNodes = nodesQuery.data?.nodes ?? []
+  const allNodes = (nodesQuery.data?.nodes ?? []).filter((n) => !excludeSet.has(n.id))
   const totalPages = nodesQuery.data?.total_pages ?? 1
 
-  // Client-side filter by search term, then exclude
-  const filtered = allNodes.filter(
-    (n) =>
-      !excludeSet.has(n.id) &&
-      n.name.toLowerCase().includes(search.toLowerCase()),
-  )
-
-  // Separate hint nodes (shown at top on page 1) from the rest
-  const hintNodes =
-    page === 1 && hintNodeIds.length > 0
-      ? filtered.filter((n) => hintSet.has(n.id))
-      : []
-  const regularNodes = filtered.filter((n) => !hintSet.has(n.id))
+  const hintNodes = page === 1 && hintNodeIds.length > 0 ? allNodes.filter((n) => hintSet.has(n.id)) : []
+  const regularNodes = allNodes.filter((n) => !hintSet.has(n.id))
 
   const handleSearchChange = (val: string) => {
     setSearch(val)
     setPage(1)
   }
 
-  const Row = ({
-    id,
-    name,
-    className,
-  }: {
-    id: number | null
-    name: string
-    className?: string
-  }) => {
-    const selected = value === id
-    return (
-      <button
-        type="button"
-        onClick={() => onChange(id)}
-        className={cn(
-          "w-full rounded-md px-3 py-2 text-left text-sm transition-colors",
-          selected
-            ? "bg-primary text-primary-foreground"
-            : "hover:bg-muted text-foreground",
-          className,
-        )}
-      >
-        {name}
-      </button>
-    )
-  }
+  const Row = ({ id, name, className }: { id: number | null; name: string; className?: string }) => (
+    <button
+      type="button"
+      onClick={() => onChange(id)}
+      className={cn(
+        "w-full rounded-md px-3 py-2 text-left text-sm transition-colors",
+        value === id ? "bg-primary text-primary-foreground" : "hover:bg-muted text-foreground",
+        className,
+      )}
+    >
+      {name}
+    </button>
+  )
 
   return (
     <div className="flex flex-col gap-2">
@@ -131,9 +113,7 @@ export function NodePicker({
           {hintNodes.length > 0 && (
             <>
               {hintLabel && (
-                <p className="text-muted-foreground px-3 pb-1 text-xs font-medium">
-                  {hintLabel}
-                </p>
+                <p className="text-muted-foreground px-3 pb-1 text-xs font-medium">{hintLabel}</p>
               )}
               {hintNodes.map((n) => (
                 <Row key={n.id} id={n.id} name={n.name} />
@@ -143,15 +123,11 @@ export function NodePicker({
           )}
 
           {nodesQuery.isPending && (
-            <p className="text-muted-foreground px-3 py-4 text-center text-sm">
-              Loading…
-            </p>
+            <p className="text-muted-foreground px-3 py-4 text-center text-sm">Loading…</p>
           )}
 
-          {!nodesQuery.isPending && filtered.length === 0 && (
-            <p className="text-muted-foreground px-3 py-4 text-center text-sm">
-              No results
-            </p>
+          {!nodesQuery.isPending && allNodes.length === 0 && (
+            <p className="text-muted-foreground px-3 py-4 text-center text-sm">No results</p>
           )}
 
           {regularNodes.map((n) => (

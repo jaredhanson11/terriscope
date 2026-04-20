@@ -213,6 +213,66 @@
             }
           }
         }
+      },
+      "patch": {
+        "tags": [
+          "Me"
+        ],
+        "summary": "Update Me",
+        "description": "Update the current user's name.",
+        "operationId": "update_me_me_patch",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateMeDTO"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/request-password-reset": {
+      "post": {
+        "tags": [
+          "Me"
+        ],
+        "summary": "Request Password Reset",
+        "description": "Send a password reset email to the current user.",
+        "operationId": "request_password_reset_me_request_password_reset_post",
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          }
+        }
       }
     },
     "/layers": {
@@ -269,7 +329,7 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "integer",
+              "type": "string",
               "title": "Map Id"
             }
           }
@@ -354,14 +414,14 @@
         "description": "Create node.",
         "operationId": "create_node_nodes_post",
         "requestBody": {
-          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/CreateNode"
               }
             }
-          }
+          },
+          "required": true
         },
         "responses": {
           "200": {
@@ -385,47 +445,17 @@
             }
           }
         }
-      },
-      "get": {
+      }
+    },
+    "/nodes/query": {
+      "post": {
         "tags": [
           "Graph"
         ],
-        "summary": "List Nodes",
-        "description": "List nodes filtered by layer_id OR parent_node_id (not both) with pagination.\n\nOnly applies to order>=1 layers. For order=0 (zip layer) use GET /zip-assignments.",
-        "operationId": "list_nodes_nodes_get",
+        "summary": "Query Nodes",
+        "description": "Query nodes with optional filters. At least one of layer_id, parent_node_id, or ids required.\n\nAll provided filters are combined with AND. Results are ordered by name.\nReplaces GET /nodes \u2014 use this for layer listing, parent picking, and selection detail.",
+        "operationId": "query_nodes_nodes_query_post",
         "parameters": [
-          {
-            "name": "layer_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Layer Id"
-            }
-          },
-          {
-            "name": "parent_node_id",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "integer"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Parent Node Id"
-            }
-          },
           {
             "name": "page",
             "in": "query",
@@ -442,11 +472,21 @@
             "required": false,
             "schema": {
               "type": "integer",
-              "default": 100,
+              "default": 50,
               "title": "Page Size"
             }
           }
         ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NodeQuery"
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Successful Response",
@@ -477,7 +517,7 @@
           "Graph"
         ],
         "summary": "Get Node",
-        "description": "Get node by id.",
+        "description": "Get node by id, including computed data and full ancestor chain.",
         "operationId": "get_node_nodes__node_id__get",
         "parameters": [
           {
@@ -849,6 +889,70 @@
         }
       }
     },
+    "/zip-assignments/query": {
+      "post": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "Query Zip Assignments",
+        "description": "Query zip codes, joining against zip_assignments for the given layer.\n\nZips without an assignment row are returned with implicit defaults\n(color=#FFFFFF, parent_node_id=null) \u2014 same contract as the single-zip\n/geography endpoint. layer_id is always required; zip_codes narrows to a\nspecific set (e.g. a lasso selection); search filters by zip code substring.\nResults are ordered by zip code.",
+        "operationId": "query_zip_assignments_zip_assignments_query_post",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1,
+              "title": "Page"
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 50,
+              "title": "Page Size"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ZipQuery"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedZipAssignments"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/zip-assignments/{layer_id}/bulk": {
       "put": {
         "tags": [
@@ -1125,7 +1229,7 @@
             "in": "query",
             "required": true,
             "schema": {
-              "type": "integer",
+              "type": "string",
               "title": "Map Id"
             }
           },
@@ -1445,7 +1549,7 @@
             "in": "path",
             "required": true,
             "schema": {
-              "type": "integer",
+              "type": "string",
               "title": "Map Id"
             }
           }
@@ -1500,6 +1604,47 @@
                 "schema": {
                   "$ref": "#/components/schemas/SpatialSelectResponse"
                 }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/maps/{map_id}/export/ztt": {
+      "get": {
+        "tags": [
+          "Exports"
+        ],
+        "summary": "Export Ztt",
+        "description": "Export a map's zip-to-territory hierarchy as an Excel (.xlsx) file.\n\nColumns: zip_code | <layer order=1 name> | <layer order=2 name> | \u2026\nOne row per assigned zip code, with the full ancestor chain filled in.",
+        "operationId": "export_ztt_maps__map_id__export_ztt_get",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Map Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
               }
             }
           },
@@ -1671,7 +1816,7 @@
             "title": "Name"
           },
           "map_id": {
-            "type": "integer",
+            "type": "string",
             "title": "Map Id"
           }
         },
@@ -1891,7 +2036,7 @@
             "title": "Id"
           },
           "map_id": {
-            "type": "integer",
+            "type": "string",
             "title": "Map Id"
           },
           "name": {
@@ -1960,7 +2105,7 @@
       "Map": {
         "properties": {
           "id": {
-            "type": "integer",
+            "type": "string",
             "title": "Id"
           },
           "name": {
@@ -1995,6 +2140,18 @@
                 "type": "null"
               }
             ]
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
           }
         },
         "type": "object",
@@ -2137,6 +2294,32 @@
             "type": "integer",
             "title": "Child Count",
             "default": 0
+          },
+          "data": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data"
+          },
+          "ancestors": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/NodeAncestor"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ancestors"
           }
         },
         "type": "object",
@@ -2148,6 +2331,94 @@
         ],
         "title": "Node",
         "description": "Node."
+      },
+      "NodeAncestor": {
+        "properties": {
+          "layer_id": {
+            "type": "integer",
+            "title": "Layer Id"
+          },
+          "layer_name": {
+            "type": "string",
+            "title": "Layer Name"
+          },
+          "node_id": {
+            "type": "integer",
+            "title": "Node Id"
+          },
+          "node_name": {
+            "type": "string",
+            "title": "Node Name"
+          },
+          "node_color": {
+            "type": "string",
+            "title": "Node Color"
+          }
+        },
+        "type": "object",
+        "required": [
+          "layer_id",
+          "layer_name",
+          "node_id",
+          "node_name",
+          "node_color"
+        ],
+        "title": "NodeAncestor",
+        "description": "One ancestor level in a node's hierarchy chain."
+      },
+      "NodeQuery": {
+        "properties": {
+          "layer_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Layer Id"
+          },
+          "parent_node_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Node Id"
+          },
+          "ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ids"
+          },
+          "search": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search"
+          }
+        },
+        "type": "object",
+        "title": "NodeQuery",
+        "description": "Body for POST /nodes/query.\n\nAt least one of layer_id, parent_node_id, or ids must be provided.\nAll conditions are combined with AND."
       },
       "PaginatedNodes": {
         "properties": {
@@ -2525,6 +2796,35 @@
         ],
         "title": "SpatialSelectResponse"
       },
+      "UpdateMeDTO": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "avatar_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avatar Url"
+          }
+        },
+        "type": "object",
+        "title": "UpdateMeDTO",
+        "description": "PATCH body for updating the current user's profile."
+      },
       "UpdateNode": {
         "properties": {
           "parent_node_id": {
@@ -2566,6 +2866,17 @@
             "type": "string",
             "format": "email",
             "title": "Email"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
           }
         },
         "type": "object",
@@ -2676,6 +2987,45 @@
         ],
         "title": "ZipAssignment",
         "description": "A zip code's assignment state on a map layer.\n\nRepresents a zip_assignments row. Implicit zips (no row) are only visible\nvia MVT tiles and are not returned by the API as individual objects."
+      },
+      "ZipQuery": {
+        "properties": {
+          "layer_id": {
+            "type": "integer",
+            "title": "Layer Id"
+          },
+          "zip_codes": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Zip Codes"
+          },
+          "search": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Search"
+          }
+        },
+        "type": "object",
+        "required": [
+          "layer_id"
+        ],
+        "title": "ZipQuery",
+        "description": "Body for POST /zip-assignments/query.\n\nlayer_id is always required. zip_codes narrows to a specific set (e.g. lasso selection).\nsearch filters by zip code prefix/substring."
       }
     }
   }

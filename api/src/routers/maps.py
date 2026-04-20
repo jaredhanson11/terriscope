@@ -1,8 +1,11 @@
 """Maps router."""
 
 import hashlib
+import logging
 import uuid
 from typing import Any, TypedDict
+
+logger = logging.getLogger(__name__)
 
 import pandas as pd
 from fastapi import APIRouter, HTTPException
@@ -58,7 +61,7 @@ class BulkInsertZipAssignment(TypedDict):
     data_inputs_cache_key: str
 
 
-def _load_active_job(db: DatabaseSession, map_id: int) -> MapJob | None:
+def _load_active_job(db: DatabaseSession, map_id: str) -> MapJob | None:
     """Return the most recent non-complete job for a map, or None."""
     job = db.execute(
         select(MapJobModel)
@@ -87,6 +90,7 @@ def _map_to_schema(map_model: MapModel, active_job: MapJob | None) -> Map:
         tile_version=map_model.tile_version,
         data_field_config=map_model.data_field_config,
         active_job=active_job,
+        updated_at=map_model.updated_at,
     )
 
 
@@ -131,6 +135,22 @@ def create_map(
 
     df_values = pd.DataFrame(import_data.values, columns=list[str](import_data.headers)).astype(object)
 
+    # Excel auto-types numeric-looking cells as int or float (territory "1" → 1 or 1.0).
+    # Normalize all numeric values to consistent strings so that int(1), float(1.0),
+    # numpy.int64(1), and numpy.float64(1.0) all become "1" before dedup, node
+    # insertion, and parent lookup. Booleans and NaN/None are left unchanged.
+    def _normalize_cell(x: object) -> object:
+        if isinstance(x, bool) or pd.isna(x):  # type: ignore[arg-type]
+            return x
+        if isinstance(x, (int, float)):
+            fval = float(x)
+            return str(int(fval)) if fval == int(fval) else str(fval)
+        return x
+
+    for col in [s.header for s in import_data.layers]:
+        if col in df_values.columns:
+            df_values[col] = df_values[col].apply(_normalize_cell)
+
     previous_header: str | None = None
     previous_nodes: pd.DataFrame | None = None  # DataFrame(id, name) from the layer above
 
@@ -140,15 +160,28 @@ def create_map(
         rows_df = df_values[df_idx].drop_duplicates().copy()
         rows_df = rows_df[rows_df[header].notna() & (rows_df[header] != "")]
 
-        # Map parent node IDs by name. Both sides are normalized to str because
-        # Excel numeric cells arrive as int/float but nodes are stored as str(name).
+        # Map parent node IDs by name. After normalization both sides are strings.
         if previous_nodes is not None and previous_header is not None:
             name_to_id: dict[str, int] = dict(
                 zip(previous_nodes["name"].astype(str), previous_nodes["id"])
             )
             rows_df["parent_node_id"] = rows_df[previous_header].apply(
-                lambda x: name_to_id.get(str(x)) if pd.notna(x) else None
+                lambda x: name_to_id.get(str(x)) if pd.notna(x) and x != "" else None
             )
+            # Warn on any rows that had a non-empty parent value but got no match
+            misses = rows_df[
+                rows_df["parent_node_id"].isna()
+                & rows_df[previous_header].notna()
+                & (rows_df[previous_header] != "")
+            ]
+            if not misses.empty:
+                miss_vals = misses[previous_header].unique().tolist()[:10]
+                logger.warning(
+                    "Parent lookup missed %d rows for header=%r. "
+                    "Sample unmatched values: %s. name_to_id keys sample: %s",
+                    len(misses), previous_header,
+                    miss_vals, list(name_to_id.keys())[:10],
+                )
         else:
             rows_df["parent_node_id"] = None
 
@@ -237,7 +270,7 @@ def list_maps(
 
     # Fetch the most recent non-complete job per map in a single query.
     # We use a subquery to rank jobs per map and take the latest one.
-    active_jobs: dict[int, MapJob] = {}
+    active_jobs: dict[str, MapJob] = {}
     if map_ids:
         job_rows = db.execute(
             select(MapJobModel)
@@ -245,7 +278,7 @@ def list_maps(
             .order_by(MapJobModel.map_id, MapJobModel.created_at.desc())
         ).scalars().all()
 
-        seen: set[int] = set()
+        seen: set[str] = set()
         for job in job_rows:
             if job.map_id not in seen:
                 seen.add(job.map_id)
@@ -263,7 +296,7 @@ def list_maps(
 
 @maps_router.get("/{map_id}", response_model=Map)
 def get_map(
-    map_id: int,
+    map_id: str,
     db: DatabaseSession,
     current_user: CurrentUserDependency,
     permission_service: PermissionsServiceDependency,

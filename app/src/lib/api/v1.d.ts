@@ -161,6 +161,30 @@ export interface paths {
         delete?: never;
         options?: never;
         head?: never;
+        /**
+         * Update Me
+         * @description Update the current user's name.
+         */
+        patch: operations["update_me_me_patch"];
+        trace?: never;
+    };
+    "/me/request-password-reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Request Password Reset
+         * @description Send a password reset email to the current user.
+         */
+        post: operations["request_password_reset_me_request_password_reset_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
         patch?: never;
         trace?: never;
     };
@@ -215,19 +239,36 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /**
-         * List Nodes
-         * @description List nodes filtered by layer_id OR parent_node_id (not both) with pagination.
-         *
-         *     Only applies to order>=1 layers. For order=0 (zip layer) use GET /zip-assignments.
-         */
-        get: operations["list_nodes_nodes_get"];
+        get?: never;
         put?: never;
         /**
          * Create Node
          * @description Create node.
          */
         post: operations["create_node_nodes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/nodes/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Query Nodes
+         * @description Query nodes with optional filters. At least one of layer_id, parent_node_id, or ids required.
+         *
+         *     All provided filters are combined with AND. Results are ordered by name.
+         *     Replaces GET /nodes — use this for layer listing, parent picking, and selection detail.
+         */
+        post: operations["query_nodes_nodes_query_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -243,7 +284,7 @@ export interface paths {
         };
         /**
          * Get Node
-         * @description Get node by id.
+         * @description Get node by id, including computed data and full ancestor chain.
          */
         get: operations["get_node_nodes__node_id__get"];
         /**
@@ -351,6 +392,32 @@ export interface paths {
         get: operations["list_zip_assignments_zip_assignments_get"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/zip-assignments/query": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Query Zip Assignments
+         * @description Query zip codes, joining against zip_assignments for the given layer.
+         *
+         *     Zips without an assignment row are returned with implicit defaults
+         *     (color=#FFFFFF, parent_node_id=null) — same contract as the single-zip
+         *     /geography endpoint. layer_id is always required; zip_codes narrows to a
+         *     specific set (e.g. a lasso selection); search filters by zip code substring.
+         *     Results are ordered by zip code.
+         */
+        post: operations["query_zip_assignments_zip_assignments_query_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -606,6 +673,29 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/maps/{map_id}/export/ztt": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Export Ztt
+         * @description Export a map's zip-to-territory hierarchy as an Excel (.xlsx) file.
+         *
+         *     Columns: zip_code | <layer order=1 name> | <layer order=2 name> | …
+         *     One row per assigned zip code, with the full ancestor chain filled in.
+         */
+        get: operations["export_ztt_maps__map_id__export_ztt_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -679,7 +769,7 @@ export interface components {
             /** Name */
             name: string;
             /** Map Id */
-            map_id: number;
+            map_id: string;
         };
         /**
          * CreateNode
@@ -770,7 +860,7 @@ export interface components {
             /** Id */
             id: number;
             /** Map Id */
-            map_id: number;
+            map_id: string;
             /** Name */
             name: string;
             /** Order */
@@ -810,7 +900,7 @@ export interface components {
          */
         Map: {
             /** Id */
-            id: number;
+            id: string;
             /** Name */
             name: string;
             /**
@@ -821,6 +911,8 @@ export interface components {
             /** Data Field Config */
             data_field_config?: components["schemas"]["DataFieldConfig"][] | null;
             active_job?: components["schemas"]["MapJob"] | null;
+            /** Updated At */
+            updated_at?: string | null;
         };
         /**
          * MapJob
@@ -880,6 +972,45 @@ export interface components {
              * @default 0
              */
             child_count: number;
+            /** Data */
+            data?: {
+                [key: string]: unknown;
+            } | null;
+            /** Ancestors */
+            ancestors?: components["schemas"]["NodeAncestor"][] | null;
+        };
+        /**
+         * NodeAncestor
+         * @description One ancestor level in a node's hierarchy chain.
+         */
+        NodeAncestor: {
+            /** Layer Id */
+            layer_id: number;
+            /** Layer Name */
+            layer_name: string;
+            /** Node Id */
+            node_id: number;
+            /** Node Name */
+            node_name: string;
+            /** Node Color */
+            node_color: string;
+        };
+        /**
+         * NodeQuery
+         * @description Body for POST /nodes/query.
+         *
+         *     At least one of layer_id, parent_node_id, or ids must be provided.
+         *     All conditions are combined with AND.
+         */
+        NodeQuery: {
+            /** Layer Id */
+            layer_id?: number | null;
+            /** Parent Node Id */
+            parent_node_id?: number | null;
+            /** Ids */
+            ids?: number[] | null;
+            /** Search */
+            search?: string | null;
         };
         /**
          * PaginatedNodes
@@ -1027,6 +1158,16 @@ export interface components {
             zip_codes: string[];
         };
         /**
+         * UpdateMeDTO
+         * @description PATCH body for updating the current user's profile.
+         */
+        UpdateMeDTO: {
+            /** Name */
+            name?: string | null;
+            /** Avatar Url */
+            avatar_url?: string | null;
+        };
+        /**
          * UpdateNode
          * @description UpdateNode.
          */
@@ -1050,6 +1191,8 @@ export interface components {
              * Format: email
              */
             email: string;
+            /** Name */
+            name?: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -1088,6 +1231,21 @@ export interface components {
             data?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * ZipQuery
+         * @description Body for POST /zip-assignments/query.
+         *
+         *     layer_id is always required. zip_codes narrows to a specific set (e.g. lasso selection).
+         *     search filters by zip code prefix/substring.
+         */
+        ZipQuery: {
+            /** Layer Id */
+            layer_id: number;
+            /** Zip Codes */
+            zip_codes?: string[] | null;
+            /** Search */
+            search?: string | null;
         };
     };
     responses: never;
@@ -1284,10 +1442,63 @@ export interface operations {
             };
         };
     };
+    update_me_me_patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateMeDTO"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    request_password_reset_me_request_password_reset_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
     list_layers_layers_get: {
         parameters: {
             query: {
-                map_id: number;
+                map_id: string;
             };
             header?: never;
             path?: never;
@@ -1379,40 +1590,6 @@ export interface operations {
             };
         };
     };
-    list_nodes_nodes_get: {
-        parameters: {
-            query?: {
-                layer_id?: number | null;
-                parent_node_id?: number | null;
-                page?: number;
-                page_size?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PaginatedNodes"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
     create_node_nodes_post: {
         parameters: {
             query?: never;
@@ -1433,6 +1610,42 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Node"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    query_nodes_nodes_query_post: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["NodeQuery"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedNodes"];
                 };
             };
             /** @description Validation Error */
@@ -1705,6 +1918,42 @@ export interface operations {
             };
         };
     };
+    query_zip_assignments_zip_assignments_query_post: {
+        parameters: {
+            query?: {
+                page?: number;
+                page_size?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ZipQuery"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PaginatedZipAssignments"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     bulk_assign_zips_zip_assignments__layer_id__bulk_put: {
         parameters: {
             query?: never;
@@ -1875,7 +2124,7 @@ export interface operations {
     search_map_search_get: {
         parameters: {
             query: {
-                map_id: number;
+                map_id: string;
                 q: string;
                 layer_id?: number | null;
                 limit?: number;
@@ -2056,7 +2305,7 @@ export interface operations {
             query?: never;
             header?: never;
             path: {
-                map_id: number;
+                map_id: string;
             };
             cookie?: never;
         };
@@ -2102,6 +2351,37 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpatialSelectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    export_ztt_maps__map_id__export_ztt_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                map_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
                 };
             };
             /** @description Validation Error */

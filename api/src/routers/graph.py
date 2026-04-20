@@ -5,12 +5,13 @@ from collections.abc import Sequence
 
 from fastapi import APIRouter, HTTPException
 from geoalchemy2.functions import ST_X, ST_Y, ST_Centroid
-from sqlalchemy import delete, func, select
+from sqlalchemy import and_, delete, func, select
+from sqlalchemy.orm import undefer
 
 from src.app.database import DatabaseSession
 from src.exceptions import TerramapsException
 from src.models.geography import ZipCodeGeography
-from src.models.graph import LayerModel, NodeModel, ZipAssignmentModel
+from src.models.graph import LayerModel, MapModel, NodeModel, ZipAssignmentModel
 from src.models.jobs import MapJobModel
 from src.schemas.dtos.graph import (
     AssignZip,
@@ -20,12 +21,15 @@ from src.schemas.dtos.graph import (
     CreateLayer,
     CreateNode,
     MergeNodes,
+    NodeQuery,
     ReparentNodes,
     UpdateNode,
+    ZipQuery,
 )
 from src.schemas.graph import (
     Layer,
     Node,
+    NodeAncestor,
     PaginatedNodes,
     PaginatedZipAssignments,
     SearchResultItem,
@@ -39,7 +43,7 @@ from src.services.permissions import PermissionsServiceDependency
 graph_router = APIRouter(prefix="", tags=["Graph"])
 
 
-def _enqueue_recompute(db: DatabaseSession, map_id: int) -> str:
+def _enqueue_recompute(db: DatabaseSession, map_id: str) -> str:
     """Stage a recompute_geometry job record in the current session and return its ID.
 
     The caller MUST commit before dispatching the Celery task so the worker
@@ -64,6 +68,14 @@ def _enqueue_recompute(db: DatabaseSession, map_id: int) -> str:
     )
     db.add(job)
     return job_id
+
+
+def _bump_tile_version(db: DatabaseSession, map_id: str) -> None:
+    """Increment tile_version so clients know to re-fetch tiles after an attribute change."""
+    map_model = db.get(MapModel, map_id)
+    if map_model:
+        map_model.tile_version += 1
+
 
 
 # ---------------------------------------------------------------------------
@@ -94,7 +106,7 @@ def create_layer(
 @graph_router.get("/layers", response_model=list[Layer])
 def list_layers(
     db: DatabaseSession,
-    map_id: int,
+    map_id: str,
     current_user: CurrentUserDependency,
     permission_service: PermissionsServiceDependency,
 ) -> list[Layer]:
@@ -167,63 +179,77 @@ def create_node(
     )
 
 
-@graph_router.get("/nodes", response_model=PaginatedNodes)
-def list_nodes(
+def _resolve_node_query_map_id(db: DatabaseSession, body: NodeQuery) -> str:
+    """Derive map_id from whichever anchor field is present in a NodeQuery."""
+    if body.layer_id is not None:
+        layer = db.get(LayerModel, body.layer_id)
+        if not layer:
+            raise HTTPException(404, "Layer not found")
+        if layer.order == 0:
+            raise HTTPException(400, "Layer order=0 is the zip layer. Use /zip-assignments instead.")
+        return layer.map_id
+    if body.parent_node_id is not None:
+        parent = db.get(NodeModel, body.parent_node_id)
+        layer = db.get(LayerModel, parent.layer_id) if parent else None
+        if not layer:
+            raise HTTPException(404, "Parent node not found")
+        return layer.map_id
+    # ids-only path
+    anchor = db.get(NodeModel, body.ids[0])  # type: ignore[index]
+    layer = db.get(LayerModel, anchor.layer_id) if anchor else None
+    if not layer:
+        raise HTTPException(404, "Node not found")
+    return layer.map_id
+
+
+@graph_router.post("/nodes/query", response_model=PaginatedNodes)
+def query_nodes(
+    body: NodeQuery,
     db: DatabaseSession,
     current_user: CurrentUserDependency,
     permission_service: PermissionsServiceDependency,
-    layer_id: int | None = None,
-    parent_node_id: int | None = None,
     page: int = 1,
-    page_size: int = 100,
+    page_size: int = 50,
 ):
-    """List nodes filtered by layer_id OR parent_node_id (not both) with pagination.
+    """Query nodes with optional filters. At least one of layer_id, parent_node_id, or ids required.
 
-    Only applies to order>=1 layers. For order=0 (zip layer) use GET /zip-assignments.
+    All provided filters are combined with AND. Results are ordered by name.
+    Replaces GET /nodes — use this for layer listing, parent picking, and selection detail.
     """
-    if layer_id is not None and parent_node_id is not None:
-        raise HTTPException(400, "Provide either layer_id or parent_node_id, not both")
-    elif layer_id is not None:
-        layer = db.get(LayerModel, layer_id)
-        if not layer or not permission_service.check_for_map_access(
-            user_id=current_user.id,
-            map_id=layer.map_id,
-            map_roles=["OWNER"],
-        ):
-            raise HTTPException(403)
-        if layer.order == 0:
-            raise HTTPException(400, "Layer order=0 is the zip layer. Use GET /zip-assignments instead.")
-        filter_condition = NodeModel.layer_id == layer_id
-    elif parent_node_id is not None:
-        parent_node = db.get(NodeModel, parent_node_id)
-        layer = db.get(LayerModel, parent_node.layer_id) if parent_node else None
-        if not layer or not permission_service.check_for_map_access(
-            user_id=current_user.id,
-            map_id=layer.map_id,
-            map_roles=["OWNER"],
-        ):
-            raise HTTPException(403)
-        filter_condition = NodeModel.parent_node_id == parent_node_id
-    else:
-        raise HTTPException(400, "Must provide either layer_id or parent_node_id")
+    if body.layer_id is None and body.parent_node_id is None and not body.ids:
+        raise HTTPException(400, "Provide at least one of: layer_id, parent_node_id, ids")
 
-    total = db.execute(select(func.count(NodeModel.id)).filter(filter_condition)).scalar() or 0
+    map_id = _resolve_node_query_map_id(db, body)
+    if not permission_service.check_for_map_access(
+        user_id=current_user.id, map_id=map_id, map_roles=["OWNER"]
+    ):
+        raise HTTPException(403)
+
+    conditions = []
+    if body.layer_id is not None:
+        conditions.append(NodeModel.layer_id == body.layer_id)
+    if body.parent_node_id is not None:
+        conditions.append(NodeModel.parent_node_id == body.parent_node_id)
+    if body.ids:
+        conditions.append(NodeModel.id.in_(body.ids))
+    if body.search:
+        conditions.append(NodeModel.name.ilike(f"%{body.search}%"))
+
+    total = db.execute(select(func.count(NodeModel.id)).where(*conditions)).scalar() or 0
     total_pages = (total + page_size - 1) // page_size if total > 0 else 0
     offset = (page - 1) * page_size
-
-    nodes = db.execute(select(NodeModel).filter(filter_condition).offset(offset).limit(page_size)).scalars().all()
+    nodes = (
+        db.execute(
+            select(NodeModel).where(*conditions).order_by(NodeModel.name).offset(offset).limit(page_size)
+        )
+        .scalars()
+        .all()
+    )
 
     return PaginatedNodes(
         nodes=[
-            Node(
-                id=node.id,
-                layer_id=node.layer_id,
-                color=node.color,
-                name=node.name,
-                parent_node_id=node.parent_node_id,
-                child_count=node.child_count,
-            )
-            for node in nodes
+            Node(id=n.id, layer_id=n.layer_id, color=n.color, name=n.name, parent_node_id=n.parent_node_id, child_count=n.child_count)
+            for n in nodes
         ],
         total=total,
         page=page,
@@ -239,12 +265,13 @@ def get_node(
     current_user: CurrentUserDependency,
     permission_service: PermissionsServiceDependency,
 ):
-    """Get node by id."""
+    """Get node by id, including computed data and full ancestor chain."""
     result = (
         db.execute(
             select(NodeModel, LayerModel)
             .join(LayerModel, NodeModel.layer_id == LayerModel.id)
             .filter(NodeModel.id == node_id)
+            .options(undefer(NodeModel.data))
         )
         .tuples()
         .one_or_none()
@@ -258,6 +285,35 @@ def get_node(
         map_roles=["OWNER"],
     ):
         raise HTTPException(403)
+
+    # Walk parent_node_id chain upward to build the full ancestor list.
+    # Hierarchies are shallow (3-4 levels max) so N+1 is acceptable here.
+    ancestors: list[NodeAncestor] = []
+    current_parent_id = node.parent_node_id
+    while current_parent_id is not None:
+        parent_result = (
+            db.execute(
+                select(NodeModel, LayerModel)
+                .join(LayerModel, NodeModel.layer_id == LayerModel.id)
+                .filter(NodeModel.id == current_parent_id)
+            )
+            .tuples()
+            .one_or_none()
+        )
+        if not parent_result:
+            break
+        parent_node, parent_layer = parent_result
+        ancestors.append(
+            NodeAncestor(
+                layer_id=parent_layer.id,
+                layer_name=parent_layer.name,
+                node_id=parent_node.id,
+                node_name=parent_node.name,
+                node_color=parent_node.color,
+            )
+        )
+        current_parent_id = parent_node.parent_node_id
+
     return Node(
         id=node.id,
         layer_id=node.layer_id,
@@ -265,6 +321,8 @@ def get_node(
         name=node.name,
         parent_node_id=node.parent_node_id,
         child_count=node.child_count,
+        data=node.data,
+        ancestors=ancestors if ancestors else None,
     )
 
 
@@ -300,6 +358,8 @@ def update_node(
         graph_service.update_node(node=node, node_data=node_data, layer=layer)
     except TerramapsException as e:
         raise HTTPException(400, e.msg) from e
+    _bump_tile_version(db, layer.map_id)
+
     db.commit()
     return Node(
         id=node.id,
@@ -339,6 +399,8 @@ def delete_node(
         raise HTTPException(403)
     if layer.order == 0:
         raise HTTPException(400, "Cannot delete zip-layer entries via this endpoint. Use DELETE /zip-assignments.")
+    _bump_tile_version(db, layer.map_id)
+
     db.execute(delete(NodeModel).where(NodeModel.id == node_id))
     db.commit()
 
@@ -368,8 +430,10 @@ def bulk_update_node(
         raise HTTPException(404, f"Can't find nodes: {set(wanted_ids) - found_ids}")
 
     updated: list[Node] = []
+    map_ids: set[str] = set()
     for (node, layer), node_data in zip(nodes_and_layers, node_datas, strict=True):
         graph_service.update_node(node=node, node_data=node_data, layer=layer)
+        map_ids.add(layer.map_id)
         updated.append(
             Node(
                 id=node.id,
@@ -379,6 +443,8 @@ def bulk_update_node(
                 child_count=node.child_count,
             )
         )
+    for map_id in map_ids:
+        _bump_tile_version(db, map_id)
     db.commit()
     return updated
 
@@ -419,6 +485,7 @@ def bulk_reparent_nodes(
     except TerramapsException as e:
         raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
     job_id = _enqueue_recompute(db, map_id)
+
     db.commit()
     from src.workers.tasks.maps import recompute_geometry_task
 
@@ -470,6 +537,7 @@ def merge_nodes(
     except TerramapsException as e:
         raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
     job_id = _enqueue_recompute(db, map_id)
+
     db.commit()
     from src.workers.tasks.maps import recompute_geometry_task
 
@@ -520,6 +588,7 @@ def bulk_delete_nodes(
     except TerramapsException as e:
         raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
     job_id = _enqueue_recompute(db, map_id)
+
     db.commit()
     from src.workers.tasks.maps import recompute_geometry_task
 
@@ -592,6 +661,62 @@ def list_zip_assignments(
     )
 
 
+@graph_router.post("/zip-assignments/query", response_model=PaginatedZipAssignments)
+def query_zip_assignments(
+    body: ZipQuery,
+    db: DatabaseSession,
+    current_user: CurrentUserDependency,
+    permission_service: PermissionsServiceDependency,
+    page: int = 1,
+    page_size: int = 50,
+):
+    """Query zip codes, joining against zip_assignments for the given layer.
+
+    Zips without an assignment row are returned with implicit defaults
+    (color=#FFFFFF, parent_node_id=null) — same contract as the single-zip
+    /geography endpoint. layer_id is always required; zip_codes narrows to a
+    specific set (e.g. a lasso selection); search filters by zip code substring.
+    Results are ordered by zip code.
+    """
+    _check_layer_access(db, body.layer_id, current_user.id, permission_service)
+
+    join_cond = and_(
+        ZipAssignmentModel.zip_code == ZipCodeGeography.zip_code,
+        ZipAssignmentModel.layer_id == body.layer_id,
+    )
+    geo_conditions = []
+    if body.zip_codes:
+        geo_conditions.append(ZipCodeGeography.zip_code.in_(body.zip_codes))
+    if body.search:
+        geo_conditions.append(ZipCodeGeography.zip_code.contains(body.search))
+
+    base = (
+        select(
+            ZipCodeGeography.zip_code,
+            ZipAssignmentModel.parent_node_id,
+            func.coalesce(ZipAssignmentModel.color, "#FFFFFF").label("color"),
+        )
+        .outerjoin(ZipAssignmentModel, join_cond)
+        .where(*geo_conditions)
+    )
+
+    total = db.execute(select(func.count()).select_from(base.subquery())).scalar() or 0
+    total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+    offset = (page - 1) * page_size
+    rows = db.execute(base.order_by(ZipCodeGeography.zip_code).offset(offset).limit(page_size)).all()
+
+    return PaginatedZipAssignments(
+        zip_assignments=[
+            ZipAssignment(zip_code=row.zip_code, layer_id=body.layer_id, parent_node_id=row.parent_node_id, color=row.color)
+            for row in rows
+        ],
+        total=total,
+        page=page,
+        page_size=page_size,
+        total_pages=total_pages,
+    )
+
+
 @graph_router.put("/zip-assignments/{layer_id}/bulk", response_model=dict)
 def bulk_assign_zips(
     layer_id: int,
@@ -613,6 +738,7 @@ def bulk_assign_zips(
     except TerramapsException as e:
         raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
     job_id = _enqueue_recompute(db, layer.map_id)
+
     db.commit()
     from src.workers.tasks.maps import recompute_geometry_task
 
@@ -634,11 +760,13 @@ def assign_zip(
 
     Passing parent_node_id=null unassigns the zip (preserves the row and color).
     """
-    _check_layer_access(db, layer_id, current_user.id, permission_service)
+    layer = _check_layer_access(db, layer_id, current_user.id, permission_service)
     try:
         za = graph_service.assign_zip(layer_id=layer_id, zip_code=zip_code.zfill(5), data=data)
     except TerramapsException as e:
         raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
+    _bump_tile_version(db, layer.map_id)
+
     db.commit()
     return ZipAssignment(
         zip_code=za.zip_code,
@@ -661,8 +789,10 @@ def reset_zip(
 
     The zip remains implicitly present on the map but reverts to white with no territory.
     """
-    _check_layer_access(db, layer_id, current_user.id, permission_service)
+    layer = _check_layer_access(db, layer_id, current_user.id, permission_service)
     graph_service.reset_zip(layer_id=layer_id, zip_code=zip_code.zfill(5))
+    _bump_tile_version(db, layer.map_id)
+
     db.commit()
 
 
@@ -712,7 +842,9 @@ def get_zip_with_geography_default(
     padded = zip_code.zfill(5)
 
     za = db.execute(
-        select(ZipAssignmentModel).where(
+        select(ZipAssignmentModel)
+        .options(undefer(ZipAssignmentModel.data))
+        .where(
             ZipAssignmentModel.layer_id == layer_id,
             ZipAssignmentModel.zip_code == padded,
         )
@@ -720,7 +852,7 @@ def get_zip_with_geography_default(
 
     if za:
         return ZipAssignment(
-            zip_code=za.zip_code, layer_id=za.layer_id, parent_node_id=za.parent_node_id, color=za.color
+            zip_code=za.zip_code, layer_id=za.layer_id, parent_node_id=za.parent_node_id, color=za.color, data=za.data
         )
 
     # Implicit state — verify zip exists in geography
@@ -732,7 +864,7 @@ def get_zip_with_geography_default(
 
 @graph_router.get("/search", response_model=SearchResults)
 def search_map(
-    map_id: int,
+    map_id: str,
     q: str,
     db: DatabaseSession,
     current_user: CurrentUserDependency,

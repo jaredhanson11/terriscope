@@ -60,6 +60,8 @@ def upgrade() -> None:
             Geometry(srid=4326, dimension=2, spatial_index=False, from_text="ST_GeomFromEWKT", name="geometry"),
             nullable=True,
         ),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.PrimaryKeyConstraint("zip_code", name=op.f("pk_geography_zip_codes")),
     )
     op.create_geospatial_index(
@@ -104,10 +106,12 @@ def upgrade() -> None:
     )
     op.create_table(
         "maps",
-        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("id", postgresql.UUID(as_uuid=False), nullable=False, server_default=sa.text("gen_random_uuid()")),
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("tile_version", sa.Integer(), server_default="0", nullable=False),
         sa.Column("data_field_config", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_maps")),
     )
     op.create_table(
@@ -115,6 +119,7 @@ def upgrade() -> None:
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("email", postgresql.CITEXT(), nullable=False),
         sa.Column("password", sa.String(), nullable=False),
+        sa.Column("name", sa.String(), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_users")),
@@ -123,9 +128,11 @@ def upgrade() -> None:
     op.create_table(
         "layers",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
-        sa.Column("map_id", sa.Integer(), nullable=False),
+        sa.Column("map_id", postgresql.UUID(as_uuid=False), nullable=False),
         sa.Column("name", sa.String(), nullable=False),
         sa.Column("order", sa.Integer(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.ForeignKeyConstraint(["map_id"], ["maps.id"], name=op.f("fk_layers_map_id_maps")),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_layers")),
         sa.UniqueConstraint("name", "map_id", name=op.f("uq_layers_name")),
@@ -135,7 +142,7 @@ def upgrade() -> None:
     op.create_table(
         "map_jobs",
         sa.Column("id", sa.String(length=36), nullable=False),
-        sa.Column("map_id", sa.Integer(), nullable=False),
+        sa.Column("map_id", postgresql.UUID(as_uuid=False), nullable=False),
         sa.Column(
             "job_type", sa.Enum("import", "recompute_geometry", "recompute_data", native_enum=False), nullable=False
         ),
@@ -152,7 +159,7 @@ def upgrade() -> None:
         "user_map_roles",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
         sa.Column("user_id", sa.Integer(), nullable=False),
-        sa.Column("map_id", sa.Integer(), nullable=False),
+        sa.Column("map_id", postgresql.UUID(as_uuid=False), nullable=False),
         sa.Column("role", sa.Enum("OWNER", "MEMBER", native_enum=False), nullable=False),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
@@ -201,6 +208,8 @@ def upgrade() -> None:
         sa.Column("geom_cache_key", sa.String(), nullable=False),
         sa.Column("geom_inputs_cache_key", sa.String(), nullable=False),
         sa.Column("parent_node_id", sa.Integer(), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.ForeignKeyConstraint(["layer_id"], ["layers.id"], name=op.f("fk_nodes_layer_id_layers")),
         sa.ForeignKeyConstraint(["parent_node_id"], ["nodes.id"], name=op.f("fk_nodes_parent_node_id_nodes")),
         sa.PrimaryKeyConstraint("id", name=op.f("pk_nodes")),
@@ -233,6 +242,8 @@ def upgrade() -> None:
         sa.Column("data", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("data_cache_key", sa.String(), nullable=False),
         sa.Column("data_inputs_cache_key", sa.String(), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.ForeignKeyConstraint(["layer_id"], ["layers.id"], name=op.f("fk_zip_assignments_layer_id_layers")),
         sa.ForeignKeyConstraint(["parent_node_id"], ["nodes.id"], name=op.f("fk_zip_assignments_parent_node_id_nodes")),
         sa.ForeignKeyConstraint(

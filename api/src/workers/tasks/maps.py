@@ -31,7 +31,7 @@ def _set_job_status(
     task.db.commit()
 
 
-def _get_layers(task: DatabaseTask, map_id: int) -> list[LayerModel]:
+def _get_layers(task: DatabaseTask, map_id: str) -> list[LayerModel]:
     return list(
         task.db
         .execute(
@@ -47,7 +47,7 @@ def _get_layers(task: DatabaseTask, map_id: int) -> list[LayerModel]:
 def _run_geometry_computation(
     task: DatabaseTask,
     job: MapJobModel,
-    map_id: int,
+    map_id: str,
     force: bool,
     step_prefix: str,
 ) -> list[LayerModel]:
@@ -85,7 +85,7 @@ def _run_geometry_computation(
 def _run_data_computation(
     task: DatabaseTask,
     job: MapJobModel,
-    map_id: int,
+    map_id: str,
     force: bool,
     step_prefix: str,
     layers: list[LayerModel] | None = None,
@@ -122,7 +122,7 @@ def _run_data_computation(
 
 
 @celery_app.task(base=DatabaseTask, bind=True, queue="terramaps", name="src.workers.tasks.maps.import_map_task")
-def import_map_task(self: DatabaseTask, job_id: str, map_id: int) -> None:  # type: ignore[misc]
+def import_map_task(self: DatabaseTask, job_id: str, map_id: str) -> None:  # type: ignore[misc]
     """Compute geometry and data aggregations for a newly imported map.
 
     Uses force=True so every node is computed from scratch regardless of
@@ -160,7 +160,7 @@ def import_map_task(self: DatabaseTask, job_id: str, map_id: int) -> None:  # ty
 
 
 @celery_app.task(base=DatabaseTask, bind=True, queue="terramaps", name="src.workers.tasks.maps.recompute_geometry_task")
-def recompute_geometry_task(self: DatabaseTask, job_id: str, map_id: int) -> None:  # type: ignore[misc]
+def recompute_geometry_task(self: DatabaseTask, job_id: str, map_id: str) -> None:  # type: ignore[misc]
     """Incrementally recompute geometry after structural edits.
 
     Triggered after bulk node operations (move, merge, delete, zip reassign).
@@ -208,7 +208,7 @@ def recompute_geometry_task(self: DatabaseTask, job_id: str, map_id: int) -> Non
 
 
 @celery_app.task(base=DatabaseTask, bind=True, queue="terramaps", name="src.workers.tasks.maps.recompute_data_task")
-def recompute_data_task(self: DatabaseTask, job_id: str, map_id: int) -> None:  # type: ignore[misc]
+def recompute_data_task(self: DatabaseTask, job_id: str, map_id: str) -> None:  # type: ignore[misc]
     """Incrementally recompute data aggregations after geometry is updated.
 
     Chained automatically by recompute_geometry_task on success.

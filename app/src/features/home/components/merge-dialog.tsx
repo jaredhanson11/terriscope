@@ -9,10 +9,9 @@
  * Fetches node details (name, parent_node_id) internally when opened so the
  * caller only needs to pass selectedNodeIds.
  */
-
 import { useQuery } from "@tanstack/react-query"
-import { useEffect, useState } from "react"
 import pluralize from "pluralize"
+import { useEffect, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import {
@@ -68,7 +67,7 @@ export function MergeDialog({
   // the common parent. Page size 1000 covers all practical layer sizes.
   const selectedIdsSet = new Set(selectedNodeIds)
   const activeLayerNodesQuery = useQuery({
-    ...queries.listNodes(activeLayer.id, 1, 1000),
+    ...queries.queryNodes({ layer_id: activeLayer.id }, 1, 1000),
     enabled: open,
   })
   const selectedNodeData =
@@ -79,7 +78,9 @@ export function MergeDialog({
   // share the same parent).
   useEffect(() => {
     if (!open || initialised || selectedNodeData.length === 0) return
-    const parentIds = [...new Set(selectedNodeData.map((n) => n.parent_node_id ?? null))]
+    const parentIds = [
+      ...new Set(selectedNodeData.map((n) => n.parent_node_id ?? null)),
+    ]
     if (parentIds.length === 1) {
       setTargetParentId(parentIds[0])
     }
@@ -147,14 +148,21 @@ export function MergeDialog({
             <Input
               placeholder={`${activeLayer.name} name…`}
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                setName(e.target.value)
+              }}
             />
             {selectedNodeData.length > 0 && (
               <div className="flex items-center gap-2">
                 <span className="text-muted-foreground text-xs">
                   Or use existing:
                 </span>
-                <Select value="" onValueChange={(val) => setName(val)}>
+                <Select
+                  value=""
+                  onValueChange={(val) => {
+                    setName(val)
+                  }}
+                >
                   <SelectTrigger className="h-7 text-xs">
                     <SelectValue placeholder="Pick a name…" />
                   </SelectTrigger>
@@ -200,7 +208,9 @@ export function MergeDialog({
         <DialogFooter>
           <Button
             variant="outline"
-            onClick={() => handleOpenChange(false)}
+            onClick={() => {
+              handleOpenChange(false)
+            }}
             disabled={isPending}
           >
             Cancel
