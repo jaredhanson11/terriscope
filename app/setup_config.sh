@@ -9,11 +9,8 @@
 
 OUTPUT=/usr/share/nginx/html/config.js
 echo "window.appConfig={}" >$OUTPUT
-if [[ -n "$API_BASE_URL" ]]; then
-    echo "window.appConfig.api_base_url=\"$API_BASE_URL\"" >>$OUTPUT
-fi
 
-REQUIRED_VARS=""
+REQUIRED_VARS="API_BASE_URL"
 OPTIONAL_VARS=""
 ###### !! IMPORTANT !! ######
 # Any value in OPTIONAL_VARS must have a default value defined in the defaultConfig of /src/app/config.ts

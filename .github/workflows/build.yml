@@ -9,18 +9,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Build api image
+      - name: Build api images
         run: |
-          docker build . -f api/Dockerfile --platform linux/amd64 --target api -t terramaps/api:latest
-      - name: Build worker image
-        run: |
-          docker build . -f api/Dockerfile --platform linux/amd64 --target worker -t terramaps/worker:latest
-      - name: Build migrations image
-        run: |
-          docker build . -f api/Dockerfile --platform linux/amd64 --target migrations -t terramaps/migrations:latest
+          for target in api worker migrations; do
+            docker build . -f api/Dockerfile --platform linux/amd64 --target $target -t terramaps/$target:latest
+          done
       - name: Build app image
         run: |
-          docker build app -f app/Dockerfile --platform linux/amd64 -t terramaps/app:latest
+          docker build . -f app/Dockerfile --platform linux/amd64 -t terramaps/app:latest
       - name: Export images to tar
         run: |
           for name in $IMAGE_NAMES; do
