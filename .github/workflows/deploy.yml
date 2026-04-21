@@ -16,4 +16,6 @@ jobs:
           role-arn: arn:aws:iam::650136199785:role/github/deploy_role
       - name: Redeploy dev environment
         run: |
-          echo "Looks good!"
+          aws ecs update-service --cluster terramaps-dev-cluster --service api --force-new-deployment
+          aws ecs update-service --cluster terramaps-dev-cluster --service worker --force-new-deployment
+          aws ecs update-service --cluster terramaps-dev-cluster --service app --force-new-deployment
