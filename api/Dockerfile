@@ -1,12 +1,14 @@
 # syntax=docker/dockerfile:1
 
-## This dockerfile sets will build any of the required backend images. The potentional images are:
+## This dockerfile sets will build any of the required backend images. The potential images are:
 ## api: production api
 ## api-debug: debugger api
+## worker: production worker
+## worker-local: worker with auto restart
+## worker-debug: debugger worker
 ## migrations: production migrations
 ## migrations-local: migrations with dev dependencies for creating revisions
 
-##  api-debug, tests, migrations, migrations-local.
 ARG POETRY_VERSION=1.8
 
 FROM alpine/git AS version
@@ -77,6 +79,15 @@ CMD [ \
     "--host=0.0.0.0", \
     "--port=8000", \
     "--reload" \
+    ]
+
+
+### Worker image ###
+FROM api-extra-deps AS worker
+ENTRYPOINT [ "/app/.venv/bin/celery" ]
+CMD [ \
+    "--app", "src.workers:celery_app", \
+    "worker" \
     ]
 
 
