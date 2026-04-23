@@ -75,6 +75,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { fetchClient } from "@/fetch-client"
 import { Map, type HoverHierarchyItem, type ClickSelectResult } from "@/features/home/components/map"
 import { DeleteDialog } from "@/features/home/components/delete-dialog"
 import { MergeDialog } from "@/features/home/components/merge-dialog"
@@ -91,6 +92,8 @@ import { queries } from "@/queries/queries"
 
 import type { BaseMapName } from "./components/map/config"
 import {
+  updateLayers,
+  updateSources,
   updateSelectedNodeStates,
   updateSelectedZipStates,
 } from "./components/map/utils"
@@ -172,6 +175,7 @@ export default function HomePage() {
   const [mergeOpen, setMergeOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [exportZttOpen, setExportZttOpen] = useState(false)
+  const [isCapturing, setIsCapturing] = useState(false)
 
   // Search / detail sheet state
   const [detailResult, setDetailResult] = useState<SearchResultItem | null>(null)
@@ -256,6 +260,65 @@ export default function HomePage() {
     void queryClient.invalidateQueries({
       queryKey: queries.getMap(currentMap.id).queryKey,
     })
+  }
+
+  const handleTerritoryReport = async () => {
+    if (!mapRef.current || !layersQuery.data) return
+    const map = mapRef.current.getMap()
+    setIsCapturing(true)
+    try {
+      // Find the zip layer (order === 0)
+      const zipLayer = layersQuery.data.find((l) => l.order === 0)
+      if (!zipLayer) return
+
+      // Update React state so the sidebar UI reflects the change
+      setFillLayerId(zipLayer.id)
+      setBorderLayerIds((prev) => new Set([...prev, zipLayer.id]))
+      setLabelLayerIds((prev) => new Set([...prev, zipLayer.id]))
+
+      // Apply immediately to MapLibre without waiting for React re-render
+      const tileVersion = currentMapPolled.data?.tile_version ?? currentMap.tile_version
+      const desiredLayers = layersQuery.data.map((l) => ({
+        id: l.id,
+        order: l.order,
+        showFill: l.id === zipLayer.id,
+        showOutline: borderLayerIds.has(l.id) || l.id === zipLayer.id,
+        showLabel: labelLayerIds.has(l.id) || l.id === zipLayer.id,
+        labelFields: labelFields[l.id] ?? ["name"],
+      }))
+      updateSources(map, desiredLayers, tileVersion)
+      updateLayers(map, baseMap, desiredLayers)
+
+      // Look up 94510 centroid via the search endpoint
+      const searchResponse = await fetchClient.GET("/search", {
+        params: { query: { map_id: currentMap.id, q: "94510" } },
+      })
+      const zipResult = searchResponse.data?.results.find(
+        (r) => r.type === "zip" && r.name === "94510",
+      )
+      if (!zipResult?.centroid) return
+
+      // Fly to the zip code
+      map.flyTo({
+        center: [zipResult.centroid[0], zipResult.centroid[1]],
+        zoom: 12,
+        duration: 1500,
+      })
+
+      // Wait for camera + tiles to settle
+      await new Promise<void>((resolve) => { map.once("idle", resolve) })
+
+      // Capture and download
+      const dataUrl = map.getCanvas().toDataURL("image/png")
+      const link = document.createElement("a")
+      link.href = dataUrl
+      link.download = `territory-report-94510-${Date.now().toString()}.png`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } finally {
+      setIsCapturing(false)
+    }
   }
 
   if (
@@ -735,22 +798,28 @@ export default function HomePage() {
                     <IconChevronRight className="text-muted-foreground/40 h-3.5 w-3.5 shrink-0 transition-colors group-hover:text-muted-foreground" />
                   </button>
 
-                  <div className="group flex w-full cursor-not-allowed items-center gap-3 rounded-md border border-dashed p-2.5 opacity-45">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                      <IconPresentation className="h-3.5 w-3.5" />
+                  <button
+                    onClick={() => { void handleTerritoryReport() }}
+                    disabled={isCapturing}
+                    className="group flex w-full items-center gap-3 rounded-md border bg-card p-2.5 text-left transition-colors hover:bg-accent hover:border-accent-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                      {isCapturing ? (
+                        <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <IconPresentation className="h-3.5 w-3.5" />
+                      )}
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <div className="text-xs font-medium leading-tight">Territory Report</div>
-                        <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-px text-[9px] font-semibold uppercase leading-none tracking-wide">
-                          Soon
-                        </span>
+                      <div className="text-xs font-medium leading-tight">
+                        {isCapturing ? "Capturing…" : "Territory Report"}
                       </div>
                       <div className="text-muted-foreground mt-0.5 text-[11px] leading-tight">
-                        PowerPoint slide deck
+                        Screenshot slide deck
                       </div>
                     </div>
-                  </div>
+                    <IconChevronRight className="text-muted-foreground/40 h-3.5 w-3.5 shrink-0 transition-colors group-hover:text-muted-foreground" />
+                  </button>
                 </div>
               </SidebarGroupContent>
             </SidebarGroup>
