@@ -551,52 +551,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/tiles/{layer_id}/{z}/{x}/{y}/labels.pbf": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Label Tile
-         * @description Get a label tile for a specific layer using point-on-surface geometries.
-         *
-         *     For order=0 (zip) layers: one point per zip code, label is the zip_code string.
-         *     For order>=1 layers: one point per node with all configured data field values.
-         */
-        get: operations["get_label_tile_tiles__layer_id___z___x___y__labels_pbf_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/tiles/layers": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * List Tile Layers
-         * @description List all available layers that can be rendered as tiles.
-         *
-         *     Returns a list of layers with their IDs and names, which can be used
-         *     to construct tile URLs.
-         */
-        get: operations["list_tile_layers_tiles_layers_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/maps": {
         parameters: {
             query?: never;
@@ -2157,81 +2111,14 @@ export interface operations {
     };
     get_tile_tiles__layer_id___z___x___y__pbf_get: {
         parameters: {
-            query?: {
-                rev?: number;
-            };
-            header?: never;
-            path: {
-                layer_id: number;
-                z: number;
-                x: number;
-                y: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_label_tile_tiles__layer_id___z___x___y__labels_pbf_get: {
-        parameters: {
-            query?: {
-                rev?: number;
-            };
-            header?: never;
-            path: {
-                layer_id: number;
-                z: number;
-                x: number;
-                y: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": unknown;
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_tile_layers_tiles_layers_get: {
-        parameters: {
             query?: never;
             header?: never;
-            path?: never;
+            path: {
+                layer_id: number;
+                z: number;
+                x: number;
+                y: number;
+            };
             cookie?: never;
         };
         requestBody?: never;
@@ -2243,6 +2130,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };

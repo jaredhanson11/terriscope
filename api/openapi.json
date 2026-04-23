@@ -1337,16 +1337,6 @@
               "type": "integer",
               "title": "Y"
             }
-          },
-          {
-            "name": "rev",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "default": 0,
-              "title": "Rev"
-            }
           }
         ],
         "responses": {
@@ -1365,104 +1355,6 @@
                 "schema": {
                   "$ref": "#/components/schemas/HTTPValidationError"
                 }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tiles/{layer_id}/{z}/{x}/{y}/labels.pbf": {
-      "get": {
-        "tags": [
-          "MVT"
-        ],
-        "summary": "Get Label Tile",
-        "description": "Get a label tile for a specific layer using point-on-surface geometries.\n\nFor order=0 (zip) layers: one point per zip code, label is the zip_code string.\nFor order>=1 layers: one point per node with all configured data field values.",
-        "operationId": "get_label_tile_tiles__layer_id___z___x___y__labels_pbf_get",
-        "parameters": [
-          {
-            "name": "layer_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Layer Id"
-            }
-          },
-          {
-            "name": "z",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Z"
-            }
-          },
-          {
-            "name": "x",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "X"
-            }
-          },
-          {
-            "name": "y",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Y"
-            }
-          },
-          {
-            "name": "rev",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "default": 0,
-              "title": "Rev"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/tiles/layers": {
-      "get": {
-        "tags": [
-          "MVT"
-        ],
-        "summary": "List Tile Layers",
-        "description": "List all available layers that can be rendered as tiles.\n\nReturns a list of layers with their IDs and names, which can be used\nto construct tile URLs.",
-        "operationId": "list_tile_layers_tiles_layers_get",
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {}
               }
             }
           }
