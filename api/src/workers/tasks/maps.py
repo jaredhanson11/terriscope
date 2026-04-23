@@ -43,6 +43,9 @@ def import_map_task(self: DatabaseTask, job_id: str, map_id: str) -> None:  # ty
         layers = computation.recompute_all_layers(map_id)
         logger.info("[%s]: geometry complete, %d layers", job_id, len(layers))
         if layers:
+            layer_ids = {layer.id for layer in layers}
+            computation.invalidate_cache_for_layers(layer_ids)
+
             map_model = self.db.get(MapModel, map_id)
             if map_model:
                 map_model.tile_version += 1

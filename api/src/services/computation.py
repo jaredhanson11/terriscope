@@ -4,9 +4,10 @@ import logging
 from typing import Annotated
 
 from fastapi import Depends
-from sqlalchemy import select, text
+from sqlalchemy import delete, select, text
 
 from src.app.database import DatabaseSession
+from src.models.cache import MvtTileCacheModel
 from src.models.graph import LayerModel, MapModel, NodeModel
 from src.services.base import BaseService
 
@@ -23,8 +24,9 @@ class ComputationService(BaseService):
     def recompute_from(self, map_id: str, affected_node_ids: set[int]) -> None:
         """Recompute geometry (and data, if configured) for affected nodes and all ancestors.
 
-        Propagates upward layer by layer until no parents remain.
-        Call this synchronously inside the request handler before db.commit().
+        Propagates upward layer by layer until no parents remain. Invalidates the MVT
+        tile cache for every layer touched. Call before db.commit() so everything lands
+        in one transaction.
         """
         map_model = self.db.get(MapModel, map_id)
         data_field_config: list[dict[str, object]] = (
@@ -34,7 +36,7 @@ class ComputationService(BaseService):
         current_ids = set(affected_node_ids)
         while current_ids:
             order_groups = self._get_layer_order_groups(current_ids)
-            for order, ids in sorted(order_groups.items()):
+            for order, (layer_id, ids) in sorted(order_groups.items()):
                 if order == 1:
                     self._recompute_zip_layer(ids)
                     if data_field_config:
@@ -43,6 +45,7 @@ class ComputationService(BaseService):
                     self._recompute_node_layer(ids)
                     if data_field_config:
                         self._recompute_data_node_layer(ids, data_field_config)
+                self._invalidate_tiles_for_nodes(layer_id, ids)
             current_ids = self._get_parent_ids(current_ids)
 
     def recompute_all_layers(self, map_id: str) -> list[LayerModel]:
@@ -228,16 +231,71 @@ class ComputationService(BaseService):
     # Propagation helpers
     # ------------------------------------------------------------------
 
-    def _get_layer_order_groups(self, node_ids: set[int]) -> dict[int, set[int]]:
-        """Group node IDs by their layer's order value."""
+    def invalidate_cache_for_layers(self, layer_ids: set[int]) -> None:
+        """Delete ALL cached MVT tiles for the given layers.
+
+        Use for full recomputes (import). For incremental edits use
+        _invalidate_tiles_for_nodes, which scopes deletes to the changed bbox.
+        Does not commit — caller owns the transaction.
+        """
+        if not layer_ids:
+            return
+        self.db.execute(delete(MvtTileCacheModel).where(MvtTileCacheModel.layer_id.in_(layer_ids)))
+        self.db.flush()
+
+    def _invalidate_tiles_for_nodes(self, layer_id: int, node_ids: set[int]) -> None:
+        """Delete MVT cache tiles for layer_id that cover the bounding box of the given nodes.
+
+        Computes tile (x, y) ranges for z=3..11 from the nodes' updated geometry in one
+        SQL statement using the Mercator tile formula — no spatial index on the cache table
+        required. Does not commit — caller owns the transaction.
+        """
+        sql = text("""
+            WITH bbox AS (
+                SELECT ST_Extent(COALESCE(n.geom_z11, n.geom_z7, n.geom_z3)) AS geom
+                FROM nodes n
+                WHERE n.id = ANY(:node_ids)
+            ),
+            tile_ranges AS (
+                SELECT
+                    z::smallint,
+                    GREATEST(0, FLOOR((ST_XMin(b.geom) + 180.0) / 360.0 * POW(2, z))::int) AS x_min,
+                    FLOOR((ST_XMax(b.geom) + 180.0) / 360.0 * POW(2, z))::int             AS x_max,
+                    GREATEST(0, FLOOR(
+                        (1.0 - LN(TAN(RADIANS(LEAST(ST_YMax(b.geom), 85.051)))
+                               + 1.0 / COS(RADIANS(LEAST(ST_YMax(b.geom), 85.051)))) / PI()
+                        ) / 2.0 * POW(2, z)
+                    )::int) AS y_min,
+                    FLOOR(
+                        (1.0 - LN(TAN(RADIANS(GREATEST(ST_YMin(b.geom), -85.051)))
+                               + 1.0 / COS(RADIANS(GREATEST(ST_YMin(b.geom), -85.051)))) / PI()
+                        ) / 2.0 * POW(2, z)
+                    )::int AS y_max
+                FROM bbox b, generate_series(3, 11) z
+                WHERE b.geom IS NOT NULL
+            )
+            DELETE FROM mvt_tile_cache c
+            USING tile_ranges tr
+            WHERE c.layer_id = :layer_id
+              AND c.z = tr.z
+              AND c.x BETWEEN tr.x_min AND tr.x_max
+              AND c.y BETWEEN tr.y_min AND tr.y_max
+        """)
+        self.db.execute(sql, {"layer_id": layer_id, "node_ids": list(node_ids)})
+        self.db.flush()
+
+    def _get_layer_order_groups(self, node_ids: set[int]) -> dict[int, tuple[int, set[int]]]:
+        """Group node IDs by their layer's order. Returns {order: (layer_id, node_ids)}."""
         rows = self.db.execute(
-            select(NodeModel.id, LayerModel.order)
+            select(NodeModel.id, LayerModel.id, LayerModel.order)
             .join(LayerModel, NodeModel.layer_id == LayerModel.id)
             .where(NodeModel.id.in_(node_ids))
         ).all()
-        groups: dict[int, set[int]] = {}
-        for node_id, order in rows:
-            groups.setdefault(order, set()).add(node_id)
+        groups: dict[int, tuple[int, set[int]]] = {}
+        for node_id, layer_id, order in rows:
+            if order not in groups:
+                groups[order] = (layer_id, set())
+            groups[order][1].add(node_id)
         return groups
 
     def _get_parent_ids(self, node_ids: set[int]) -> set[int]:
