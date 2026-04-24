@@ -731,6 +731,11 @@ export interface components {
             /** Field */
             field: string;
             /**
+             * Label
+             * @default
+             */
+            label: string;
+            /**
              * Type
              * @enum {string}
              */

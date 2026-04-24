@@ -2,6 +2,7 @@
 
 import hashlib
 import logging
+import re
 import uuid
 from typing import Any, TypedDict
 
@@ -33,6 +34,19 @@ _TERRITORY_PALETTE = [
     "#8338EC", "#FF006E", "#3A86FF", "#06D6A0", "#FFBE0B",
     "#FB5607",
 ]
+
+
+def _normalize_field_key(name: str) -> str:
+    """Convert a user-supplied field display name to a safe JSONB key.
+
+    Result is lowercase alphanumeric + underscores, starts with a letter,
+    max 64 chars. Used as the key in node/zip data JSONB dicts.
+    """
+    key = re.sub(r"[^a-zA-Z0-9_]", "_", name.strip()).lower()
+    key = re.sub(r"_+", "_", key).strip("_")
+    if key and key[0].isdigit():
+        key = f"f_{key}"
+    return key[:64] or "field"
 
 
 class BulkInsertNode(TypedDict):
@@ -114,6 +128,19 @@ def create_map(
     new_map = graph_service.create_map(name=import_data.name)
     permission_service.add_map_role(user_id=current_user.id, map_id=new_map.id, role="OWNER")
 
+    # Persist data field config (number fields only for now; text fields deferred)
+    number_fields = [f for f in import_data.data_fields if f.type == "number" and f.aggregations]
+    if number_fields:
+        new_map.data_field_config = [
+            {
+                "field": _normalize_field_key(f.name),
+                "label": f.name,
+                "type": f.type,
+                "aggregations": list(f.aggregations),
+            }
+            for f in number_fields
+        ]
+
     # Bulk insert all layers; order mirrors position in import_data.layers (0 = zip layer)
     layer_result = db.execute(
         insert(LayerModel)
@@ -192,6 +219,17 @@ def create_map(
             )
             rows_df = rows_df[rows_df[header].isin(valid_zip_codes)].copy()
 
+            # Attach data field columns so each zip row carries its raw values
+            valid_number_fields = [
+                f for f in number_fields if f.header in df_values.columns
+            ]
+            if valid_number_fields:
+                data_headers = [f.header for f in valid_number_fields]
+                zip_data_source = df_values[[header] + data_headers].copy()
+                zip_data_source[header] = zip_data_source[header].astype(str).str.zfill(5)
+                zip_data_source = zip_data_source.drop_duplicates(subset=[header])
+                rows_df = rows_df.merge(zip_data_source, on=header, how="left")
+
             geography_colors: dict[str, str] = dict(
                 db.execute(
                     select(ZipCodeGeography.zip_code, ZipCodeGeography.color)
@@ -199,18 +237,34 @@ def create_map(
                 ).all()
             )
 
-            zip_codes = rows_df[header].tolist()
-            parent_ids = rows_df["parent_node_id"].tolist()
-            bulk_insert_zips = [
-                BulkInsertZipAssignment(
-                    layer_id=layer_id,
-                    zip_code=str(z),
-                    parent_node_id=int(p) if pd.notna(p) else None,
-                    color=geography_colors.get(str(z), "#CCCCCC"),
-                    data=None,
+            bulk_insert_zips: list[BulkInsertZipAssignment] = []
+            for _, row in rows_df.iterrows():
+                z = str(row[header])
+                p = row.get("parent_node_id")
+
+                zip_data: dict[str, Any] | None = None
+                if valid_number_fields:
+                    field_data: dict[str, Any] = {}
+                    for f in valid_number_fields:
+                        raw = row.get(f.header)
+                        if raw is not None and not (isinstance(raw, float) and pd.isna(raw)):
+                            try:
+                                num = float(raw)
+                                field_key = _normalize_field_key(f.name)
+                                field_data[field_key] = {"sum": num, "avg": num}
+                            except (ValueError, TypeError):
+                                pass
+                    zip_data = field_data or None
+
+                bulk_insert_zips.append(
+                    BulkInsertZipAssignment(
+                        layer_id=layer_id,
+                        zip_code=z,
+                        parent_node_id=int(p) if pd.notna(p) else None,
+                        color=geography_colors.get(z, "#CCCCCC"),
+                        data=zip_data,
+                    )
                 )
-                for z, p in zip(zip_codes, parent_ids)
-            ]
             db.execute(insert(ZipAssignmentModel).values(bulk_insert_zips))
 
         else:

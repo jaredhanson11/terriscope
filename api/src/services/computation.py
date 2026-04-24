@@ -1,15 +1,18 @@
-"""Computation service for geometry roll-ups."""
+"""Computation service for geometry roll-ups and data aggregations."""
 
 import logging
-from typing import Annotated
+import re
+from typing import Annotated, Any
 
 from fastapi import Depends
 from sqlalchemy import delete, select, text
 
 from src.app.database import DatabaseSession
 from src.models.cache import MvtTileCacheModel
-from src.models.graph import LayerModel, NodeModel
+from src.models.graph import LayerModel, MapModel, NodeModel
 from src.services.base import BaseService
+
+_SAFE_FIELD_RE = re.compile(r"^[a-z][a-z0-9_]*$")
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +71,103 @@ class ComputationService(BaseService):
         layer_ids = {layer.id for layer in layers}
         self.invalidate_cache_for_layers(layer_ids)
         return layers
+
+    # ------------------------------------------------------------------
+    # Data aggregation
+    # ------------------------------------------------------------------
+
+    def compute_data_for_map(self, map_id: str) -> None:
+        """Aggregate numeric data fields bottom-to-top for all layers in a map.
+
+        Reads data_field_config from the map, then for each order>=1 layer
+        (bottom to top) aggregates child data into parent nodes using SUM and
+        naive AVG-of-AVGs. Skips maps with no number fields configured.
+        """
+        map_model = self.db.get(MapModel, map_id)
+        if not map_model or not map_model.data_field_config:
+            logger.info("compute_data_for_map: no data_field_config for map %s, skipping", map_id)
+            return
+
+        number_fields: list[dict[str, Any]] = [
+            f for f in map_model.data_field_config
+            if f.get("type") == "number" and f.get("aggregations")
+        ]
+        if not number_fields:
+            return
+
+        for field in number_fields:
+            fname = field["field"]
+            if not _SAFE_FIELD_RE.match(fname):
+                raise ValueError(f"Unsafe field key in data_field_config: {fname!r}")
+
+        layers = list(
+            self.db.execute(
+                select(LayerModel)
+                .where(LayerModel.map_id == map_id, LayerModel.order >= 1)
+                .order_by(LayerModel.order.asc())
+            )
+            .scalars()
+            .all()
+        )
+
+        for layer in layers:
+            node_ids = set(
+                self.db.execute(
+                    select(NodeModel.id).where(NodeModel.layer_id == layer.id)
+                )
+                .scalars()
+                .all()
+            )
+            if not node_ids:
+                continue
+            if layer.order == 1:
+                self._compute_data_zip_layer(node_ids, number_fields)
+            else:
+                self._compute_data_node_layer(node_ids, number_fields)
+
+    @staticmethod
+    def _data_branch(fname: str, from_clause: str, alias: str) -> str:
+        """Build one UNION ALL branch for a single data field.
+
+        fname is pre-validated against _SAFE_FIELD_RE — no injection risk.
+        from_clause is e.g. "zip_assignments za" or "nodes c".
+        alias is the table alias used for column references, e.g. "za" or "c".
+        """
+        return (
+            f"SELECT {alias}.parent_node_id, '{fname}'::text AS key_name,"  # noqa: S608
+            f" SUM(({alias}.data->'{fname}'->>'sum')::numeric) AS sum_val,"
+            f" AVG(({alias}.data->'{fname}'->>'avg')::numeric) AS avg_val"
+            f" FROM {from_clause}"
+            f" WHERE {alias}.parent_node_id = ANY(:node_ids) AND {alias}.data ? '{fname}'"
+            f" GROUP BY {alias}.parent_node_id"
+        )
+
+    def _run_data_agg(
+        self, node_ids: set[int], fields: list[dict[str, Any]], from_clause: str, alias: str
+    ) -> None:
+        branches = " UNION ALL ".join(
+            self._data_branch(f["field"], from_clause, alias) for f in fields
+        )
+        sql_str = (
+            f"WITH field_aggs AS ({branches}),"  # noqa: S608
+            " node_data AS ("
+            "   SELECT parent_node_id,"
+            "          jsonb_object_agg(key_name, jsonb_build_object('sum', sum_val, 'avg', avg_val)) AS data"
+            "   FROM field_aggs GROUP BY parent_node_id"
+            " )"
+            " UPDATE nodes n SET data = nd.data"
+            " FROM node_data nd WHERE n.id = nd.parent_node_id"
+        )
+        self.db.execute(text(sql_str), {"node_ids": list(node_ids)})
+        self.db.flush()
+
+    def _compute_data_zip_layer(self, node_ids: set[int], fields: list[dict[str, Any]]) -> None:
+        """Aggregate zip_assignments.data into order=1 territory nodes."""
+        self._run_data_agg(node_ids, fields, "zip_assignments za", "za")
+
+    def _compute_data_node_layer(self, node_ids: set[int], fields: list[dict[str, Any]]) -> None:
+        """Aggregate child node data into order>1 nodes."""
+        self._run_data_agg(node_ids, fields, "nodes c", "c")
 
     # ------------------------------------------------------------------
     # Geometry helpers

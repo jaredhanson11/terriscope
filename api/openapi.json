@@ -1762,6 +1762,11 @@
             "type": "string",
             "title": "Field"
           },
+          "label": {
+            "type": "string",
+            "title": "Label",
+            "default": ""
+          },
           "type": {
             "type": "string",
             "enum": [

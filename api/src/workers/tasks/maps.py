@@ -50,6 +50,11 @@ def import_map_task(self: DatabaseTask, job_id: str, map_id: str) -> None:  # ty
             if map_model:
                 map_model.tile_version += 1
             self.db.flush()
+
+        _set_job_status(self, job, "processing", step="Computing data")
+        computation.compute_data_for_map(map_id)
+        logger.info("[%s]: data complete", job_id)
+
         _set_job_status(self, job, "complete", step="Done")
         logger.info("[%s]: complete", job_id)
     except Exception as exc:

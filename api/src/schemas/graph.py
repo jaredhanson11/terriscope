@@ -11,6 +11,9 @@ class DataFieldConfig(BaseModel):
     """Data field config entry stored on a map."""
 
     field: str
+    """Normalized JSONB key used in node/zip data dicts (lowercase alphanumeric + underscore)."""
+    label: str = ""
+    """Display name shown in the UI. Defaults to field if not set."""
     type: Literal["text", "number"]
     aggregations: list[Literal["sum", "avg"]]
 

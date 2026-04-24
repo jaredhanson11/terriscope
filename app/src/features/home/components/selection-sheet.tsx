@@ -359,16 +359,15 @@ function NodeDetailView({
                     <div className="space-y-2">
                       {dataFieldConfig.flatMap((field) =>
                         field.aggregations.map((agg) => {
-                          const key = `${field.field}_${agg}`
-                          const raw = node.data?.[key]
+                          const raw = (node.data?.[field.field] as Record<string, number> | undefined)?.[agg]
                           const formatted: string =
                             typeof raw === "number"
                               ? new Intl.NumberFormat().format(raw)
-                              : String(raw ?? "—")
+                              : "—"
                           return (
-                            <div key={key} className="flex items-center justify-between gap-4">
+                            <div key={`${field.field}-${agg}`} className="flex items-center justify-between gap-4">
                               <span className="text-muted-foreground truncate text-sm">
-                                {field.field}{" "}
+                                {field.label || field.field}{" "}
                                 <span className="text-muted-foreground/60">({agg})</span>
                               </span>
                               <span className="text-sm font-medium tabular-nums">{formatted}</span>
@@ -565,16 +564,15 @@ function ZipDetailView({
                     <div className="space-y-2">
                       {dataFieldConfig.flatMap((field) =>
                         field.aggregations.map((agg) => {
-                          const key = `${field.field}_${agg}`
-                          const raw = za.data?.[key]
+                          const raw = (za.data?.[field.field] as Record<string, number> | undefined)?.[agg]
                           const formatted: string =
                             typeof raw === "number"
                               ? new Intl.NumberFormat().format(raw)
-                              : String(raw ?? "—")
+                              : "—"
                           return (
-                            <div key={key} className="flex items-center justify-between gap-4">
+                            <div key={`${field.field}-${agg}`} className="flex items-center justify-between gap-4">
                               <span className="text-muted-foreground truncate text-sm">
-                                {field.field}{" "}
+                                {field.label || field.field}{" "}
                                 <span className="text-muted-foreground/60">({agg})</span>
                               </span>
                               <span className="text-sm font-medium tabular-nums">{formatted}</span>
