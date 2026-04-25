@@ -20,17 +20,16 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { differenceInDays, format, formatDistanceToNow } from "date-fns"
 import pluralize from "pluralize"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { useNavigate, useParams } from "react-router-dom"
 import { type MapRef } from "react-map-gl/maplibre"
+import { useNavigate, useParams } from "react-router-dom"
 
-import { useMe, useMaps } from "@/app/providers/me-provider/context"
+import { useMaps, useMe } from "@/app/providers/me-provider/context"
 import { AppRoutes, PageName } from "@/app/routes"
-
-const ACTIVE_MAP_KEY = "terramaps_active_map_id"
 import { BrandLogo } from "@/components/brand-logo"
 import { PageLayout } from "@/components/layout"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Collapsible,
   CollapsibleContent,
@@ -56,6 +55,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
 import {
   Sidebar,
   SidebarContent,
@@ -67,21 +67,26 @@ import {
   SidebarMenuButton,
   SidebarTrigger,
 } from "@/components/ui/sidebar"
-import { Checkbox } from "@/components/ui/checkbox"
-import { Separator } from "@/components/ui/separator"
 import { Switch } from "@/components/ui/switch"
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { Map, type HoverHierarchyItem, type ClickSelectResult } from "@/features/home/components/map"
 import { DeleteDialog } from "@/features/home/components/delete-dialog"
+import { ExportZttDialog } from "@/features/home/components/export-ztt-dialog"
+import {
+  type ClickSelectResult,
+  type HoverHierarchyItem,
+  Map,
+} from "@/features/home/components/map"
 import { MergeDialog } from "@/features/home/components/merge-dialog"
 import { MoveDialog } from "@/features/home/components/move-dialog"
-import { ExportZttDialog } from "@/features/home/components/export-ztt-dialog"
 import { NodeDetailSheet } from "@/features/home/components/node-detail-sheet"
-import { SearchBar, type SearchResultItem } from "@/features/home/components/search-bar"
+import {
+  SearchBar,
+  type SearchResultItem,
+} from "@/features/home/components/search-bar"
 import { SelectionSheet } from "@/features/home/components/selection-sheet"
 import {
   useLogoutMutation,
@@ -94,6 +99,8 @@ import {
   updateSelectedNodeStates,
   updateSelectedZipStates,
 } from "./components/map/utils"
+
+const ACTIVE_MAP_KEY = "terramaps_active_map_id"
 
 const BASE_MAPS = [
   { id: "osm", name: "OpenStreetMap" },
@@ -127,6 +134,10 @@ export default function HomePage() {
   // while a job is active, pauses automatically when idle).
   const currentMapPolled = useQuery(queries.getMap(currentMap.id))
   const activeJob = currentMapPolled.data?.active_job ?? currentMap.active_job
+  const importState =
+    currentMapPolled.data?.import_state ?? currentMap.import_state
+  const isImporting = importState.status === "importing"
+  const isImportFailed = importState.status === "failed"
   const layersQuery = useQuery(queries.listLayers(currentMap.id))
   const [baseMap, setBaseMap] = useState<BaseMapName>("osm")
   const [fillLayerId, setFillLayerId] = useState<number | null>(null)
@@ -154,7 +165,9 @@ export default function HomePage() {
       if (e.key === "Escape") clearSelection()
     }
     window.addEventListener("keydown", handler)
-    return () => window.removeEventListener("keydown", handler)
+    return () => {
+      window.removeEventListener("keydown", handler)
+    }
   })
 
   const spatialSelectMutation = useSpatialSelectMutation()
@@ -174,7 +187,9 @@ export default function HomePage() {
   const [exportZttOpen, setExportZttOpen] = useState(false)
 
   // Search / detail sheet state
-  const [detailResult, setDetailResult] = useState<SearchResultItem | null>(null)
+  const [detailResult, setDetailResult] = useState<SearchResultItem | null>(
+    null,
+  )
 
   // Close search detail sheet when the user makes a lasso/click selection
   const selectionCount =
@@ -183,7 +198,9 @@ export default function HomePage() {
     if (selectionCount > 0) setDetailResult(null)
   }, [selectionCount])
 
-  const [hoveredHierarchy, setHoveredHierarchy] = useState<HoverHierarchyItem[]>([])
+  const [hoveredHierarchy, setHoveredHierarchy] = useState<
+    HoverHierarchyItem[]
+  >([])
 
   const handleSearchSelect = (result: SearchResultItem) => {
     // Fly map to the result's centroid if geometry is available
@@ -306,219 +323,221 @@ export default function HomePage() {
   return (
     <>
       <PageLayout>
-      <PageLayout.SideNav>
-        <Sidebar>
-          <SidebarHeader className="border-border border-b p-4 gap-4">
-            <BrandLogo />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <SidebarMenuButton className="h-auto w-full py-2">
-                  <div className="flex w-full items-center gap-3">
-                    <IconHome className="h-5 w-5 shrink-0" />
-                    <div className="flex-1 text-left">
-                      <div className="text-sm font-medium leading-tight">
-                        {currentMap.name}
+        <PageLayout.SideNav>
+          <Sidebar>
+            <SidebarHeader className="border-border border-b p-4 gap-4">
+              <BrandLogo />
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <SidebarMenuButton className="h-auto w-full py-2">
+                    <div className="flex w-full items-center gap-3">
+                      <IconHome className="h-5 w-5 shrink-0" />
+                      <div className="flex-1 text-left">
+                        <div className="text-sm font-medium leading-tight">
+                          {currentMap.name}
+                        </div>
+                        <div className="text-muted-foreground text-xs">
+                          {activeJob
+                            ? activeJob.status === "failed"
+                              ? "Recompute failed"
+                              : (activeJob.step ?? "Recomputing…")
+                            : formatLastEdited(currentMap.updated_at)}
+                        </div>
                       </div>
-                      <div className="text-muted-foreground text-xs">
-                        {activeJob
-                          ? activeJob.status === "failed"
-                            ? activeJob.job_type === "import"
-                              ? "Import failed"
-                              : "Recompute failed"
-                            : activeJob.step ??
-                              (activeJob.job_type === "import"
-                                ? "Computing…"
-                                : "Recomputing…")
-                          : formatLastEdited(currentMap.updated_at)}
-                      </div>
+                      {activeJob && activeJob.status !== "failed" && (
+                        <IconLoader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+                      )}
+                      <IconChevronDown className="h-4 w-4 shrink-0" />
                     </div>
-                    {activeJob && activeJob.status !== "failed" && (
-                      <IconLoader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
-                    )}
-                    <IconChevronDown className="h-4 w-4 shrink-0" />
-                  </div>
-                </SidebarMenuButton>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent
-                align="start"
-                className="w-(--radix-popper-anchor-width)"
-              >
-                <DropdownMenuLabel>Recent Maps</DropdownMenuLabel>
-                {maps.map((map) => (
-                  <DropdownMenuItem
-                    key={map.id}
-                    className="gap-3"
-                    onClick={() => {
-                      localStorage.setItem(ACTIVE_MAP_KEY, map.id)
-                      void navigate(AppRoutes.getRoute(PageName.Home, { mapId: map.id }))
-                      setActiveLayerId(undefined)
-                      setFillLayerId(null)
-                      setBorderLayerIds(new Set())
-                      setLabelLayerIds(new Set())
-                      setLabelFields({})
-                      clearSelection()
+                  </SidebarMenuButton>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent
+                  align="start"
+                  className="w-(--radix-popper-anchor-width)"
+                >
+                  <DropdownMenuLabel>Recent Maps</DropdownMenuLabel>
+                  {maps.map((map) => (
+                    <DropdownMenuItem
+                      key={map.id}
+                      className="gap-3"
+                      onClick={() => {
+                        localStorage.setItem(ACTIVE_MAP_KEY, map.id)
+                        void navigate(
+                          AppRoutes.getRoute(PageName.Home, { mapId: map.id }),
+                        )
+                        setActiveLayerId(undefined)
+                        setFillLayerId(null)
+                        setBorderLayerIds(new Set())
+                        setLabelLayerIds(new Set())
+                        setLabelFields({})
+                        clearSelection()
+                      }}
+                    >
+                      <IconHome className="h-4 w-4 shrink-0" />
+                      <div className="flex-1">
+                        <div className="text-sm font-medium">{map.name}</div>
+                        <div className="text-muted-foreground text-xs">
+                          {map.active_job
+                            ? map.active_job.status === "failed"
+                              ? "Recompute failed"
+                              : (map.active_job.step ?? "Recomputing…")
+                            : formatLastEdited(map.updated_at)}
+                        </div>
+                      </div>
+                      {map.active_job && map.active_job.status !== "failed" && (
+                        <IconLoader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
+                      )}
+                      {map.id === currentMap.id && !map.active_job && (
+                        <IconCheck className="h-4 w-4" />
+                      )}
+                    </DropdownMenuItem>
+                  ))}
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem>
+                    <IconSettings className="h-4 w-4" />
+                    <span>Map Settings</span>
+                  </DropdownMenuItem>
+                  <DropdownMenuItem asChild>
+                    <a href={AppRoutes.getRoute("InitializePage")}>
+                      <IconPlus className="h-4 w-4" />
+                      <span>New Map</span>
+                    </a>
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </SidebarHeader>
+
+            <SidebarContent>
+              {/* Active Layer */}
+              <SidebarGroup>
+                <SidebarGroupLabel>
+                  Active Layer
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button className="text-muted-foreground hover:text-foreground ml-auto">
+                        <IconInfoCircle className="h-3.5 w-3.5" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent side="right" className="w-80">
+                      <div className="space-y-2">
+                        <h4 className="font-semibold">Active Layer</h4>
+                        <p className="text-muted-foreground text-sm">
+                          Select which geographic layer you want to work with.
+                          All editing tools and selection operations will apply
+                          to this layer.
+                        </p>
+                        <div className="text-muted-foreground text-xs">
+                          <strong>Tip:</strong> Use keyboard shortcuts 1-4 to
+                          quickly switch between layers.
+                        </div>
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <Select
+                    value={activeLayerId?.toString()}
+                    onValueChange={(val) => {
+                      if (mapRef.current && activeLayerId) {
+                        if (activeLayer?.order === 0) {
+                          updateSelectedZipStates(
+                            mapRef.current.getMap(),
+                            activeLayerId,
+                            selectedZipCodes,
+                            [],
+                          )
+                          setSelectedZipCodes([])
+                        } else {
+                          updateSelectedNodeStates(
+                            mapRef.current.getMap(),
+                            activeLayerId,
+                            selectedNodeIds,
+                            [],
+                          )
+                          setSelectedNodeIds([])
+                        }
+                      }
+                      setActiveLayerId(parseInt(val))
                     }}
                   >
-                    <IconHome className="h-4 w-4 shrink-0" />
-                    <div className="flex-1">
-                      <div className="text-sm font-medium">{map.name}</div>
-                      <div className="text-muted-foreground text-xs">
-                        {map.active_job
-                          ? map.active_job.status === "failed"
-                            ? map.active_job.job_type === "import"
-                              ? "Import failed"
-                              : "Recompute failed"
-                            : map.active_job.step ??
-                              (map.active_job.job_type === "import"
-                                ? "Computing…"
-                                : "Recomputing…")
-                          : formatLastEdited(map.updated_at)}
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {layersQuery.data
+                        ? layersQuery.data.map((layer) => (
+                            <SelectItem
+                              key={layer.id}
+                              value={layer.id.toString()}
+                            >
+                              {layer.name}
+                            </SelectItem>
+                          ))
+                        : undefined}
+                    </SelectContent>
+                  </Select>
+                </SidebarGroupContent>
+              </SidebarGroup>
+
+              {/* Base Map */}
+              <SidebarGroup>
+                <SidebarGroupLabel>
+                  Base Map
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <button className="text-muted-foreground hover:text-foreground ml-auto">
+                        <IconInfoCircle className="h-3.5 w-3.5" />
+                      </button>
+                    </PopoverTrigger>
+                    <PopoverContent side="right" className="w-80">
+                      <div className="space-y-2">
+                        <h4 className="font-semibold">Base Map Style</h4>
+                        <p className="text-muted-foreground text-sm">
+                          Choose the background map that works best for your
+                          workflow. Each style provides different context.
+                        </p>
+                        <ul className="text-muted-foreground space-y-1 text-xs">
+                          <li>
+                            • <strong>OpenStreetMap:</strong> Detailed streets
+                            and labels
+                          </li>
+                          <li>
+                            • <strong>Satellite:</strong> Aerial imagery
+                          </li>
+                          <li>
+                            • <strong>Terrain:</strong> Topographic features
+                          </li>
+                          <li>
+                            • <strong>Dark:</strong> Reduced eye strain
+                          </li>
+                        </ul>
                       </div>
-                    </div>
-                    {map.active_job && map.active_job.status !== "failed" && (
-                      <IconLoader2 className="h-4 w-4 shrink-0 animate-spin text-muted-foreground" />
-                    )}
-                    {map.id === currentMap.id && !map.active_job && (
-                      <IconCheck className="h-4 w-4" />
-                    )}
-                  </DropdownMenuItem>
-                ))}
-                <DropdownMenuSeparator />
-                <DropdownMenuItem>
-                  <IconSettings className="h-4 w-4" />
-                  <span>Map Settings</span>
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <a href={AppRoutes.getRoute("InitializePage")}>
-                    <IconPlus className="h-4 w-4" />
-                    <span>New Map</span>
-                  </a>
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </SidebarHeader>
+                    </PopoverContent>
+                  </Popover>
+                </SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <Select
+                    value={baseMap}
+                    onValueChange={(value) => {
+                      setBaseMap(value as typeof baseMap)
+                    }}
+                  >
+                    <SelectTrigger className="w-full">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {BASE_MAPS.map((baseMap) => (
+                        <SelectItem key={baseMap.id} value={baseMap.id}>
+                          {baseMap.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </SidebarGroupContent>
+              </SidebarGroup>
 
-          <SidebarContent>
-            {/* Active Layer */}
-            <SidebarGroup>
-              <SidebarGroupLabel>
-                Active Layer
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button className="text-muted-foreground hover:text-foreground ml-auto">
-                      <IconInfoCircle className="h-3.5 w-3.5" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent side="right" className="w-80">
-                    <div className="space-y-2">
-                      <h4 className="font-semibold">Active Layer</h4>
-                      <p className="text-muted-foreground text-sm">
-                        Select which geographic layer you want to work with. All
-                        editing tools and selection operations will apply to
-                        this layer.
-                      </p>
-                      <div className="text-muted-foreground text-xs">
-                        <strong>Tip:</strong> Use keyboard shortcuts 1-4 to
-                        quickly switch between layers.
-                      </div>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <Select
-                  value={activeLayerId?.toString()}
-                  onValueChange={(val) => {
-                    if (mapRef.current && activeLayerId) {
-                      if (activeLayer?.order === 0) {
-                        updateSelectedZipStates(mapRef.current.getMap(), activeLayerId, selectedZipCodes, [])
-                        setSelectedZipCodes([])
-                      } else {
-                        updateSelectedNodeStates(mapRef.current.getMap(), activeLayerId, selectedNodeIds, [])
-                        setSelectedNodeIds([])
-                      }
-                    }
-                    setActiveLayerId(parseInt(val))
-                  }}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {layersQuery.data
-                      ? layersQuery.data.map((layer) => (
-                          <SelectItem
-                            key={layer.id}
-                            value={layer.id.toString()}
-                          >
-                            {layer.name}
-                          </SelectItem>
-                        ))
-                      : undefined}
-                  </SelectContent>
-                </Select>
-              </SidebarGroupContent>
-            </SidebarGroup>
-
-            {/* Base Map */}
-            <SidebarGroup>
-              <SidebarGroupLabel>
-                Base Map
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <button className="text-muted-foreground hover:text-foreground ml-auto">
-                      <IconInfoCircle className="h-3.5 w-3.5" />
-                    </button>
-                  </PopoverTrigger>
-                  <PopoverContent side="right" className="w-80">
-                    <div className="space-y-2">
-                      <h4 className="font-semibold">Base Map Style</h4>
-                      <p className="text-muted-foreground text-sm">
-                        Choose the background map that works best for your
-                        workflow. Each style provides different context.
-                      </p>
-                      <ul className="text-muted-foreground space-y-1 text-xs">
-                        <li>
-                          • <strong>OpenStreetMap:</strong> Detailed streets and
-                          labels
-                        </li>
-                        <li>
-                          • <strong>Satellite:</strong> Aerial imagery
-                        </li>
-                        <li>
-                          • <strong>Terrain:</strong> Topographic features
-                        </li>
-                        <li>
-                          • <strong>Dark:</strong> Reduced eye strain
-                        </li>
-                      </ul>
-                    </div>
-                  </PopoverContent>
-                </Popover>
-              </SidebarGroupLabel>
-              <SidebarGroupContent>
-                <Select
-                  value={baseMap}
-                  onValueChange={(value) => {
-                    setBaseMap(value as typeof baseMap)
-                  }}
-                >
-                  <SelectTrigger className="w-full">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {BASE_MAPS.map((baseMap) => (
-                      <SelectItem key={baseMap.id} value={baseMap.id}>
-                        {baseMap.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </SidebarGroupContent>
-            </SidebarGroup>
-
-            {/* Overlays */}
-            {/* <SidebarGroup>
+              {/* Overlays */}
+              {/* <SidebarGroup>
               <SidebarGroupLabel>
                 Overlays
                 <Popover>
@@ -554,485 +573,602 @@ export default function HomePage() {
               </SidebarGroupContent>
             </SidebarGroup> */}
 
-            {/* Layers */}
-            <SidebarGroup>
-              <SidebarGroupLabel>Layers</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <div className="space-y-1">
-                  {layersQuery.data?.map((layer) => {
-                    const hasFill = fillLayerId === layer.id
-                    const hasBorder = borderLayerIds.has(layer.id)
-                    const hasLabels = labelLayerIds.has(layer.id)
-                    // Build label options: "Name" plus one entry per field+aggregation combo
-                    const mapDataFields = currentMap.data_field_config ?? []
-                    const labelFieldOptions = [
-                      { value: "name", label: "Name" },
-                      ...mapDataFields.flatMap((f) =>
-                        f.aggregations.map((agg) => ({
-                          value: `${f.field}_${agg}`,
-                          label: `${f.field} (${agg})`,
-                        })),
-                      ),
-                    ]
-                    return (
-                      <Collapsible key={layer.id}>
-                        <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
-                          <IconChevronDown className="text-muted-foreground h-3.5 w-3.5 shrink-0 transition-transform group-data-[state=closed]:-rotate-90" />
-                          <span className="flex-1 truncate text-left font-medium">
+              {/* Layers */}
+              <SidebarGroup>
+                <SidebarGroupLabel>Layers</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <div className="space-y-1">
+                    {layersQuery.data?.map((layer) => {
+                      const hasFill = fillLayerId === layer.id
+                      const hasBorder = borderLayerIds.has(layer.id)
+                      const hasLabels = labelLayerIds.has(layer.id)
+                      // Build label options: "Name" plus one entry per field+aggregation combo
+                      const mapDataFields = currentMap.data_field_config ?? []
+                      const labelFieldOptions = [
+                        { value: "name", label: "Name" },
+                        ...mapDataFields.flatMap((f) =>
+                          f.aggregations.map((agg) => ({
+                            value: `${f.field}_${agg}`,
+                            label: `${f.field} (${agg})`,
+                          })),
+                        ),
+                      ]
+                      return (
+                        <Collapsible key={layer.id}>
+                          <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+                            <IconChevronDown className="text-muted-foreground h-3.5 w-3.5 shrink-0 transition-transform group-data-[state=closed]:-rotate-90" />
+                            <span className="flex-1 truncate text-left font-medium">
+                              {layer.name}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <span
+                                className={`rounded px-1 py-0.5 font-mono text-[10px] font-semibold leading-none transition-colors ${hasFill ? "bg-primary text-primary-foreground" : "text-muted-foreground/50"}`}
+                              >
+                                F
+                              </span>
+                              <span
+                                className={`rounded px-1 py-0.5 font-mono text-[10px] font-semibold leading-none transition-colors ${hasBorder ? "bg-primary text-primary-foreground" : "text-muted-foreground/50"}`}
+                              >
+                                B
+                              </span>
+                              <span
+                                className={`rounded px-1 py-0.5 font-mono text-[10px] font-semibold leading-none transition-colors ${hasLabels ? "bg-primary text-primary-foreground" : "text-muted-foreground/50"}`}
+                              >
+                                L
+                              </span>
+                              <button
+                                className="text-muted-foreground/50 hover:text-foreground ml-0.5 transition-colors"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  const allOn =
+                                    hasFill && hasBorder && hasLabels
+                                  if (allOn) {
+                                    setFillLayerId((prev) =>
+                                      prev === layer.id ? null : prev,
+                                    )
+                                    toggleBorder(layer.id)
+                                    toggleLabel(layer.id)
+                                  } else {
+                                    setFillLayerId(layer.id)
+                                    setBorderLayerIds(
+                                      (prev) => new Set([...prev, layer.id]),
+                                    )
+                                    setLabelLayerIds(
+                                      (prev) => new Set([...prev, layer.id]),
+                                    )
+                                  }
+                                }}
+                              >
+                                {hasFill && hasBorder && hasLabels ? (
+                                  <IconEye className="h-3.5 w-3.5" />
+                                ) : (
+                                  <IconEyeOff className="h-3.5 w-3.5" />
+                                )}
+                              </button>
+                            </div>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent>
+                            <div className="mt-0.5 ml-2 space-y-px border-l pl-3.5 pb-1">
+                              <div className="flex items-center justify-between rounded px-1.5 py-1">
+                                <span className="text-muted-foreground text-xs">
+                                  Fill
+                                </span>
+                                <Switch
+                                  size="sm"
+                                  checked={hasFill}
+                                  onCheckedChange={() => {
+                                    toggleFill(layer.id)
+                                  }}
+                                />
+                              </div>
+                              <div className="flex items-center justify-between rounded px-1.5 py-1">
+                                <span className="text-muted-foreground text-xs">
+                                  Border
+                                </span>
+                                <Switch
+                                  size="sm"
+                                  checked={hasBorder}
+                                  onCheckedChange={() => {
+                                    toggleBorder(layer.id)
+                                  }}
+                                />
+                              </div>
+                              <div className="flex items-center justify-between rounded px-1.5 py-1">
+                                <span className="text-muted-foreground text-xs">
+                                  Labels
+                                </span>
+                                <Switch
+                                  size="sm"
+                                  checked={hasLabels}
+                                  onCheckedChange={() => {
+                                    toggleLabel(layer.id)
+                                  }}
+                                />
+                              </div>
+                              {/* Label field checkboxes — shown when labels are on */}
+                              {hasLabels && (
+                                <div className="mt-0.5 space-y-0.5">
+                                  {labelFieldOptions.map((opt) => {
+                                    const active = labelFields[layer.id] ?? [
+                                      "name",
+                                    ]
+                                    return (
+                                      <label
+                                        key={opt.value}
+                                        className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-0.5"
+                                      >
+                                        <Checkbox
+                                          checked={active.includes(opt.value)}
+                                          onCheckedChange={(checked) => {
+                                            setLabelFields((prev) => {
+                                              const cur = prev[layer.id] ?? [
+                                                "name",
+                                              ]
+                                              const next: string[] =
+                                                checked === true
+                                                  ? cur.includes(opt.value)
+                                                    ? cur
+                                                    : [...cur, opt.value]
+                                                  : cur.filter(
+                                                      (f) => f !== opt.value,
+                                                    )
+                                              return {
+                                                ...prev,
+                                                [layer.id]: next,
+                                              }
+                                            })
+                                          }}
+                                        />
+                                        <span className="text-muted-foreground text-xs">
+                                          {opt.label}
+                                        </span>
+                                      </label>
+                                    )
+                                  })}
+                                </div>
+                              )}
+                            </div>
+                          </CollapsibleContent>
+                        </Collapsible>
+                      )
+                    })}
+                  </div>
+                </SidebarGroupContent>
+              </SidebarGroup>
+
+              {/* Exports */}
+              <SidebarGroup>
+                <SidebarGroupLabel>Exports</SidebarGroupLabel>
+                <SidebarGroupContent>
+                  <div className="space-y-1.5 px-0.5">
+                    <button
+                      onClick={() => {
+                        setExportZttOpen(true)
+                      }}
+                      className="group flex w-full items-center gap-3 rounded-md border bg-card p-2.5 text-left transition-colors hover:bg-accent hover:border-accent-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                        <IconFileSpreadsheet className="h-3.5 w-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-xs font-medium leading-tight">
+                          Export to ZTT
+                        </div>
+                        <div className="text-muted-foreground mt-0.5 text-[11px] leading-tight">
+                          Zip-to-territory Excel file
+                        </div>
+                      </div>
+                      <IconChevronRight className="text-muted-foreground/40 h-3.5 w-3.5 shrink-0 transition-colors group-hover:text-muted-foreground" />
+                    </button>
+
+                    <div className="group flex w-full cursor-not-allowed items-center gap-3 rounded-md border border-dashed p-2.5 opacity-45">
+                      <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+                        <IconPresentation className="h-3.5 w-3.5" />
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5">
+                          <div className="text-xs font-medium leading-tight">
+                            Territory Report
+                          </div>
+                          <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-px text-[9px] font-semibold uppercase leading-none tracking-wide">
+                            Soon
+                          </span>
+                        </div>
+                        <div className="text-muted-foreground mt-0.5 text-[11px] leading-tight">
+                          PowerPoint slide deck
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </SidebarGroupContent>
+              </SidebarGroup>
+            </SidebarContent>
+
+            <SidebarFooter className="border-border border-t p-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-sidebar-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                    <Avatar size="default">
+                      <AvatarFallback>
+                        {me.name
+                          ? me.name
+                              .trim()
+                              .split(/\s+/)
+                              .map((w) => w[0])
+                              .join("")
+                              .toUpperCase()
+                              .slice(0, 2)
+                          : me.email[0].toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1 min-w-0">
+                      {me.name && (
+                        <p className="text-sm font-medium leading-tight truncate">
+                          {me.name}
+                        </p>
+                      )}
+                      <p
+                        className={`text-muted-foreground truncate ${me.name ? "text-xs" : "text-sm"}`}
+                      >
+                        {me.email}
+                      </p>
+                    </div>
+                    <IconChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                  </button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent side="top" align="start" className="w-56">
+                  <DropdownMenuLabel className="font-normal">
+                    <div className="flex flex-col gap-0.5">
+                      {me.name && (
+                        <span className="font-medium">{me.name}</span>
+                      )}
+                      <span className="text-xs text-muted-foreground truncate">
+                        {me.email}
+                      </span>
+                    </div>
+                  </DropdownMenuLabel>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() =>
+                      void navigate(AppRoutes.getRoute(PageName.Settings))
+                    }
+                  >
+                    <IconSettings className="mr-2 h-4 w-4" />
+                    Account settings
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem
+                    onClick={() => {
+                      logoutMutation.mutate()
+                    }}
+                    disabled={logoutMutation.isPending}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <IconLogout className="mr-2 h-4 w-4" />
+                    {logoutMutation.isPending ? "Logging out…" : "Log out"}
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </SidebarFooter>
+          </Sidebar>
+        </PageLayout.SideNav>
+
+        <PageLayout.TopNav>
+          <div className="flex w-full items-center gap-4">
+            <SidebarTrigger />
+            <SearchBar
+              mapId={currentMap.id}
+              onSelect={handleSearchSelect}
+              className="max-w-80 w-full"
+            />
+          </div>
+        </PageLayout.TopNav>
+
+        <PageLayout.FullScreenBody>
+          <div className="relative h-full w-full">
+            <Map
+              ref={mapRef}
+              baseMap={baseMap}
+              layers={layers}
+              currentTool={currentTool}
+              activeLayerId={activeLayerId}
+              tileVersion={
+                currentMapPolled.data?.tile_version ?? currentMap.tile_version
+              }
+              onClickSelect={handleClickSelect}
+              onLassoComplete={(geojson, additive) => {
+                if (activeLayerId != null) {
+                  spatialSelectMutation.mutate(
+                    { lasso: geojson, layerId: activeLayerId },
+                    {
+                      onSuccess: (response) => {
+                        if (!mapRef.current) return
+                        const map = mapRef.current.getMap()
+                        if (activeLayer?.order === 0) {
+                          const incoming = response.zip_codes ?? []
+                          const next = additive
+                            ? [...new Set([...selectedZipCodes, ...incoming])]
+                            : incoming
+                          updateSelectedZipStates(
+                            map,
+                            activeLayerId,
+                            selectedZipCodes,
+                            next,
+                          )
+                          setSelectedZipCodes(next)
+                        } else {
+                          const incoming = response.nodes
+                          const next = additive
+                            ? [...new Set([...selectedNodeIds, ...incoming])]
+                            : incoming
+                          updateSelectedNodeStates(
+                            map,
+                            activeLayerId,
+                            selectedNodeIds,
+                            next,
+                          )
+                          setSelectedNodeIds(next)
+                        }
+                      },
+                    },
+                  )
+                }
+              }}
+              selectedNodeIds={selectedNodeIds}
+              selectedZipCodes={selectedZipCodes}
+              onHover={setHoveredHierarchy}
+              onHoverEnd={() => {
+                setHoveredHierarchy([])
+              }}
+            />
+
+            {hoveredHierarchy.length > 0 && layersQuery.data && (
+              <div
+                className={`absolute top-4 rounded-lg border bg-background/90 px-3 py-2 shadow-md backdrop-blur-sm pointer-events-none transition-[right] duration-200 ease-in-out ${hasSelection ? "right-100" : "right-4"}`}
+              >
+                <div className="space-y-0.5">
+                  {[...layersQuery.data]
+                    .sort((a, b) => b.order - a.order)
+                    .map((layer) => {
+                      const hit = hoveredHierarchy.find(
+                        (h) => h.layerId === layer.id,
+                      )
+                      return (
+                        <div
+                          key={layer.id}
+                          className="flex items-baseline gap-2"
+                        >
+                          <span className="text-muted-foreground text-xs w-16 shrink-0 truncate text-right">
                             {layer.name}
                           </span>
-                          <div className="flex items-center gap-1">
-                            <span
-                              className={`rounded px-1 py-0.5 font-mono text-[10px] font-semibold leading-none transition-colors ${hasFill ? "bg-primary text-primary-foreground" : "text-muted-foreground/50"}`}
-                            >
-                              F
+                          {hit ? (
+                            <span className="text-foreground text-xs font-medium truncate max-w-40">
+                              {hit.name}
                             </span>
-                            <span
-                              className={`rounded px-1 py-0.5 font-mono text-[10px] font-semibold leading-none transition-colors ${hasBorder ? "bg-primary text-primary-foreground" : "text-muted-foreground/50"}`}
-                            >
-                              B
+                          ) : (
+                            <span className="text-muted-foreground/50 text-xs">
+                              —
                             </span>
-                            <span
-                              className={`rounded px-1 py-0.5 font-mono text-[10px] font-semibold leading-none transition-colors ${hasLabels ? "bg-primary text-primary-foreground" : "text-muted-foreground/50"}`}
-                            >
-                              L
-                            </span>
-                            <button
-                              className="text-muted-foreground/50 hover:text-foreground ml-0.5 transition-colors"
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                const allOn = hasFill && hasBorder && hasLabels
-                                if (allOn) {
-                                  setFillLayerId((prev) =>
-                                    prev === layer.id ? null : prev,
-                                  )
-                                  toggleBorder(layer.id)
-                                  toggleLabel(layer.id)
-                                } else {
-                                  setFillLayerId(layer.id)
-                                  setBorderLayerIds(
-                                    (prev) => new Set([...prev, layer.id]),
-                                  )
-                                  setLabelLayerIds(
-                                    (prev) => new Set([...prev, layer.id]),
-                                  )
-                                }
-                              }}
-                            >
-                              {hasFill && hasBorder && hasLabels ? (
-                                <IconEye className="h-3.5 w-3.5" />
-                              ) : (
-                                <IconEyeOff className="h-3.5 w-3.5" />
-                              )}
-                            </button>
-                          </div>
-                        </CollapsibleTrigger>
-                        <CollapsibleContent>
-                          <div className="mt-0.5 ml-2 space-y-px border-l pl-3.5 pb-1">
-                            <div className="flex items-center justify-between rounded px-1.5 py-1">
-                              <span className="text-muted-foreground text-xs">
-                                Fill
-                              </span>
-                              <Switch
-                                size="sm"
-                                checked={hasFill}
-                                onCheckedChange={() => {
-                                  toggleFill(layer.id)
-                                }}
-                              />
-                            </div>
-                            <div className="flex items-center justify-between rounded px-1.5 py-1">
-                              <span className="text-muted-foreground text-xs">
-                                Border
-                              </span>
-                              <Switch
-                                size="sm"
-                                checked={hasBorder}
-                                onCheckedChange={() => {
-                                  toggleBorder(layer.id)
-                                }}
-                              />
-                            </div>
-                            <div className="flex items-center justify-between rounded px-1.5 py-1">
-                              <span className="text-muted-foreground text-xs">
-                                Labels
-                              </span>
-                              <Switch
-                                size="sm"
-                                checked={hasLabels}
-                                onCheckedChange={() => {
-                                  toggleLabel(layer.id)
-                                }}
-                              />
-                            </div>
-                            {/* Label field checkboxes — shown when labels are on */}
-                            {hasLabels && (
-                              <div className="mt-0.5 space-y-0.5">
-                                {labelFieldOptions.map((opt) => {
-                                  const active =
-                                    labelFields[layer.id] ?? ["name"]
-                                  return (
-                                    <label
-                                      key={opt.value}
-                                      className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-0.5"
-                                    >
-                                      <Checkbox
-                                        checked={active.includes(opt.value)}
-                                        onCheckedChange={(checked) => {
-                                          setLabelFields((prev) => {
-                                            const cur =
-                                              prev[layer.id] ?? ["name"]
-                                            const next: string[] =
-                                              checked === true
-                                                ? cur.includes(opt.value)
-                                                  ? cur
-                                                  : [...cur, opt.value]
-                                                : cur.filter(
-                                                    (f) => f !== opt.value,
-                                                  )
-                                            return {
-                                              ...prev,
-                                              [layer.id]: next,
-                                            }
-                                          })
-                                        }}
-                                      />
-                                      <span className="text-muted-foreground text-xs">
-                                        {opt.label}
-                                      </span>
-                                    </label>
-                                  )
-                                })}
-                              </div>
-                            )}
-                          </div>
-                        </CollapsibleContent>
-                      </Collapsible>
-                    )
-                  })}
+                          )}
+                        </div>
+                      )
+                    })}
                 </div>
-              </SidebarGroupContent>
-            </SidebarGroup>
+              </div>
+            )}
 
-            {/* Exports */}
-            <SidebarGroup>
-              <SidebarGroupLabel>Exports</SidebarGroupLabel>
-              <SidebarGroupContent>
-                <div className="space-y-1.5 px-0.5">
-                  <button
-                    onClick={() => { setExportZttOpen(true) }}
-                    className="group flex w-full items-center gap-3 rounded-md border bg-card p-2.5 text-left transition-colors hover:bg-accent hover:border-accent-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            <div className="absolute bottom-4 left-4 flex flex-col gap-0.5 rounded-lg border bg-background/90 p-1 shadow-md backdrop-blur-sm">
+              {(
+                [
+                  {
+                    tool: "pan",
+                    icon: IconHandGrab,
+                    label: "Pan",
+                    shortcut: "V",
+                  },
+                  {
+                    tool: "select",
+                    icon: IconLasso,
+                    label: "Select",
+                    shortcut: "L",
+                  },
+                ] as const
+              ).map(({ tool, icon: Icon, label, shortcut }) => (
+                <Tooltip key={tool}>
+                  <TooltipTrigger asChild>
+                    <button
+                      onClick={() => {
+                        setCurrentTool(tool)
+                      }}
+                      className={`rounded p-2 transition-colors ${
+                        currentTool === tool
+                          ? "bg-primary text-primary-foreground"
+                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="right">
+                    {label}
+                    <kbd className="bg-muted text-muted-foreground ml-2 rounded px-1 py-0.5 font-mono text-[10px]">
+                      {shortcut}
+                    </kbd>
+                  </TooltipContent>
+                </Tooltip>
+              ))}
+            </div>
+
+            {/* Floating action bar — appears when something is selected */}
+            {hasSelection && activeLayer && (
+              <div className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2">
+                <div className="flex items-center gap-1 rounded-full border bg-background/95 px-3 py-1.5 shadow-lg backdrop-blur-sm">
+                  <span className="text-sm font-medium px-1">
+                    {selectionCount}{" "}
+                    {pluralize(activeLayer.name, selectionCount)}
+                  </span>
+                  <Separator orientation="vertical" className="mx-1 h-4" />
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-full"
+                    onClick={() => {
+                      setMoveOpen(true)
+                    }}
                   >
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
-                      <IconFileSpreadsheet className="h-3.5 w-3.5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="text-xs font-medium leading-tight">Export to ZTT</div>
-                      <div className="text-muted-foreground mt-0.5 text-[11px] leading-tight">
-                        Zip-to-territory Excel file
-                      </div>
-                    </div>
-                    <IconChevronRight className="text-muted-foreground/40 h-3.5 w-3.5 shrink-0 transition-colors group-hover:text-muted-foreground" />
+                    Move
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-full"
+                    disabled={isZipLayer || selectionCount < 2}
+                    title={
+                      isZipLayer
+                        ? "Cannot merge zip codes"
+                        : selectionCount < 2
+                          ? "Select 2 or more to merge"
+                          : undefined
+                    }
+                    onClick={() => {
+                      setMergeOpen(true)
+                    }}
+                  >
+                    Merge
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="rounded-full text-destructive hover:text-destructive"
+                    onClick={() => {
+                      setDeleteOpen(true)
+                    }}
+                  >
+                    {isZipLayer ? "Unassign" : "Delete"}
+                  </Button>
+                  <Separator orientation="vertical" className="mx-1 h-4" />
+                  <button
+                    onClick={clearSelection}
+                    className="text-muted-foreground hover:text-foreground p-1 transition-colors"
+                    title="Clear selection (Esc)"
+                  >
+                    <IconX className="h-3.5 w-3.5" />
                   </button>
+                </div>
+              </div>
+            )}
 
-                  <div className="group flex w-full cursor-not-allowed items-center gap-3 rounded-md border border-dashed p-2.5 opacity-45">
-                    <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-                      <IconPresentation className="h-3.5 w-3.5" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <div className="text-xs font-medium leading-tight">Territory Report</div>
-                        <span className="bg-muted text-muted-foreground rounded-full px-1.5 py-px text-[9px] font-semibold uppercase leading-none tracking-wide">
-                          Soon
+            {(isImporting || isImportFailed) && (
+              <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/70 backdrop-blur-sm">
+                <div className="flex flex-col items-center gap-6 rounded-2xl border bg-card/95 p-10 shadow-2xl">
+                  {isImportFailed ? (
+                    <>
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10">
+                        <span className="text-destructive text-2xl font-bold">
+                          !
                         </span>
                       </div>
-                      <div className="text-muted-foreground mt-0.5 text-[11px] leading-tight">
-                        PowerPoint slide deck
+                      <div className="text-center space-y-1.5">
+                        <p className="text-lg font-semibold">Import failed</p>
+                        <p className="text-muted-foreground text-sm max-w-xs">
+                          {importState.error ??
+                            "An error occurred while building this map."}
+                        </p>
                       </div>
-                    </div>
-                  </div>
+                      <div className="flex flex-col items-center gap-2">
+                        <a
+                          href={AppRoutes.getRoute(
+                            PageName.InitializeProcessing,
+                            { mapId: currentMap.id },
+                          )}
+                          className="text-sm text-primary underline underline-offset-4"
+                        >
+                          View import details
+                        </a>
+                        <a
+                          href={AppRoutes.getRoute(PageName.Initialize)}
+                          className="text-sm text-muted-foreground underline underline-offset-4"
+                        >
+                          Start a new import
+                        </a>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="relative size-14">
+                        <div className="absolute inset-0 rounded-full border-4 border-muted" />
+                        <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+                      </div>
+                      <div className="text-center space-y-1.5">
+                        <p className="text-lg font-semibold">
+                          Building your map
+                        </p>
+                        <p className="text-muted-foreground text-sm">
+                          {importState.step ?? "Setting up territories…"}
+                        </p>
+                        <p className="text-muted-foreground/60 text-xs">
+                          This may take a minute
+                        </p>
+                      </div>
+                    </>
+                  )}
                 </div>
-              </SidebarGroupContent>
-            </SidebarGroup>
-          </SidebarContent>
-
-          <SidebarFooter className="border-border border-t p-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <button className="flex w-full items-center gap-3 rounded-lg px-2 py-2.5 text-left hover:bg-sidebar-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-                  <Avatar size="default">
-                    <AvatarFallback>
-                      {me.name
-                        ? me.name.trim().split(/\s+/).map((w) => w[0]).join("").toUpperCase().slice(0, 2)
-                        : me.email[0].toUpperCase()}
-                    </AvatarFallback>
-                  </Avatar>
-                  <div className="flex-1 min-w-0">
-                    {me.name && (
-                      <p className="text-sm font-medium leading-tight truncate">{me.name}</p>
-                    )}
-                    <p className={`text-muted-foreground truncate ${me.name ? "text-xs" : "text-sm"}`}>
-                      {me.email}
-                    </p>
-                  </div>
-                  <IconChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
-                </button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent side="top" align="start" className="w-56">
-                <DropdownMenuLabel className="font-normal">
-                  <div className="flex flex-col gap-0.5">
-                    {me.name && <span className="font-medium">{me.name}</span>}
-                    <span className="text-xs text-muted-foreground truncate">{me.email}</span>
-                  </div>
-                </DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => void navigate(AppRoutes.getRoute(PageName.Settings))}
-                >
-                  <IconSettings className="mr-2 h-4 w-4" />
-                  Account settings
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onClick={() => logoutMutation.mutate()}
-                  disabled={logoutMutation.isPending}
-                  className="text-destructive focus:text-destructive"
-                >
-                  <IconLogout className="mr-2 h-4 w-4" />
-                  {logoutMutation.isPending ? "Logging out…" : "Log out"}
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </SidebarFooter>
-        </Sidebar>
-      </PageLayout.SideNav>
-
-      <PageLayout.TopNav>
-        <div className="flex w-full items-center gap-4">
-          <SidebarTrigger />
-          <SearchBar
-            mapId={currentMap.id}
-            onSelect={handleSearchSelect}
-            className="max-w-80 w-full"
-          />
-        </div>
-      </PageLayout.TopNav>
-
-      <PageLayout.FullScreenBody>
-        <div className="relative h-full w-full">
-          <Map
-            ref={mapRef}
-            baseMap={baseMap}
-            layers={layers}
-            currentTool={currentTool}
-            activeLayerId={activeLayerId}
-            tileVersion={currentMapPolled.data?.tile_version ?? currentMap.tile_version}
-            onClickSelect={handleClickSelect}
-            onLassoComplete={(geojson, additive) => {
-              if (activeLayerId != null) {
-                spatialSelectMutation.mutate(
-                  { lasso: geojson, layerId: activeLayerId },
-                  {
-                    onSuccess: (response) => {
-                      if (!mapRef.current) return
-                      const map = mapRef.current.getMap()
-                      if (activeLayer?.order === 0) {
-                        const incoming = response.zip_codes ?? []
-                        const next = additive
-                          ? [...new Set([...selectedZipCodes, ...incoming])]
-                          : incoming
-                        updateSelectedZipStates(map, activeLayerId, selectedZipCodes, next)
-                        setSelectedZipCodes(next)
-                      } else {
-                        const incoming = response.nodes
-                        const next = additive
-                          ? [...new Set([...selectedNodeIds, ...incoming])]
-                          : incoming
-                        updateSelectedNodeStates(map, activeLayerId, selectedNodeIds, next)
-                        setSelectedNodeIds(next)
-                      }
-                    },
-                  },
-                )
-              }
-            }}
+              </div>
+            )}
+          </div>
+        </PageLayout.FullScreenBody>
+      </PageLayout>
+      {activeLayer && (
+        <>
+          <MoveDialog
+            open={moveOpen}
+            onOpenChange={setMoveOpen}
+            activeLayer={activeLayer}
+            parentLayer={parentLayer}
             selectedNodeIds={selectedNodeIds}
             selectedZipCodes={selectedZipCodes}
-            onHover={setHoveredHierarchy}
-            onHoverEnd={() => setHoveredHierarchy([])}
+            onSuccess={onActionSuccess}
           />
-
-          {hoveredHierarchy.length > 0 && layersQuery.data && (
-            <div className={`absolute top-4 rounded-lg border bg-background/90 px-3 py-2 shadow-md backdrop-blur-sm pointer-events-none transition-[right] duration-200 ease-in-out ${hasSelection ? "right-100" : "right-4"}`}>
-              <div className="space-y-0.5">
-                {[...layersQuery.data]
-                  .sort((a, b) => b.order - a.order)
-                  .map((layer) => {
-                    const hit = hoveredHierarchy.find((h) => h.layerId === layer.id)
-                    return (
-                      <div key={layer.id} className="flex items-baseline gap-2">
-                        <span className="text-muted-foreground text-xs w-16 shrink-0 truncate text-right">
-                          {layer.name}
-                        </span>
-                        {hit ? (
-                          <span className="text-foreground text-xs font-medium truncate max-w-40">
-                            {hit.name}
-                          </span>
-                        ) : (
-                          <span className="text-muted-foreground/50 text-xs">—</span>
-                        )}
-                      </div>
-                    )
-                  })}
-              </div>
-            </div>
-          )}
-
-          <div className="absolute bottom-4 left-4 flex flex-col gap-0.5 rounded-lg border bg-background/90 p-1 shadow-md backdrop-blur-sm">
-            {(
-              [
-                {
-                  tool: "pan",
-                  icon: IconHandGrab,
-                  label: "Pan",
-                  shortcut: "V",
-                },
-                {
-                  tool: "select",
-                  icon: IconLasso,
-                  label: "Select",
-                  shortcut: "L",
-                },
-              ] as const
-            ).map(({ tool, icon: Icon, label, shortcut }) => (
-              <Tooltip key={tool}>
-                <TooltipTrigger asChild>
-                  <button
-                    onClick={() => {
-                      setCurrentTool(tool)
-                    }}
-                    className={`rounded p-2 transition-colors ${
-                      currentTool === tool
-                        ? "bg-primary text-primary-foreground"
-                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="right">
-                  {label}
-                  <kbd className="bg-muted text-muted-foreground ml-2 rounded px-1 py-0.5 font-mono text-[10px]">
-                    {shortcut}
-                  </kbd>
-                </TooltipContent>
-              </Tooltip>
-            ))}
-          </div>
-
-          {/* Floating action bar — appears when something is selected */}
-          {hasSelection && activeLayer && (
-            <div className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2">
-              <div className="flex items-center gap-1 rounded-full border bg-background/95 px-3 py-1.5 shadow-lg backdrop-blur-sm">
-                <span className="text-sm font-medium px-1">
-                  {selectionCount} {pluralize(activeLayer.name, selectionCount)}
-                </span>
-                <Separator orientation="vertical" className="mx-1 h-4" />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="rounded-full"
-                  onClick={() => setMoveOpen(true)}
-                >
-                  Move
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="rounded-full"
-                  disabled={isZipLayer || selectionCount < 2}
-                  title={
-                    isZipLayer
-                      ? "Cannot merge zip codes"
-                      : selectionCount < 2
-                        ? "Select 2 or more to merge"
-                        : undefined
-                  }
-                  onClick={() => setMergeOpen(true)}
-                >
-                  Merge
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="rounded-full text-destructive hover:text-destructive"
-                  onClick={() => setDeleteOpen(true)}
-                >
-                  {isZipLayer ? "Unassign" : "Delete"}
-                </Button>
-                <Separator orientation="vertical" className="mx-1 h-4" />
-                <button
-                  onClick={clearSelection}
-                  className="text-muted-foreground hover:text-foreground p-1 transition-colors"
-                  title="Clear selection (Esc)"
-                >
-                  <IconX className="h-3.5 w-3.5" />
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      </PageLayout.FullScreenBody>
-    </PageLayout>
-    {activeLayer && (
-      <>
-        <MoveDialog
-          open={moveOpen}
-          onOpenChange={setMoveOpen}
-          activeLayer={activeLayer}
-          parentLayer={parentLayer}
-          selectedNodeIds={selectedNodeIds}
-          selectedZipCodes={selectedZipCodes}
-          onSuccess={onActionSuccess}
-        />
-        <MergeDialog
-          open={mergeOpen}
-          onOpenChange={setMergeOpen}
-          activeLayer={activeLayer}
-          parentLayer={parentLayer}
-          selectedNodeIds={selectedNodeIds}
-          onSuccess={onActionSuccess}
-        />
-        <DeleteDialog
-          open={deleteOpen}
-          onOpenChange={setDeleteOpen}
-          activeLayer={activeLayer}
-          selectedNodeIds={selectedNodeIds}
-          selectedZipCodes={selectedZipCodes}
-          onSuccess={onActionSuccess}
-        />
-      </>
-    )}
-    <ExportZttDialog
-      open={exportZttOpen}
-      onOpenChange={setExportZttOpen}
-      mapId={currentMap.id}
-      mapName={currentMap.name}
-      layers={layersQuery.data ?? []}
-    />
-    <NodeDetailSheet
-      result={detailResult}
-      layers={layersQuery.data ?? []}
-      onClose={() => setDetailResult(null)}
-    />
-    <SelectionSheet
-      selectedNodeIds={selectedNodeIds}
-      selectedZipCodes={selectedZipCodes}
-      activeLayer={activeLayer}
-      layers={layersQuery.data ?? []}
-      dataFieldConfig={currentMap.data_field_config ?? []}
-      onClose={clearSelection}
-    />
+          <MergeDialog
+            open={mergeOpen}
+            onOpenChange={setMergeOpen}
+            activeLayer={activeLayer}
+            parentLayer={parentLayer}
+            selectedNodeIds={selectedNodeIds}
+            onSuccess={onActionSuccess}
+          />
+          <DeleteDialog
+            open={deleteOpen}
+            onOpenChange={setDeleteOpen}
+            activeLayer={activeLayer}
+            selectedNodeIds={selectedNodeIds}
+            selectedZipCodes={selectedZipCodes}
+            onSuccess={onActionSuccess}
+          />
+        </>
+      )}
+      <ExportZttDialog
+        open={exportZttOpen}
+        onOpenChange={setExportZttOpen}
+        mapId={currentMap.id}
+        mapName={currentMap.name}
+        layers={layersQuery.data ?? []}
+      />
+      <NodeDetailSheet
+        result={detailResult}
+        layers={layersQuery.data ?? []}
+        onClose={() => {
+          setDetailResult(null)
+        }}
+      />
+      <SelectionSheet
+        selectedNodeIds={selectedNodeIds}
+        selectedZipCodes={selectedZipCodes}
+        activeLayer={activeLayer}
+        layers={layersQuery.data ?? []}
+        dataFieldConfig={currentMap.data_field_config ?? []}
+        onClose={clearSelection}
+      />
     </>
   )
 }

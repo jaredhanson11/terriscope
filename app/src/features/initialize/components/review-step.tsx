@@ -21,15 +21,16 @@ import type {
   DataFields,
   HeadersData,
   LayerFields,
-  ValuesData,
 } from "@/features/initialize/initialize"
 
 interface ReviewStepProps {
   name: string
   headers: HeadersData
-  values: ValuesData
+  rowCount: number
+  previewRows: (string | number | null)[][]
   layerFields: LayerFields
   dataFields: DataFields
+  isSubmitting?: boolean
   onNameChange?: (name: string) => void
   onComplete?: () => void
   onBack?: () => void
@@ -38,29 +39,16 @@ interface ReviewStepProps {
 export default function ReviewStep({
   name,
   headers,
-  values,
+  rowCount,
+  previewRows,
   layerFields,
   dataFields,
+  isSubmitting = false,
   onNameChange,
   onComplete,
   onBack,
 }: ReviewStepProps) {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false)
-
-  // Calculate some stats
-  const totalRows = values.length
-  const totalColumns = headers.length
-
-  // Function to count unique values for a column
-  const getUniqueCount = (columnHeader: string): number => {
-    const columnIndex = headers.indexOf(columnHeader)
-    if (columnIndex === -1) return 0
-
-    const uniqueValues = new Set(
-      values.map((row) => row[columnIndex]).filter((val) => val !== null),
-    )
-    return uniqueValues.size
-  }
 
   return (
     <div className="flex h-full items-center justify-center p-6">
@@ -98,14 +86,14 @@ export default function ReviewStep({
                     Total Rows
                   </div>
                   <div className="text-2xl font-semibold">
-                    {totalRows.toLocaleString()}
+                    {rowCount.toLocaleString()}
                   </div>
                 </div>
                 <div>
                   <div className="text-sm text-muted-foreground">
                     Total Columns
                   </div>
-                  <div className="text-2xl font-semibold">{totalColumns}</div>
+                  <div className="text-2xl font-semibold">{headers.length}</div>
                 </div>
               </div>
 
@@ -147,7 +135,7 @@ export default function ReviewStep({
                           </TableRow>
                         </TableHeader>
                         <TableBody>
-                          {values.slice(0, 5).map((row, rowIndex) => (
+                          {previewRows.slice(0, 5).map((row, rowIndex) => (
                             <TableRow key={rowIndex}>
                               {row.map((cell, cellIndex) => (
                                 <TableCell key={cellIndex}>
@@ -170,35 +158,22 @@ export default function ReviewStep({
                 Layer Configuration
               </h3>
               <div className="space-y-3">
-                {layerFields.map((layer, index) => {
-                  const uniqueCount = getUniqueCount(layer.header)
-                  return (
-                    <div
-                      key={layer.header}
-                      className="flex items-center gap-4 rounded-md border border-border p-4"
-                    >
-                      <Badge variant="outline" className="shrink-0">
-                        Layer {index + 1}
-                      </Badge>
-                      <div className="flex-1">
-                        <div className="font-medium">{layer.name}</div>
-                        <div className="text-sm text-muted-foreground">
-                          Column: {layer.header}
-                          {layer.parentHeader &&
-                            ` → Parent: ${layer.parentHeader}`}
-                        </div>
-                      </div>
-                      <div className="text-right">
-                        <div className="text-2xl font-semibold">
-                          {uniqueCount.toLocaleString()}
-                        </div>
-                        <div className="text-xs text-muted-foreground">
-                          unique {uniqueCount === 1 ? "value" : "values"}
-                        </div>
+                {layerFields.map((layer, index) => (
+                  <div
+                    key={layer.header}
+                    className="flex items-center gap-4 rounded-md border border-border p-4"
+                  >
+                    <Badge variant="outline" className="shrink-0">
+                      Layer {index + 1}
+                    </Badge>
+                    <div className="flex-1">
+                      <div className="font-medium">{layer.name}</div>
+                      <div className="text-sm text-muted-foreground">
+                        Column: {layer.header}
                       </div>
                     </div>
-                  )
-                })}
+                  </div>
+                ))}
               </div>
             </div>
 
@@ -245,7 +220,7 @@ export default function ReviewStep({
           <Button onClick={onBack} variant="outline" size="lg">
             Back
           </Button>
-          <Button onClick={onComplete} size="lg" disabled={!name.trim()}>
+          <Button onClick={onComplete} size="lg" disabled={!name.trim() || isSubmitting}>
             Create Project
           </Button>
         </div>

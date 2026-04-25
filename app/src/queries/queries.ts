@@ -1,23 +1,33 @@
 import { queryOptions } from "@tanstack/react-query"
 
+import config from "@/app/config"
 import { fetchClient } from "@/fetch-client"
 import type { components } from "@/lib/api/v1"
 
 type NodeQuery = components["schemas"]["NodeQuery"]
 type ZipQuery = components["schemas"]["ZipQuery"]
 
+// Local type for upload status — replace with generated path type after openapi:generate
+type UploadStatusData =
+  | { document_id: string; status: "parsing" }
+  | { document_id: string; status: "ready"; headers: string[]; suggested_layers: string[]; preview_rows: (string | number | null)[][]; row_count: number; warnings: string[] }
+  | { document_id: string; status: "failed"; error: string; error_reason?: string | null }
+
 const ACTIVE_JOB_STATUSES = new Set(["pending", "processing", "failed"])
 
-function isJobActive(
-  data: { active_job?: { status: string } | null } | undefined,
+function isMapLoading(
+  data: { active_job?: { status: string } | null; import_state?: { status: string } | null } | undefined,
 ): boolean {
-  return !!data?.active_job && ACTIVE_JOB_STATUSES.has(data.active_job.status)
+  if (data?.active_job && ACTIVE_JOB_STATUSES.has(data.active_job.status)) return true
+  if (data?.import_state?.status === "importing") return true
+  return false
 }
 
 export const queries = {
   _root: () => [],
   _layers: () => ["layers"],
   _nodes: () => ["nodes"],
+  _uploads: () => ["uploads"],
   _me: () => [...queries._root(), "me"],
   _maps: () => [...queries._root(), "maps"],
   me: () =>
@@ -81,9 +91,24 @@ export const queries = {
         }
         return response.data
       },
-      // Poll every 2s while a job is active; stop when idle or complete
       refetchInterval: (query) =>
-        isJobActive(query.state.data) ? 2000 : false,
+        isMapLoading(query.state.data) ? 2000 : false,
+    }),
+  getUpload: (documentId: string) =>
+    queryOptions({
+      queryKey: [...queries._uploads(), documentId],
+      queryFn: async () => {
+        const baseUrl = config.get("api_base_url")
+        const response = await fetch(`${baseUrl}/maps/uploads/${documentId}`, {
+          credentials: "include",
+        })
+        if (!response.ok) {
+          throw new Error("Failed to fetch upload status")
+        }
+        return response.json() as Promise<UploadStatusData>
+      },
+      refetchInterval: (query) =>
+        query.state.data?.status === "parsing" ? 2000 : false,
     }),
   searchMap: (mapId: string, q: string) =>
     queryOptions({

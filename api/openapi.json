@@ -1367,7 +1367,7 @@
           "Maps"
         ],
         "summary": "List Maps",
-        "description": "List maps for the current user, each with its latest active job if any.",
+        "description": "List maps for the current user, each with its active job and import state.",
         "operationId": "list_maps_maps_get",
         "responses": {
           "200": {
@@ -1391,13 +1391,13 @@
           "Maps"
         ],
         "summary": "Create Map",
-        "description": "Create map.\n\nSynchronously inserts all nodes and zip assignments, then enqueues a\nbackground task to compute geometry and data aggregations.  Returns 202\nwith the new map and an ``active_job`` tracking the pending computation.\n\nTODO:\n    - Return errors for zip codes we don't have data for\n    - Validate no duplicate layer names\n    - Validate no duplicate parents and raise error if so",
+        "description": "Create a map from a previously uploaded and parsed document.",
         "operationId": "create_map_maps_post",
         "requestBody": {
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ImportMap"
+                "$ref": "#/components/schemas/CreateMap"
               }
             }
           },
@@ -1433,7 +1433,7 @@
           "Maps"
         ],
         "summary": "Get Map",
-        "description": "Get a single map with its latest active job.",
+        "description": "Get a single map with its active job and import state.",
         "operationId": "get_map_maps__map_id__get",
         "parameters": [
           {
@@ -1552,6 +1552,129 @@
           }
         }
       }
+    },
+    "/maps/uploads": {
+      "post": {
+        "tags": [
+          "Uploads"
+        ],
+        "summary": "Upload Spreadsheet",
+        "description": "Accept an Excel/.ztt file, stream it to S3, and enqueue background parsing.\n\nReturns immediately with document_id. The client should poll\nGET /maps/uploads/{document_id} until status is 'ready' or 'failed'.",
+        "operationId": "upload_spreadsheet_maps_uploads_post",
+        "requestBody": {
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/Body_upload_spreadsheet_maps_uploads_post"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/MapUploadParsing"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MapUploadReady"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MapUploadFailed"
+                    }
+                  ],
+                  "title": "Response Upload Spreadsheet Maps Uploads Post",
+                  "discriminator": {
+                    "propertyName": "status",
+                    "mapping": {
+                      "parsing": "#/components/schemas/MapUploadParsing",
+                      "ready": "#/components/schemas/MapUploadReady",
+                      "failed": "#/components/schemas/MapUploadFailed"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/maps/uploads/{document_id}": {
+      "get": {
+        "tags": [
+          "Uploads"
+        ],
+        "summary": "Get Upload Status",
+        "description": "Poll the parse status of an uploaded file.",
+        "operationId": "get_upload_status_maps_uploads__document_id__get",
+        "parameters": [
+          {
+            "name": "document_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Document Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "$ref": "#/components/schemas/MapUploadParsing"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MapUploadReady"
+                    },
+                    {
+                      "$ref": "#/components/schemas/MapUploadFailed"
+                    }
+                  ],
+                  "discriminator": {
+                    "propertyName": "status",
+                    "mapping": {
+                      "parsing": "#/components/schemas/MapUploadParsing",
+                      "ready": "#/components/schemas/MapUploadReady",
+                      "failed": "#/components/schemas/MapUploadFailed"
+                    }
+                  },
+                  "title": "Response Get Upload Status Maps Uploads  Document Id  Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
     }
   },
   "components": {
@@ -1587,6 +1710,25 @@
         ],
         "title": "AssignZip",
         "description": "Assign or update a single zip code's territory assignment.\n\nPUT with parent_node_id=null unassigns the zip (nulls the FK, preserves the row and color).\nDELETE /layers/{layer_id}/zips/{zip_code} resets the zip (removes the row entirely)."
+      },
+      "Body_upload_spreadsheet_maps_uploads_post": {
+        "properties": {
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "title": "File"
+          },
+          "tab_index": {
+            "type": "integer",
+            "title": "Tab Index",
+            "default": 0
+          }
+        },
+        "type": "object",
+        "required": [
+          "file"
+        ],
+        "title": "Body_upload_spreadsheet_maps_uploads_post"
       },
       "BulkAssignZips": {
         "properties": {
@@ -1719,6 +1861,41 @@
         ],
         "title": "CreateLayer",
         "description": "CreateLayer."
+      },
+      "CreateMap": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "layers": {
+            "items": {
+              "$ref": "#/components/schemas/LayerSetup"
+            },
+            "type": "array",
+            "title": "Layers"
+          },
+          "data_fields": {
+            "items": {
+              "$ref": "#/components/schemas/DataFieldSetup"
+            },
+            "type": "array",
+            "title": "Data Fields"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "name",
+          "layers",
+          "data_fields"
+        ],
+        "title": "CreateMap",
+        "description": "DTO for POST /maps.\n\nReferences a previously uploaded and parsed document. The raw spreadsheet\ndata stays in S3 and is read by the background import worker."
       },
       "CreateNode": {
         "properties": {
@@ -1864,68 +2041,6 @@
         "title": "HeartbeatResponseDTO",
         "description": "Heartbeat response DTO."
       },
-      "ImportMap": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "layers": {
-            "items": {
-              "$ref": "#/components/schemas/LayerSetup"
-            },
-            "type": "array",
-            "title": "Layers"
-          },
-          "data_fields": {
-            "items": {
-              "$ref": "#/components/schemas/DataFieldSetup"
-            },
-            "type": "array",
-            "title": "Data Fields"
-          },
-          "values": {
-            "items": {
-              "items": {
-                "anyOf": [
-                  {
-                    "type": "string"
-                  },
-                  {
-                    "type": "integer"
-                  },
-                  {
-                    "type": "number"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
-              },
-              "type": "array"
-            },
-            "type": "array",
-            "title": "Values"
-          },
-          "headers": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Headers"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "layers",
-          "data_fields",
-          "values",
-          "headers"
-        ],
-        "title": "ImportMap",
-        "description": "ImportMap."
-      },
       "Layer": {
         "properties": {
           "id": {
@@ -2038,6 +2153,9 @@
               }
             ]
           },
+          "import_state": {
+            "$ref": "#/components/schemas/MapImportState"
+          },
           "updated_at": {
             "anyOf": [
               {
@@ -2054,10 +2172,66 @@
         "type": "object",
         "required": [
           "id",
-          "name"
+          "name",
+          "import_state"
         ],
         "title": "Map",
         "description": "Map."
+      },
+      "MapImportState": {
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "importing",
+              "complete",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          },
+          "warnings": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "string"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Warnings"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "status"
+        ],
+        "title": "MapImportState",
+        "description": "Import lifecycle state embedded in Map responses.\n\nCovers the import phase (after POST /maps). The parse phase lives on MapUploadStatus.\nNon-nullable on Map \u2014 all maps in this system are created via the upload flow."
       },
       "MapJob": {
         "properties": {
@@ -2068,7 +2242,6 @@
           "job_type": {
             "type": "string",
             "enum": [
-              "import",
               "recompute_geometry",
               "recompute_data"
             ],
@@ -2114,7 +2287,136 @@
           "status"
         ],
         "title": "MapJob",
-        "description": "Background job for a map."
+        "description": "Background recompute job for a map (geometry or data). Import lifecycle is tracked separately via MapImportState."
+      },
+      "MapUploadFailed": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "status": {
+            "type": "string",
+            "const": "failed",
+            "title": "Status"
+          },
+          "error": {
+            "type": "string",
+            "title": "Error"
+          },
+          "error_reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Reason"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "status",
+          "error"
+        ],
+        "title": "MapUploadFailed",
+        "description": "Returned by GET /maps/uploads/{id} when parsing failed."
+      },
+      "MapUploadParsing": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "status": {
+            "type": "string",
+            "const": "parsing",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "status"
+        ],
+        "title": "MapUploadParsing",
+        "description": "Returned by both POST /maps/uploads and GET /maps/uploads/{id} while parsing."
+      },
+      "MapUploadReady": {
+        "properties": {
+          "document_id": {
+            "type": "string",
+            "title": "Document Id"
+          },
+          "status": {
+            "type": "string",
+            "const": "ready",
+            "title": "Status"
+          },
+          "headers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Headers"
+          },
+          "suggested_layers": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Suggested Layers"
+          },
+          "preview_rows": {
+            "items": {
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "integer"
+                  },
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "type": "array"
+            },
+            "type": "array",
+            "title": "Preview Rows"
+          },
+          "row_count": {
+            "type": "integer",
+            "title": "Row Count"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Warnings"
+          }
+        },
+        "type": "object",
+        "required": [
+          "document_id",
+          "status",
+          "headers",
+          "suggested_layers",
+          "preview_rows",
+          "row_count",
+          "warnings"
+        ],
+        "title": "MapUploadReady",
+        "description": "Returned by GET /maps/uploads/{id} once parsing is complete.\n\nThe frontend uses headers + suggested_layers to render the wizard configuration\nstep, and preview_rows to show the user a sample of their data."
       },
       "MergeNodes": {
         "properties": {

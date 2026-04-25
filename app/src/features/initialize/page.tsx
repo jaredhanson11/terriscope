@@ -1,7 +1,7 @@
 import { IconCheck } from "@tabler/icons-react"
 import { useFormik } from "formik"
 import * as React from "react"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useParams } from "react-router-dom"
 
 import { AppRoutes, PageName } from "@/app/routes"
 import { BrandLogo } from "@/components/brand-logo"
@@ -15,7 +15,7 @@ import {
   SidebarHeader,
 } from "@/components/ui/sidebar"
 import { cn } from "@/lib/utils"
-import { useImportMapMutation } from "@/queries/mutations"
+import { useCreateMapMutation } from "@/queries/mutations"
 import { queries } from "@/queries/queries"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 
@@ -26,9 +26,8 @@ import ReviewStep from "./components/review-step"
 import type {
   DataField,
   DataFields,
-  HeadersData,
   LayerFields,
-  ValuesData,
+  UploadResult,
 } from "./initialize"
 
 interface Step {
@@ -41,65 +40,94 @@ interface Step {
 const WIZARD_STEPS_COUNT = 4
 
 export default function InitializePage() {
+  const { documentId: urlDocumentId, mapId: urlMapId } = useParams<{
+    documentId?: string
+    mapId?: string
+  }>()
+
   const [activeStepIdx, setActiveStepIdx] = React.useState<number>(0)
-  const [processingMapId, setProcessingMapId] = React.useState<string | null>(null)
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const importMutation = useImportMapMutation()
+  const createMapMutation = useCreateMapMutation()
 
-  // Poll the map once the import task is queued
-  const mapQuery = useQuery({
-    ...queries.getMap(processingMapId ?? ""),
-    enabled: processingMapId != null,
+  // Restore mode: documentId in URL — poll the upload to re-hydrate wizard state
+  const isRestoringUpload = !!urlDocumentId
+  const uploadRestoreQuery = useQuery({
+    ...queries.getUpload(urlDocumentId ?? ""),
+    enabled: isRestoringUpload,
   })
 
-  // Navigate to home once the job completes
+  // Processing mode: mapId in URL — poll import_state
+  const isProcessingFromUrl = !!urlMapId
+  const mapQuery = useQuery({
+    ...queries.getMap(urlMapId ?? ""),
+    enabled: isProcessingFromUrl,
+  })
+
+  const isProcessing = isProcessingFromUrl
+  const processingFailed = mapQuery.data?.import_state?.status === "failed"
+  const processingStep = mapQuery.data?.import_state?.step ?? "Queuing…"
+
+  // Navigate to home once import completes
   React.useEffect(() => {
     if (!mapQuery.data) return
-    const job = mapQuery.data.active_job
-    if (job?.status === "complete" || job == null) {
+    if (mapQuery.data.import_state.status === "complete") {
       void queryClient.invalidateQueries({ queryKey: queries._maps() })
-      void navigate(AppRoutes.getRoute(PageName.Home))
+      void navigate(AppRoutes.getRoute(PageName.Home, { mapId: urlMapId ?? "" }))
     }
-  }, [mapQuery.data, navigate, queryClient])
-
-  const isProcessing = processingMapId != null
-  const processingStep = mapQuery.data?.active_job?.step ?? "Queuing…"
-  const processingFailed = mapQuery.data?.active_job?.status === "failed"
+  }, [mapQuery.data, navigate, queryClient, urlMapId])
 
   const formik = useFormik({
     initialValues: {
       name: "",
-      headers: [] as HeadersData,
-      values: [] as ValuesData,
+      documentId: "",
+      headers: [] as string[],
+      suggestedLayers: [] as string[],
+      previewRows: [] as (string | number | null)[][],
+      rowCount: 0,
       layers: [] as LayerFields,
       data_fields: [] as DataFields,
     },
     onSubmit: () => {
-      importMutation.mutate(
+      createMapMutation.mutate(
         {
-          import_data: {
-            name: formik.values.name,
-            headers: formik.values.headers,
-            values: formik.values.values,
-            layers: formik.values.layers,
-            data_fields: formik.values.data_fields.map((f: DataField) => ({
-              name: f.name,
-              header: f.header,
-              type: f.type,
-              aggregations: f.aggregations,
-            })),
-          },
+          document_id: formik.values.documentId,
+          name: formik.values.name,
+          layers: formik.values.layers,
+          data_fields: formik.values.data_fields.map((f: DataField) => ({
+            name: f.name,
+            header: f.header,
+            type: f.type,
+            aggregations: f.aggregations,
+          })),
         },
         {
           onSuccess: (data) => {
-            setProcessingMapId(data.id)
-            setActiveStepIdx(WIZARD_STEPS_COUNT) // advance past wizard steps to processing view
+            void navigate(
+              AppRoutes.getRoute(PageName.InitializeProcessing, { mapId: data.id }),
+            )
           },
         },
       )
     },
   })
+
+  // Restore wizard state when upload data arrives (refresh on /new/:documentId)
+  const formPopulated = React.useRef(false)
+  React.useEffect(() => {
+    if (!isRestoringUpload || formPopulated.current) return
+    if (uploadRestoreQuery.data?.status !== "ready") return
+    formPopulated.current = true
+    const data = uploadRestoreQuery.data
+    void formik.setFieldValue("documentId", data.document_id)
+    void formik.setFieldValue("headers", data.headers)
+    void formik.setFieldValue("suggestedLayers", data.suggested_layers)
+    void formik.setFieldValue("previewRows", data.preview_rows)
+    void formik.setFieldValue("rowCount", data.row_count)
+    setActiveStepIdx(1)
+  // formik is stable; exhaustive-deps would add it but it's safe to omit
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uploadRestoreQuery.data, isRestoringUpload])
 
   const STEPS: Step[] = [
     {
@@ -108,9 +136,18 @@ export default function InitializePage() {
       description: "Upload your data file",
       component: (
         <ImportStep
-          onComplete={(headers, values) => {
-            void formik.setFieldValue("headers", headers)
-            void formik.setFieldValue("values", values)
+          onComplete={(result: UploadResult) => {
+            void formik.setFieldValue("documentId", result.documentId)
+            void formik.setFieldValue("headers", result.headers)
+            void formik.setFieldValue("suggestedLayers", result.suggestedLayers)
+            void formik.setFieldValue("previewRows", result.previewRows)
+            void formik.setFieldValue("rowCount", result.rowCount)
+            void navigate(
+              AppRoutes.getRoute(PageName.InitializeUpload, {
+                documentId: result.documentId,
+              }),
+              { replace: true },
+            )
             setActiveStepIdx(1)
           }}
         />
@@ -123,18 +160,13 @@ export default function InitializePage() {
       component: (
         <LayerStep
           headers={formik.values.headers}
-          onBack={() => {
-            setActiveStepIdx(0)
-          }}
+          suggestedLayers={formik.values.suggestedLayers}
+          onBack={() => setActiveStepIdx(0)}
           onComplete={(layers) => {
-            const layerFields: LayerFields = layers
-              .filter((l) => l.enabled)
-              .map((layer) => ({
-                name: layer.name,
-                header: layer.idField,
-              }))
-
-            void formik.setFieldValue("layers", layerFields)
+            void formik.setFieldValue(
+              "layers",
+              layers.filter((l) => l.enabled).map((l) => ({ name: l.name, header: l.idField })),
+            )
             setActiveStepIdx(2)
           }}
         />
@@ -148,9 +180,7 @@ export default function InitializePage() {
         <DataStep
           headers={formik.values.headers}
           layerHeaders={formik.values.layers.map((l) => l.header)}
-          onBack={() => {
-            setActiveStepIdx(1)
-          }}
+          onBack={() => setActiveStepIdx(1)}
           onComplete={(dataFields) => {
             void formik.setFieldValue("data_fields", dataFields)
             setActiveStepIdx(3)
@@ -166,24 +196,78 @@ export default function InitializePage() {
         <ReviewStep
           name={formik.values.name}
           headers={formik.values.headers}
-          values={formik.values.values}
+          rowCount={formik.values.rowCount}
+          previewRows={formik.values.previewRows}
           layerFields={formik.values.layers}
           dataFields={formik.values.data_fields}
-          onNameChange={(name) => {
-            void formik.setFieldValue("name", name)
-          }}
-          onBack={() => {
-            setActiveStepIdx(2)
-          }}
-          onComplete={() => {
-            formik.handleSubmit()
-          }}
+          isSubmitting={createMapMutation.isPending}
+          onNameChange={(name) => void formik.setFieldValue("name", name)}
+          onBack={() => setActiveStepIdx(2)}
+          onComplete={() => formik.handleSubmit()}
         />
       ),
     },
   ]
 
   const activeStep = STEPS[activeStepIdx]
+
+  // ── Restore loading / error states ────────────────────────────────────────
+
+  if (isRestoringUpload && uploadRestoreQuery.isLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative size-10">
+            <div className="absolute inset-0 rounded-full border-4 border-muted" />
+            <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+          </div>
+          <p className="text-muted-foreground text-sm">Loading upload…</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (isRestoringUpload && uploadRestoreQuery.data?.status === "parsing") {
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="flex flex-col items-center gap-4">
+          <div className="relative size-10">
+            <div className="absolute inset-0 rounded-full border-4 border-muted" />
+            <div className="absolute inset-0 rounded-full border-4 border-primary border-t-transparent animate-spin" />
+          </div>
+          <p className="text-sm font-medium">Parsing spreadsheet…</p>
+          <p className="text-muted-foreground text-xs">Almost ready</p>
+        </div>
+      </div>
+    )
+  }
+
+  if (isRestoringUpload && (uploadRestoreQuery.isError || uploadRestoreQuery.data?.status === "failed")) {
+    const reason = uploadRestoreQuery.data?.status === "failed"
+      ? uploadRestoreQuery.data.error
+      : "This upload could not be loaded."
+    return (
+      <div className="flex h-screen items-center justify-center">
+        <div className="flex flex-col items-center gap-6 text-center max-w-sm">
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-destructive/10">
+            <span className="text-destructive text-xl font-bold">!</span>
+          </div>
+          <div className="space-y-1.5">
+            <p className="font-semibold">Upload unavailable</p>
+            <p className="text-muted-foreground text-sm">{reason}</p>
+          </div>
+          <a
+            href={AppRoutes.getRoute(PageName.Initialize)}
+            className="text-sm text-primary underline underline-offset-4"
+          >
+            Start a new import
+          </a>
+        </div>
+      </div>
+    )
+  }
+
+  // ── Main wizard / processing layout ───────────────────────────────────────
 
   return (
     <PageLayout>
@@ -241,7 +325,7 @@ export default function InitializePage() {
                       </div>
                     )
                   })}
-                  {/* Processing step — only visible after submit */}
+                  {/* Processing step — only visible after map is created */}
                   <div
                     className={cn(
                       "flex items-start gap-3 rounded-lg p-3 transition-colors",
@@ -307,9 +391,15 @@ export default function InitializePage() {
                 <div className="space-y-2">
                   <p className="text-lg font-semibold">Import failed</p>
                   <p className="text-muted-foreground text-sm max-w-sm">
-                    {mapQuery.data?.active_job?.error ?? "An unexpected error occurred."}
+                    {mapQuery.data?.import_state?.error ?? "An unexpected error occurred."}
                   </p>
                 </div>
+                <a
+                  href={AppRoutes.getRoute(PageName.Initialize)}
+                  className="text-sm text-primary underline underline-offset-4"
+                >
+                  Start a new import
+                </a>
               </>
             ) : (
               <>

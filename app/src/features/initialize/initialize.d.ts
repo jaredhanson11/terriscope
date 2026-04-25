@@ -13,5 +13,12 @@ export type DataField = {
 }
 export type DataFields = DataField[]
 export type HeadersData = string[]
-export type ValuesData = (string | number | null)[][]
-export type CellData = string | number | null
+
+export type UploadResult = {
+  documentId: string
+  headers: string[]
+  suggestedLayers: string[]
+  previewRows: (string | number | null)[][]
+  rowCount: number
+  warnings: string[]
+}

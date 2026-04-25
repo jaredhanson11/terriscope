@@ -9,6 +9,7 @@ from .graph import graph_router
 from .maps import maps_router
 from .mvt import mvt_router
 from .spatial import spatial_router
+from .uploads import uploads_router
 
 __all__ = [
     "accounts_router",
@@ -20,4 +21,5 @@ __all__ = [
     "maps_router",
     "mvt_router",
     "spatial_router",
+    "uploads_router",
 ]

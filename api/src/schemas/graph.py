@@ -2,10 +2,16 @@
 
 from collections.abc import Sequence
 from datetime import datetime
-from typing import Any, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, field_validator, model_validator
 
+from src.models.graph import MapModel
+from src.models.jobs import MapJobModel
+from src.schemas.uploads import MapImportState
+
+if TYPE_CHECKING:
+    from src.models.uploads import MapUploadModel
 
 class DataFieldConfig(BaseModel):
     """Data field config entry stored on a map."""
@@ -17,15 +23,34 @@ class DataFieldConfig(BaseModel):
     type: Literal["text", "number"]
     aggregations: list[Literal["sum", "avg"]]
 
+    @staticmethod
+    def create(config: dict[Any, Any]) -> "DataFieldConfig":
+        return DataFieldConfig(
+            field=config["field"],
+            label=config.get("label", config["field"]),
+            type=config["type"],
+            aggregations=config.get("aggregations", []),
+        )
+
 
 class MapJob(BaseModel):
-    """Background job for a map."""
+    """Background recompute job for a map (geometry or data). Import lifecycle is tracked separately via MapImportState."""
 
     id: str
-    job_type: Literal["import", "recompute_geometry", "recompute_data"]
+    job_type: Literal["recompute_geometry", "recompute_data"]
     status: Literal["pending", "processing", "complete", "failed"]
     step: str | None = None
     error: str | None = None
+
+    @staticmethod
+    def create(job: MapJobModel) -> "MapJob":
+        return MapJob(
+            id=job.id,
+            job_type=job.job_type,
+            status=job.status,
+            step=job.step,
+            error=job.error,
+        )
 
 
 class Map(BaseModel):
@@ -36,7 +61,22 @@ class Map(BaseModel):
     tile_version: int = 0
     data_field_config: list[DataFieldConfig] | None = None
     active_job: MapJob | None = None
+    """Active recompute job, if any. Null during import and when idle."""
+    import_state: MapImportState
+    """Import lifecycle state. Non-nullable — all maps are created via the upload flow."""
     updated_at: datetime | None = None
+
+    @staticmethod
+    def create(map_model: MapModel, upload: "MapUploadModel", active_job: MapJob | None) -> "Map":
+        return Map(
+            id=map_model.id,
+            name=map_model.name,
+            tile_version=map_model.tile_version,
+            data_field_config=map_model.data_field_config,
+            active_job=active_job,
+            import_state=MapImportState.create(upload),
+            updated_at=map_model.updated_at,
+        )
 
 
 class Layer(BaseModel):

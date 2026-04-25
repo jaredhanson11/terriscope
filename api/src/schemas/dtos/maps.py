@@ -23,20 +23,15 @@ class DataFieldSetup(BaseModel):
     """Aggregation rules applied to direct children. Only meaningful when type == "number"."""
 
 
-class ImportMap(BaseModel):
-    """ImportMap."""
+class CreateMap(BaseModel):
+    """DTO for POST /maps.
 
+    References a previously uploaded and parsed document. The raw spreadsheet
+    data stays in S3 and is read by the background import worker.
+    """
+
+    document_id: str
+    """ID of a MapUploadModel record with status == 'ready'."""
     name: str
     layers: Sequence[LayerSetup]
     data_fields: Sequence[DataFieldSetup]
-    values: Sequence[Sequence[str | int | float | None]]
-    headers: Sequence[str]
-
-    # TODO add validation for data fields and layers to have valid headers
-
-
-class ImportMapResponse(BaseModel):
-    """ImportMapResponse."""
-
-    map_id: str
-    # TODO add warnings/errors

@@ -2,19 +2,45 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import type { Polygon } from "geojson"
 import type { FetchResponse } from "openapi-fetch"
 
+import config from "@/app/config"
 import { fetchClient } from "@/fetch-client"
-import type { components, paths } from "@/lib/api/v1"
+import type { components } from "@/lib/api/v1"
 
 import { queries } from "./queries"
 
-export const useImportMapMutation = () => {
+export const useUploadSpreadsheetMutation = () => {
+  return useMutation({
+    mutationFn: async (vars: { file: File; tabIndex: number }) => {
+      const formData = new FormData()
+      formData.append("file", vars.file)
+      formData.append("tab_index", String(vars.tabIndex))
+
+      const baseUrl = config.get("api_base_url")
+      const response = await fetch(`${baseUrl}/maps/uploads`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      })
+      if (!response.ok) {
+        throw new Error("Upload failed")
+      }
+      return response.json() as Promise<{ document_id: string; status: "parsing" }>
+    },
+  })
+}
+
+export const useCreateMapMutation = () => {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async (variables: {
-      import_data: paths["/maps"]["post"]["requestBody"]["content"]["application/json"]
+      document_id: string
+      name: string
+      layers: { name: string; header: string }[]
+      data_fields: { name: string; header: string; type: "text" | "number"; aggregations: ("sum" | "avg")[] }[]
     }) => {
       const response = await fetchClient.POST("/maps", {
-        body: variables.import_data,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        body: variables as any,
       })
       if (!response.data || (response.response.status !== 200 && response.response.status !== 202)) {
         throw new Error("Failed to create map")
@@ -22,7 +48,6 @@ export const useImportMapMutation = () => {
       return response.data
     },
     onSuccess: (data) => {
-      // Seed the detail cache so polling starts immediately with the pending job
       queryClient.setQueryData(queries.getMap(data.id).queryKey, data)
       void queryClient.invalidateQueries({ queryKey: queries._maps() })
     },

@@ -21,18 +21,20 @@ interface LayerConfig {
 
 interface LayerStepProps {
   headers: string[]
+  suggestedLayers: string[]
   onComplete: (layers: LayerConfig[]) => void
   onBack?: () => void
 }
 
 export default function LayerStep({
   headers,
+  suggestedLayers,
   onComplete,
   onBack,
 }: LayerStepProps) {
   const [layers, setLayers] = React.useState<LayerConfig[]>(() => {
-    // Initialize with first 4 columns as default layers
-    return headers.slice(0, 4).map((header, index) => ({
+    const defaults = suggestedLayers.length > 0 ? suggestedLayers : headers.slice(0, 4)
+    return defaults.map((header, index) => ({
       level: index,
       name: header,
       idField: header,

@@ -12,6 +12,8 @@ import { VersionsPage } from "./common/versions.page"
 const PageName = {
   Versions: "VersionsPage",
   Initialize: "InitializePage",
+  InitializeUpload: "InitializeUploadPage",
+  InitializeProcessing: "InitializeProcessingPage",
   Example: "ExamplePage",
   Home: "HomePage",
   Login: "LoginPage",
@@ -41,6 +43,16 @@ export type RouteParamsType = {
       mapId: string
     }
   }
+  [PageName.InitializeUpload]: {
+    path: {
+      documentId: string
+    }
+  }
+  [PageName.InitializeProcessing]: {
+    path: {
+      mapId: string
+    }
+  }
 }
 
 export type ExtractPathParams<T extends PageName> =
@@ -65,6 +77,16 @@ const Routes: Record<PageName, Route> = {
   },
   [PageName.Initialize]: {
     route: "/new",
+    component: <InitializePage />,
+    protected: true,
+  },
+  [PageName.InitializeUpload]: {
+    route: "/new/:documentId",
+    component: <InitializePage />,
+    protected: true,
+  },
+  [PageName.InitializeProcessing]: {
+    route: "/new/map/:mapId",
     component: <InitializePage />,
     protected: true,
   },

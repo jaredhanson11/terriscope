@@ -544,22 +544,13 @@ export interface paths {
         };
         /**
          * List Maps
-         * @description List maps for the current user, each with its latest active job if any.
+         * @description List maps for the current user, each with its active job and import state.
          */
         get: operations["list_maps_maps_get"];
         put?: never;
         /**
          * Create Map
-         * @description Create map.
-         *
-         *     Synchronously inserts all nodes and zip assignments, then enqueues a
-         *     background task to compute geometry and data aggregations.  Returns 202
-         *     with the new map and an ``active_job`` tracking the pending computation.
-         *
-         *     TODO:
-         *         - Return errors for zip codes we don't have data for
-         *         - Validate no duplicate layer names
-         *         - Validate no duplicate parents and raise error if so
+         * @description Create a map from a previously uploaded and parsed document.
          */
         post: operations["create_map_maps_post"];
         delete?: never;
@@ -577,7 +568,7 @@ export interface paths {
         };
         /**
          * Get Map
-         * @description Get a single map with its latest active job.
+         * @description Get a single map with its active job and import state.
          */
         get: operations["get_map_maps__map_id__get"];
         put?: never;
@@ -634,6 +625,49 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/maps/uploads": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Upload Spreadsheet
+         * @description Accept an Excel/.ztt file, stream it to S3, and enqueue background parsing.
+         *
+         *     Returns immediately with document_id. The client should poll
+         *     GET /maps/uploads/{document_id} until status is 'ready' or 'failed'.
+         */
+        post: operations["upload_spreadsheet_maps_uploads_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/maps/uploads/{document_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Upload Status
+         * @description Poll the parse status of an uploaded file.
+         */
+        get: operations["get_upload_status_maps_uploads__document_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -650,6 +684,19 @@ export interface components {
             parent_node_id: number | null;
             /** Color */
             color?: string | null;
+        };
+        /** Body_upload_spreadsheet_maps_uploads_post */
+        Body_upload_spreadsheet_maps_uploads_post: {
+            /**
+             * File
+             * Format: binary
+             */
+            file: string;
+            /**
+             * Tab Index
+             * @default 0
+             */
+            tab_index: number;
         };
         /**
          * BulkAssignZips
@@ -708,6 +755,23 @@ export interface components {
             name: string;
             /** Map Id */
             map_id: string;
+        };
+        /**
+         * CreateMap
+         * @description DTO for POST /maps.
+         *
+         *     References a previously uploaded and parsed document. The raw spreadsheet
+         *     data stays in S3 and is read by the background import worker.
+         */
+        CreateMap: {
+            /** Document Id */
+            document_id: string;
+            /** Name */
+            name: string;
+            /** Layers */
+            layers: components["schemas"]["LayerSetup"][];
+            /** Data Fields */
+            data_fields: components["schemas"]["DataFieldSetup"][];
         };
         /**
          * CreateNode
@@ -780,22 +844,6 @@ export interface components {
             timenow: string;
         };
         /**
-         * ImportMap
-         * @description ImportMap.
-         */
-        ImportMap: {
-            /** Name */
-            name: string;
-            /** Layers */
-            layers: components["schemas"]["LayerSetup"][];
-            /** Data Fields */
-            data_fields: components["schemas"]["DataFieldSetup"][];
-            /** Values */
-            values: (string | number | null)[][];
-            /** Headers */
-            headers: string[];
-        };
-        /**
          * Layer
          * @description Layer.
          */
@@ -854,12 +902,33 @@ export interface components {
             /** Data Field Config */
             data_field_config?: components["schemas"]["DataFieldConfig"][] | null;
             active_job?: components["schemas"]["MapJob"] | null;
+            import_state: components["schemas"]["MapImportState"];
             /** Updated At */
             updated_at?: string | null;
         };
         /**
+         * MapImportState
+         * @description Import lifecycle state embedded in Map responses.
+         *
+         *     Covers the import phase (after POST /maps). The parse phase lives on MapUploadStatus.
+         *     Non-nullable on Map — all maps in this system are created via the upload flow.
+         */
+        MapImportState: {
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "importing" | "complete" | "failed";
+            /** Step */
+            step?: string | null;
+            /** Warnings */
+            warnings?: string[] | null;
+            /** Error */
+            error?: string | null;
+        };
+        /**
          * MapJob
-         * @description Background job for a map.
+         * @description Background recompute job for a map (geometry or data). Import lifecycle is tracked separately via MapImportState.
          */
         MapJob: {
             /** Id */
@@ -868,7 +937,7 @@ export interface components {
              * Job Type
              * @enum {string}
              */
-            job_type: "import" | "recompute_geometry" | "recompute_data";
+            job_type: "recompute_geometry" | "recompute_data";
             /**
              * Status
              * @enum {string}
@@ -878,6 +947,62 @@ export interface components {
             step?: string | null;
             /** Error */
             error?: string | null;
+        };
+        /**
+         * MapUploadFailed
+         * @description Returned by GET /maps/uploads/{id} when parsing failed.
+         */
+        MapUploadFailed: {
+            /** Document Id */
+            document_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "failed";
+            /** Error */
+            error: string;
+            /** Error Reason */
+            error_reason?: string | null;
+        };
+        /**
+         * MapUploadParsing
+         * @description Returned by both POST /maps/uploads and GET /maps/uploads/{id} while parsing.
+         */
+        MapUploadParsing: {
+            /** Document Id */
+            document_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "parsing";
+        };
+        /**
+         * MapUploadReady
+         * @description Returned by GET /maps/uploads/{id} once parsing is complete.
+         *
+         *     The frontend uses headers + suggested_layers to render the wizard configuration
+         *     step, and preview_rows to show the user a sample of their data.
+         */
+        MapUploadReady: {
+            /** Document Id */
+            document_id: string;
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            status: "ready";
+            /** Headers */
+            headers: string[];
+            /** Suggested Layers */
+            suggested_layers: string[];
+            /** Preview Rows */
+            preview_rows: (string | number | null)[][];
+            /** Row Count */
+            row_count: number;
+            /** Warnings */
+            warnings: string[];
         };
         /**
          * MergeNodes
@@ -2161,7 +2286,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["ImportMap"];
+                "application/json": components["schemas"]["CreateMap"];
             };
         };
         responses: {
@@ -2267,6 +2392,70 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    upload_spreadsheet_maps_uploads_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": components["schemas"]["Body_upload_spreadsheet_maps_uploads_post"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapUploadParsing"] | components["schemas"]["MapUploadReady"] | components["schemas"]["MapUploadFailed"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_upload_status_maps_uploads__document_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                document_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MapUploadParsing"] | components["schemas"]["MapUploadReady"] | components["schemas"]["MapUploadFailed"];
                 };
             };
             /** @description Validation Error */

@@ -14,6 +14,7 @@ from .routers import (
     maps_router,
     mvt_router,
     spatial_router,
+    uploads_router,
 )
 
 app.include_router(common_router)
@@ -25,3 +26,4 @@ app.include_router(mvt_router)
 app.include_router(maps_router)
 app.include_router(spatial_router)
 app.include_router(exports_router)
+app.include_router(uploads_router)

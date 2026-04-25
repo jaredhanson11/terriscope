@@ -24,8 +24,15 @@ class MapModel(Base, TimestampMixin):
         JSONB,
         nullable=True,
         default=None,
+        server_default="{}",
     )
     """Per-field aggregation config. Each entry: {"field": str, "aggregations": ["sum"|"avg"]}"""
+    source_upload_id: Mapped[str | None] = mapped_column(
+        ForeignKey("map_uploads.id"),
+        nullable=True,
+        default=None,
+    )
+    """FK to the MapUploadModel that seeded this map. All import config (layers, data fields) lives there."""
 
 
 class LayerModel(Base, TimestampMixin):

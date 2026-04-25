@@ -6,7 +6,7 @@ from typing import Annotated
 from fastapi import Depends
 
 from src.app.database import DatabaseSession
-from src.models.permissions import MapRole, UserMapRoleModel
+from src.models.permissions import MapRole, UploadRole, UserMapRoleModel, UserUploadRoleModel
 
 from .base import BaseService
 
@@ -59,6 +59,22 @@ class PermissionService(BaseService):
     ) -> list[UserMapRoleModel]:
         """List map roles for a user."""
         return self.db.query(UserMapRoleModel).filter_by(user_id=user_id).all()
+
+    def add_upload_role(self, user_id: int, upload_id: str, role: UploadRole = "OWNER") -> UserUploadRoleModel:
+        """Grant a user access to an upload."""
+        record = UserUploadRoleModel(user_id=user_id, upload_id=upload_id, role=role)
+        self.db.add(record)
+        self.db.flush()
+        return record
+
+    def check_for_upload_access(self, user_id: int, upload_id: str) -> bool:
+        """Return True if the user has any role on the upload."""
+        return (
+            self.db.query(UserUploadRoleModel)
+            .filter_by(user_id=user_id, upload_id=upload_id)
+            .count()
+            > 0
+        )
 
 
 def _get_permission_service_dependency(db: DatabaseSession) -> PermissionService:

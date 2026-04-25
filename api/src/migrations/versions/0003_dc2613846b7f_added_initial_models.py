@@ -92,15 +92,29 @@ def upgrade() -> None:
         postgresql_ops={},
     )
     op.create_table(
-        "maps",
+        "map_uploads",
         sa.Column("id", sa.UUID(as_uuid=False), server_default=sa.text("gen_random_uuid()"), nullable=False),
-        sa.Column("name", sa.String(), nullable=False),
-        sa.Column("tile_version", sa.Integer(), server_default="0", nullable=False),
-        sa.Column("data_field_config", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("s3_key", sa.String(), nullable=False),
+        sa.Column("original_filename", sa.String(), nullable=False),
+        sa.Column("tab_index", sa.Integer(), nullable=False),
+        sa.Column(
+            "status", sa.Enum("parsing", "ready", "importing", "complete", "failed", native_enum=False), nullable=False
+        ),
+        sa.Column("headers", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("suggested_layers", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("preview_rows", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("row_count", sa.Integer(), nullable=True),
+        sa.Column("layer_config", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("data_config", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+        sa.Column("error", sa.String(), nullable=True),
+        sa.Column("error_reason", sa.String(), nullable=True),
+        sa.Column("import_step", sa.String(), nullable=True),
+        sa.Column("warnings", postgresql.JSONB(astext_type=sa.Text()), nullable=True),
         sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
         sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
-        sa.PrimaryKeyConstraint("id", name=op.f("pk_maps")),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_map_uploads")),
     )
+    op.create_index("idx_map_uploads_s3_key", "map_uploads", ["s3_key"], unique=False)
     op.create_table(
         "users",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
@@ -112,6 +126,36 @@ def upgrade() -> None:
         sa.PrimaryKeyConstraint("id", name=op.f("pk_users")),
         sa.UniqueConstraint("email", name=op.f("uq_users_email")),
     )
+    op.create_table(
+        "maps",
+        sa.Column("id", sa.UUID(as_uuid=False), server_default=sa.text("gen_random_uuid()"), nullable=False),
+        sa.Column("name", sa.String(), nullable=False),
+        sa.Column("tile_version", sa.Integer(), server_default="0", nullable=False),
+        sa.Column("data_field_config", postgresql.JSONB(astext_type=sa.Text()), server_default="{}", nullable=True),
+        sa.Column("source_upload_id", sa.UUID(as_uuid=False), nullable=True),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["source_upload_id"], ["map_uploads.id"], name=op.f("fk_maps_source_upload_id_map_uploads")
+        ),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_maps")),
+    )
+    op.create_table(
+        "user_upload_roles",
+        sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
+        sa.Column("user_id", sa.Integer(), nullable=False),
+        sa.Column("upload_id", sa.UUID(as_uuid=False), nullable=False),
+        sa.Column("role", sa.Enum("OWNER", native_enum=False), nullable=False),
+        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()"), nullable=False),
+        sa.ForeignKeyConstraint(
+            ["upload_id"], ["map_uploads.id"], name=op.f("fk_user_upload_roles_upload_id_map_uploads")
+        ),
+        sa.ForeignKeyConstraint(["user_id"], ["users.id"], name=op.f("fk_user_upload_roles_user_id_users")),
+        sa.PrimaryKeyConstraint("id", name=op.f("pk_user_upload_roles")),
+        sa.UniqueConstraint("user_id", "upload_id", name=op.f("uq_user_upload_roles_user_id")),
+    )
+    op.create_index("idx_user_upload_roles_user_id", "user_upload_roles", ["user_id"], unique=False)
     op.create_table(
         "layers",
         sa.Column("id", sa.Integer(), autoincrement=True, nullable=False),
@@ -130,7 +174,7 @@ def upgrade() -> None:
         "map_jobs",
         sa.Column("id", sa.String(length=36), nullable=False),
         sa.Column("map_id", sa.UUID(as_uuid=False), nullable=False),
-        sa.Column("job_type", sa.Enum("import", native_enum=False), nullable=False),
+        sa.Column("job_type", sa.Enum("recompute_geometry", "recompute_data", native_enum=False), nullable=False),
         sa.Column("status", sa.Enum("pending", "processing", "complete", "failed", native_enum=False), nullable=False),
         sa.Column("step", sa.Text(), nullable=True),
         sa.Column("error", sa.Text(), nullable=True),
@@ -258,8 +302,12 @@ def downgrade() -> None:
     op.drop_table("map_jobs")
     op.drop_index("idx_layers_map_id", table_name="layers")
     op.drop_table("layers")
-    op.drop_table("users")
+    op.drop_index("idx_user_upload_roles_user_id", table_name="user_upload_roles")
+    op.drop_table("user_upload_roles")
     op.drop_table("maps")
+    op.drop_table("users")
+    op.drop_index("idx_map_uploads_s3_key", table_name="map_uploads")
+    op.drop_table("map_uploads")
     op.drop_geospatial_index(
         "idx_geography_zip_codes_geom_z7",
         table_name="geography_zip_codes",
@@ -281,5 +329,6 @@ def downgrade() -> None:
     op.drop_geospatial_index(
         "idx_geography_zip_codes_geom", table_name="geography_zip_codes", postgresql_using="gist", column_name="geom"
     )
+    op.drop_geospatial_table("geography_zip_codes")
     op.drop_geospatial_table("geography_zip_codes")
     # ### end Alembic commands ###
