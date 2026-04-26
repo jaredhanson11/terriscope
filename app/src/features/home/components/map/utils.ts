@@ -10,30 +10,34 @@ import {
 
 /**
  * Build a MapLibre text-field expression that stacks multiple MVT properties
- * into a single label, one per line.
+ * into a single label, one per line, with an optional second-line data value
+ * rendered in blue via a format expression.
  *
  * - "name" renders as just the node name (no prefix)
  * - Other keys like "customers_sum" render as "customers (sum): <value>"
- * - Falls back to ["get", "name"] when the list is empty
+ * - Falls back to ["get", "name"] / ["get", "zip_code"] when labelFields is empty
+ * - dataLabelField adds a styled second line using the format expression
  */
 function buildLabelExpression(
   labelFields: string[],
+  isZipLayer = false,
+  dataLabelField: string | null = null,
 ): maplibregl.ExpressionSpecification {
   const fields = labelFields.length > 0 ? labelFields : ["name"]
 
-  const parts: maplibregl.ExpressionSpecification[] = []
+  const nameParts: maplibregl.ExpressionSpecification[] = []
   for (let i = 0; i < fields.length; i++) {
     const key = fields[i]
-    if (i > 0) parts.push("\n" as unknown as maplibregl.ExpressionSpecification)
+    if (i > 0) nameParts.push("\n" as unknown as maplibregl.ExpressionSpecification)
     if (key === "name") {
-      parts.push(["get", "name"])
+      nameParts.push(isZipLayer ? ["get", "zip_code"] : ["get", "name"])
     } else {
       const lastUs = key.lastIndexOf("_")
       const prefix =
         lastUs !== -1
           ? `${key.slice(0, lastUs)} (${key.slice(lastUs + 1)}): `
           : `${key}: `
-      parts.push(prefix as unknown as maplibregl.ExpressionSpecification, [
+      nameParts.push(prefix as unknown as maplibregl.ExpressionSpecification, [
         "coalesce",
         ["to-string", ["get", key]],
         "—",
@@ -41,9 +45,21 @@ function buildLabelExpression(
     }
   }
 
-  return parts.length === 1
-    ? parts[0]
-    : (["concat", ...parts] as maplibregl.ExpressionSpecification)
+  const nameExpr: maplibregl.ExpressionSpecification =
+    nameParts.length === 1
+      ? nameParts[0]
+      : (["concat", ...nameParts] as maplibregl.ExpressionSpecification)
+
+  if (!dataLabelField) return nameExpr
+
+  // Two-line format expression: name line (dark) + data value line (blue, smaller)
+  return [
+    "format",
+    nameExpr, {},
+    "\n", {},
+    ["coalesce", ["to-string", ["get", dataLabelField]], "—"],
+    { "text-color": "#2563eb", "font-scale": 0.82 },
+  ] as unknown as maplibregl.ExpressionSpecification
 }
 
 
@@ -65,7 +81,6 @@ export function updateSources(
     const { id, order } = layerOption
     const rev = `?rev=${tileVersion.toString()}`
     const sourceId = `layer-${id.toString()}`
-    const labelSourceId = `layer-${id.toString()}-labels`
     if (!map.getSource(sourceId)) {
       map.addSource(sourceId, {
         type: "vector",
@@ -76,16 +91,6 @@ export function updateSources(
         maxzoom: 14,
         // For zip layers, use zip_code as the feature ID so setFeatureState works with string keys
         ...(order === 0 ? { promoteId: { zips: "zip_code" } } : {}),
-      })
-    }
-    if (!map.getSource(labelSourceId)) {
-      map.addSource(labelSourceId, {
-        type: "vector",
-        tiles: [
-          `${config.get("api_base_url")}/tiles/${id.toString()}/{z}/{x}/{y}/labels.pbf${rev}`,
-        ],
-        minzoom: 0,
-        maxzoom: 14,
       })
     }
   })
@@ -109,7 +114,7 @@ export function updateLayers(
   })
 
   layers.forEach((layerOption) => {
-    const { id, order, showFill, showOutline, showLabel, labelFields } =
+    const { id, order, showFill, showOutline, showLabel, labelFields, dataLabelField } =
       layerOption
     const sourceLayer = order === 0 ? "zips" : "nodes"
     const fillLayerId = `layer-${id.toString()}-fill`
@@ -117,7 +122,6 @@ export function updateLayers(
     const outlineLayerId = `layer-${id.toString()}-outline`
     const labelLayerId = `layer-${id.toString()}-label`
     const sourceId = `layer-${id.toString()}`
-    const labelSourceId = `layer-${id.toString()}-labels`
 
     // Fill layer — color driven by the `color` MVT property set by the backend
     const fillLayerExists = map.getLayer(fillLayerId)
@@ -183,7 +187,7 @@ export function updateLayers(
 
     // Label layer — always on top.
     // Visual weight scales with layer order so higher-level territories read more prominently.
-    const textFieldExpr = buildLabelExpression(labelFields)
+    const textFieldExpr = buildLabelExpression(labelFields, order === 0, dataLabelField)
     const labelSizeMin = Math.min(10 + order * 2, 16)
     const labelSizeMax = Math.min(13 + order * 4, 24)
     const labelFont =
@@ -197,7 +201,7 @@ export function updateLayers(
         {
           id: labelLayerId,
           type: "symbol",
-          source: labelSourceId,
+          source: sourceId,
           "source-layer": order === 0 ? "zips" : "nodes",
           layout: {
             "text-field": textFieldExpr,
@@ -249,15 +253,9 @@ export function refreshTileSources(
 ): void {
   layers.forEach(({ id }) => {
     const tileUrl = `${config.get("api_base_url")}/tiles/${id.toString()}/{z}/{x}/{y}.pbf?rev=${tileVersion.toString()}`
-    const labelUrl = `${config.get("api_base_url")}/tiles/${id.toString()}/{z}/{x}/{y}/labels.pbf?rev=${tileVersion.toString()}`
-
     const source = map.getSource(`layer-${id.toString()}`)
     if (source?.type === "vector")
       (source as maplibregl.VectorTileSource).setTiles([tileUrl])
-
-    const labelSource = map.getSource(`layer-${id.toString()}-labels`)
-    if (labelSource?.type === "vector")
-      (labelSource as maplibregl.VectorTileSource).setTiles([labelUrl])
   })
 }
 

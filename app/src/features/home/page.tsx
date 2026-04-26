@@ -124,6 +124,9 @@ export default function HomePage() {
 
   // Track which label fields are active per layer (ordered list shown stacked on map)
   const [labelFields, setLabelFields] = useState<Record<number, string[]>>({})
+  const [dataLabelFields, setDataLabelFields] = useState<Record<number, string | null>>({})
+  const setDataLabelField = (layerId: number, field: string | null) =>
+    setDataLabelFields((prev) => ({ ...prev, [layerId]: field }))
   const queryClient = useQueryClient()
   const maps = useMaps()
   const me = useMe()
@@ -293,9 +296,10 @@ export default function HomePage() {
             showOutline: borderLayerIds.has(_layer.id),
             showLabel: labelLayerIds.has(_layer.id),
             labelFields: labelFields[_layer.id] ?? ["name"],
+            dataLabelField: dataLabelFields[_layer.id] ?? null,
           }))
         : [],
-    [layersQuery.data, fillLayerId, borderLayerIds, labelLayerIds, labelFields],
+    [layersQuery.data, fillLayerId, borderLayerIds, labelLayerIds, labelFields, dataLabelFields],
   )
 
   const toggleFill = (layerId: number) => {
@@ -727,6 +731,34 @@ export default function HomePage() {
                                   })}
                                 </div>
                               )}
+                              {/* Data label — one option per field+agg from data_field_config */}
+                              {mapDataFields.length > 0 && (
+                                <div className="mt-1 pb-0.5">
+                                  <p className="text-muted-foreground/70 px-1.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wider">
+                                    Data label
+                                  </p>
+                                  {([{ mvtProp: null as string | null, label: "None" }, ...mapDataFields.flatMap((f) =>
+                                    f.aggregations.map((agg) => ({
+                                      mvtProp: `${f.field}_${agg}`,
+                                      label: `${f.label || f.field} (${agg})`,
+                                    }))
+                                  )]).map(({ mvtProp, label }) => {
+                                    const isActive = (dataLabelFields[layer.id] ?? null) === mvtProp
+                                    return (
+                                      <button
+                                        key={mvtProp ?? "none"}
+                                        onClick={() => setDataLabelField(layer.id, mvtProp)}
+                                        className={`flex w-full items-center gap-2 rounded px-1.5 py-0.5 text-left transition-colors ${
+                                          isActive ? "text-primary" : "text-muted-foreground hover:text-foreground"
+                                        }`}
+                                      >
+                                        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${isActive ? "bg-primary" : "bg-muted-foreground/25"}`} />
+                                        <span className="text-xs">{label}</span>
+                                      </button>
+                                    )
+                                  })}
+                                </div>
+                              )}
                             </div>
                           </CollapsibleContent>
                         </Collapsible>
@@ -930,25 +962,40 @@ export default function HomePage() {
                   {[...layersQuery.data]
                     .sort((a, b) => b.order - a.order)
                     .map((layer) => {
-                      const hit = hoveredHierarchy.find(
-                        (h) => h.layerId === layer.id,
-                      )
+                      const hit = hoveredHierarchy.find((h) => h.layerId === layer.id)
+                      const layerDataField = dataLabelFields[layer.id] ?? null
+                      const lensValue = layerDataField && hit?.data
+                        ? (() => {
+                            const raw = hit.data[layerDataField]
+                            if (raw == null) return null
+                            const fieldCfg = (currentMap.data_field_config ?? []).find(
+                              (f) => layerDataField.startsWith(f.field)
+                            )
+                            const prefix = fieldCfg?.field.includes("revenue") ? "$" : ""
+                            if (raw >= 1_000_000) return `${prefix}${(raw / 1_000_000).toFixed(1)}M`
+                            if (raw >= 10_000) return `${prefix}${(raw / 1_000).toFixed(0)}K`
+                            if (raw >= 1_000) return `${prefix}${(raw / 1_000).toFixed(1)}K`
+                            return `${prefix}${raw.toFixed(0)}`
+                          })()
+                        : null
                       return (
-                        <div
-                          key={layer.id}
-                          className="flex items-baseline gap-2"
-                        >
+                        <div key={layer.id} className="flex items-baseline gap-2">
                           <span className="text-muted-foreground text-xs w-16 shrink-0 truncate text-right">
                             {layer.name}
                           </span>
                           {hit ? (
-                            <span className="text-foreground text-xs font-medium truncate max-w-40">
-                              {hit.name}
-                            </span>
+                            <>
+                              <span className="text-foreground text-xs font-medium truncate max-w-32">
+                                {hit.name}
+                              </span>
+                              {lensValue && (
+                                <span className="text-primary ml-auto shrink-0 font-bold tabular-nums text-[11px]">
+                                  {lensValue}
+                                </span>
+                              )}
+                            </>
                           ) : (
-                            <span className="text-muted-foreground/50 text-xs">
-                              —
-                            </span>
+                            <span className="text-muted-foreground/50 text-xs">—</span>
                           )}
                         </div>
                       )

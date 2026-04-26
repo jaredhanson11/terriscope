@@ -28,7 +28,14 @@ const INITIAL_VIEW_STATE = {
   zoom: 4,
 }
 
-export type HoverHierarchyItem = { layerId: number; name: string }
+export type HoverHierarchyItem = {
+  layerId: number
+  name: string
+  nodeId?: number
+  zipCode?: string
+  /** Flat numeric tile properties for this feature (e.g. { customers_sum: 1200 }). */
+  data?: Record<string, number | null>
+}
 
 export type ClickSelectResult = { nodeId: number } | { zipCode: string }
 
@@ -174,11 +181,18 @@ export const Map = forwardRef<
         if (seen.has(layerId)) continue
         seen.add(layerId)
         const layerOption = currentLayers.find((l) => l.id === layerId)
-        const name =
-          layerOption?.order === 0
-            ? (feature.properties?.zip_code as string | undefined) ?? ""
-            : (feature.properties?.name as string | undefined) ?? ""
-        if (name) items.push({ layerId, name })
+        const isZip = layerOption?.order === 0
+        const zipCode = isZip ? (feature.properties.zip_code as string | undefined) : undefined
+        const nodeId = !isZip ? (feature.id as number | undefined) : undefined
+        const name = isZip ? (zipCode ?? "") : ((feature.properties.name as string | undefined) ?? "")
+
+        const data: Record<string, number | null> = {}
+        for (const [k, v] of Object.entries(feature.properties)) {
+          if (typeof v === "number") data[k] = v
+          else if (v === null) data[k] = null
+        }
+
+        if (name) items.push({ layerId, name, nodeId, zipCode, data })
       }
       onHover(items)
     }

@@ -1299,7 +1299,7 @@
           "MVT"
         ],
         "summary": "Get Tile",
-        "description": "Get a vector tile for a specific layer at the given tile coordinates.\n\nFor order=0 (zip) layers: queries geography_zip_codes LEFT JOIN zip_assignments.\nFor order>=1 layers: queries pre-computed node geometries.",
+        "description": "Get a vector tile for a specific layer at the given tile coordinates.\n\nFor order=0 (zip) layers: queries geography_zip_codes LEFT JOIN zip_assignments.\nFor order>=1 layers: queries pre-computed node geometries.\nData fields from data_field_config are included as flat numeric properties.",
         "operationId": "get_tile_tiles__layer_id___z___x___y__pbf_get",
         "parameters": [
           {

@@ -111,6 +111,7 @@ def _insert_zip_layer(
     rows_df: pd.DataFrame,
     number_fields: list[dict[str, Any]],
     warnings: list[str],
+    source_df: pd.DataFrame | None = None,
 ) -> None:
     """Insert ZipAssignmentModel rows for the zip (order=0) layer."""
     rows_df = rows_df.copy()
@@ -130,10 +131,12 @@ def _insert_zip_layer(
 
     rows_df = rows_df[rows_df[header].isin(valid_zips)].copy()
 
-    if number_fields:
+    if number_fields and source_df is not None:
         data_col_names = [dc["header"] for dc in number_fields]
-        src = rows_df[[header, *data_col_names]].drop_duplicates(subset=[header])
-        rows_df = rows_df[[header, "parent_node_id"]].merge(src, on=header, how="left")
+        src = source_df[[header, *data_col_names]].copy()
+        src[header] = src[header].astype(str).str.zfill(5)
+        src = src[src[header].isin(valid_zips)].drop_duplicates(subset=[header])
+        rows_df = rows_df.merge(src, on=header, how="left")
 
     colors: dict[str, str] = dict(
         task.db.execute(
@@ -251,7 +254,7 @@ def import_map_task(self: DatabaseTask, map_id: str) -> None:  # type: ignore[mi
                 rows_df["parent_node_id"] = None
 
             if order == 0:
-                _insert_zip_layer(self, layer_id, header, rows_df, number_fields, warnings)
+                _insert_zip_layer(self, layer_id, header, rows_df, number_fields, warnings, source_df=df)
             else:
                 previous_nodes = _insert_node_layer(self, layer_id, header, rows_df)
 
@@ -278,6 +281,9 @@ def import_map_task(self: DatabaseTask, map_id: str) -> None:  # type: ignore[mi
 
     except Exception as exc:
         logger.exception("import_map_task [%s]: failed", map_id)
+        # If the DB aborted the transaction (e.g. unique constraint violation), the
+        # session is deactivated and must be rolled back before we can write anything.
+        self.db.rollback()
         upload.status = "failed"
         upload.import_step = None
         upload.error = type(exc).__name__

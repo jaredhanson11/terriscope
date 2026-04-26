@@ -525,6 +525,7 @@ export interface paths {
          *
          *     For order=0 (zip) layers: queries geography_zip_codes LEFT JOIN zip_assignments.
          *     For order>=1 layers: queries pre-computed node geometries.
+         *     Data fields from data_field_config are included as flat numeric properties.
          */
         get: operations["get_tile_tiles__layer_id___z___x___y__pbf_get"];
         put?: never;
