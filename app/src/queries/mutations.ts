@@ -4,7 +4,7 @@ import type { FetchResponse } from "openapi-fetch"
 
 import config from "@/app/config"
 import { fetchClient } from "@/fetch-client"
-import type { components } from "@/lib/api/v1"
+import type { components, paths } from "@/lib/api/v1"
 
 import { queries } from "./queries"
 

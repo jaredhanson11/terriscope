@@ -15,7 +15,8 @@ function RootRedirect() {
 
   useEffect(() => {
     const stored = localStorage.getItem(ACTIVE_MAP_KEY)
-    const target = maps.find((m) => m.id === stored) ?? maps[0]
+    const target =
+      (maps.find((m) => m.id === stored) ?? maps.length) ? maps[0] : undefined
     if (target) {
       localStorage.setItem(ACTIVE_MAP_KEY, target.id)
       void navigate(AppRoutes.getRoute(PageName.Home, { mapId: target.id }), {
