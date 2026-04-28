@@ -8,52 +8,17 @@ import {
   type LayerViewOptions,
 } from "./config"
 
-/**
- * Build a MapLibre text-field expression that stacks multiple MVT properties
- * into a single label, one per line, with an optional second-line data value
- * rendered in blue via a format expression.
- *
- * - "name" renders as just the node name (no prefix)
- * - Other keys like "customers_sum" render as "customers (sum): <value>"
- * - Falls back to ["get", "name"] / ["get", "zip_code"] when labelFields is empty
- * - dataLabelField adds a styled second line using the format expression
- */
+// Two-line format expression: name (dark) + optional data value (blue, smaller)
 function buildLabelExpression(
-  labelFields: string[],
   isZipLayer = false,
   dataLabelField: string | null = null,
 ): maplibregl.ExpressionSpecification {
-  const fields = labelFields.length > 0 ? labelFields : ["name"]
-
-  const nameParts: maplibregl.ExpressionSpecification[] = []
-  for (let i = 0; i < fields.length; i++) {
-    const key = fields[i]
-    if (i > 0)
-      nameParts.push("\n" as unknown as maplibregl.ExpressionSpecification)
-    if (key === "name") {
-      nameParts.push(isZipLayer ? ["get", "zip_code"] : ["get", "name"])
-    } else {
-      const lastUs = key.lastIndexOf("_")
-      const prefix =
-        lastUs !== -1
-          ? `${key.slice(0, lastUs)} (${key.slice(lastUs + 1)}): `
-          : `${key}: `
-      nameParts.push(prefix as unknown as maplibregl.ExpressionSpecification, [
-        "coalesce",
-        ["to-string", ["get", key]],
-        "—",
-      ])
-    }
-  }
-
-  const nameExpr: maplibregl.ExpressionSpecification =
-    nameParts.length === 1
-      ? nameParts[0]
-      : (["concat", ...nameParts] as maplibregl.ExpressionSpecification)
+  const nameExpr: maplibregl.ExpressionSpecification = isZipLayer
+    ? ["get", "zip_code"]
+    : ["get", "name"]
 
   if (!dataLabelField) return nameExpr
 
-  // Two-line format expression: name line (dark) + data value line (blue, smaller)
   return [
     "format",
     nameExpr,
@@ -122,7 +87,6 @@ export function updateLayers(
       showFill,
       showOutline,
       showLabel,
-      labelFields,
       dataLabelField,
     } = layerOption
     const sourceLayer = order === 0 ? "zips" : "nodes"
@@ -196,11 +160,7 @@ export function updateLayers(
 
     // Label layer — always on top.
     // Visual weight scales with layer order so higher-level territories read more prominently.
-    const textFieldExpr = buildLabelExpression(
-      labelFields,
-      order === 0,
-      dataLabelField,
-    )
+    const textFieldExpr = buildLabelExpression(order === 0, dataLabelField)
     const labelSizeMin = Math.min(10 + order * 2, 16)
     const labelSizeMax = Math.min(13 + order * 4, 24)
     const labelFont =
@@ -215,7 +175,7 @@ export function updateLayers(
           id: labelLayerId,
           type: "symbol",
           source: sourceId,
-          "source-layer": order === 0 ? "zips" : "nodes",
+          "source-layer": order === 0 ? "zip_labels" : "node_labels",
           layout: {
             "text-field": textFieldExpr,
             "text-size": [

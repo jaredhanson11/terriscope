@@ -8,8 +8,6 @@ export type LayerViewOption = {
   showFill: boolean
   showOutline: boolean
   showLabel: boolean
-  /** Ordered list of MVT property keys to stack in the map label. Defaults to ["name"]. */
-  labelFields: string[]
   /** MVT property name (e.g. "customers_sum") to render as a second styled line below the name label. Null disables the data line. */
   dataLabelField: string | null
 }

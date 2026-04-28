@@ -29,7 +29,6 @@ import { BrandLogo } from "@/components/brand-logo"
 import { PageLayout } from "@/components/layout"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
 import {
   Collapsible,
   CollapsibleContent,
@@ -122,8 +121,6 @@ function formatLastEdited(isoDate: string | null | undefined): string {
 export default function HomePage() {
   const mapRef = useRef<MapRef | null>(null)
 
-  // Track which label fields are active per layer (ordered list shown stacked on map)
-  const [labelFields, setLabelFields] = useState<Record<number, string[]>>({})
   const [dataLabelFields, setDataLabelFields] = useState<
     Record<number, string | null>
   >({})
@@ -300,7 +297,6 @@ export default function HomePage() {
             showFill: fillLayerId === _layer.id,
             showOutline: borderLayerIds.has(_layer.id),
             showLabel: labelLayerIds.has(_layer.id),
-            labelFields: labelFields[_layer.id] ?? ["name"],
             dataLabelField: dataLabelFields[_layer.id] ?? null,
           }))
         : [],
@@ -309,7 +305,6 @@ export default function HomePage() {
       fillLayerId,
       borderLayerIds,
       labelLayerIds,
-      labelFields,
       dataLabelFields,
     ],
   )
@@ -600,15 +595,6 @@ export default function HomePage() {
                       const hasLabels = labelLayerIds.has(layer.id)
                       // Build label options: "Name" plus one entry per field+aggregation combo
                       const mapDataFields = currentMap.data_field_config ?? []
-                      const labelFieldOptions = [
-                        { value: "name", label: "Name" },
-                        ...mapDataFields.flatMap((f) =>
-                          f.aggregations.map((agg) => ({
-                            value: `${f.field}_${agg}`,
-                            label: `${f.field} (${agg})`,
-                          })),
-                        ),
-                      ]
                       return (
                         <Collapsible key={layer.id}>
                           <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
@@ -701,48 +687,6 @@ export default function HomePage() {
                                   }}
                                 />
                               </div>
-                              {/* Label field checkboxes — shown when labels are on */}
-                              {hasLabels && (
-                                <div className="mt-0.5 space-y-0.5">
-                                  {labelFieldOptions.map((opt) => {
-                                    const active = labelFields[layer.id] ?? [
-                                      "name",
-                                    ]
-                                    return (
-                                      <label
-                                        key={opt.value}
-                                        className="flex cursor-pointer items-center gap-2 rounded px-1.5 py-0.5"
-                                      >
-                                        <Checkbox
-                                          checked={active.includes(opt.value)}
-                                          onCheckedChange={(checked) => {
-                                            setLabelFields((prev) => {
-                                              const cur = prev[layer.id] ?? [
-                                                "name",
-                                              ]
-                                              const next: string[] =
-                                                checked === true
-                                                  ? cur.includes(opt.value)
-                                                    ? cur
-                                                    : [...cur, opt.value]
-                                                  : cur.filter(
-                                                      (f) => f !== opt.value,
-                                                    )
-                                              return {
-                                                ...prev,
-                                                [layer.id]: next,
-                                              }
-                                            })
-                                          }}
-                                        />
-                                        <span className="text-muted-foreground text-xs">
-                                          {opt.label}
-                                        </span>
-                                      </label>
-                                    )
-                                  })}
-                                </div>
-                              )}
                               {/* Data label — one option per field+agg from data_field_config */}
                               {mapDataFields.length > 0 && (
                                 <div className="mt-1 pb-0.5">

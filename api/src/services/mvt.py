@@ -64,8 +64,19 @@ def _data_columns(fields: tuple[tuple[str, tuple[str, ...]], ...], alias: str) -
     return ",\n                " + ",\n                ".join(parts)
 
 
+def _data_column_aliases(fields: tuple[tuple[str, tuple[str, ...]], ...]) -> str:
+    if not fields:
+        return ""
+    parts: list[str] = []
+    for fname, aggs in fields:
+        for agg in aggs:
+            parts.append(f"{fname}_{agg}")
+    return ",\n                " + ",\n                ".join(parts)
+
+
 def _node_query(col: str, data_fields: tuple[tuple[str, tuple[str, ...]], ...]) -> TextClause:
     extra = _data_columns(data_fields, "n")
+    extra_aliases = _data_column_aliases(data_fields)
     return text(f"""
         WITH tile_bounds AS (
             SELECT ST_TileEnvelope(:z, :x, :y) AS geom
@@ -85,15 +96,42 @@ def _node_query(col: str, data_fields: tuple[tuple[str, tuple[str, ...]], ...]) 
             WHERE n.layer_id = :layer_id
               AND n.{col} IS NOT NULL
               AND ST_Intersects(n.{col}, (SELECT geom FROM filter_bounds))
+        ),
+        label_points AS (
+            SELECT
+                n.id,
+                n.name,
+                n.color{extra},
+                ST_PointOnSurface(n.{col}_merc) AS pt
+            FROM nodes n
+            WHERE n.layer_id = :layer_id
+              AND n.{col} IS NOT NULL
+              AND ST_Intersects(n.{col}, (SELECT geom FROM filter_bounds))
+        ),
+        label_data AS (
+            SELECT
+                id,
+                name,
+                color{extra_aliases},
+                ST_AsMVTGeom(pt, (SELECT geom FROM tile_bounds), 4096, 256, false) AS geom
+            FROM label_points
+            WHERE ST_Within(pt, (SELECT geom FROM tile_bounds))
         )
-        SELECT ST_AsMVT(tile_data, 'nodes', 4096, 'geom', 'id')
-        FROM tile_data
-        WHERE tile_data.geom IS NOT NULL;
+        SELECT
+            (
+                SELECT ST_AsMVT(q, 'nodes', 4096, 'geom', 'id')
+                FROM (SELECT * FROM tile_data WHERE geom IS NOT NULL) q
+            ) ||
+            (
+                SELECT ST_AsMVT(q, 'node_labels', 4096, 'geom')
+                FROM (SELECT * FROM label_data WHERE geom IS NOT NULL) q
+            );
     """)  # noqa: S608
 
 
 def _zip_query(col: str, data_fields: tuple[tuple[str, tuple[str, ...]], ...]) -> TextClause:
     extra = _data_columns(data_fields, "za")
+    extra_aliases = _data_column_aliases(data_fields)
     return text(f"""
         WITH tile_bounds AS (
             SELECT ST_TileEnvelope(:z, :x, :y) AS geom
@@ -115,10 +153,38 @@ def _zip_query(col: str, data_fields: tuple[tuple[str, tuple[str, ...]], ...]) -
                 AND za.layer_id = :layer_id
             WHERE gz.{col} IS NOT NULL
               AND ST_Intersects(gz.{col}, (SELECT geom FROM filter_bounds))
+        ),
+        label_points AS (
+            SELECT
+                gz.zip_code,
+                COALESCE(za.color, '#FFFFFF') AS color,
+                za.parent_node_id{extra},
+                ST_PointOnSurface(gz.{col}_merc) AS pt
+            FROM geography_zip_codes gz
+            LEFT JOIN zip_assignments za
+                ON za.zip_code = gz.zip_code
+                AND za.layer_id = :layer_id
+            WHERE gz.{col} IS NOT NULL
+              AND ST_Intersects(gz.{col}, (SELECT geom FROM filter_bounds))
+        ),
+        label_data AS (
+            SELECT
+                zip_code,
+                color,
+                parent_node_id{extra_aliases},
+                ST_AsMVTGeom(pt, (SELECT geom FROM tile_bounds), 4096, 256, false) AS geom
+            FROM label_points
+            WHERE ST_Within(pt, (SELECT geom FROM tile_bounds))
         )
-        SELECT ST_AsMVT(tile_data, 'zips', 4096, 'geom')
-        FROM tile_data
-        WHERE tile_data.geom IS NOT NULL;
+        SELECT
+            (
+                SELECT ST_AsMVT(q, 'zips', 4096, 'geom')
+                FROM (SELECT * FROM tile_data WHERE geom IS NOT NULL) q
+            ) ||
+            (
+                SELECT ST_AsMVT(q, 'zip_labels', 4096, 'geom')
+                FROM (SELECT * FROM label_data WHERE geom IS NOT NULL) q
+            );
     """)  # noqa: S608
 
 
