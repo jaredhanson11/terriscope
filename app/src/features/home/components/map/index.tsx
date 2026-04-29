@@ -6,6 +6,7 @@ import {
   forwardRef,
   useEffect,
   useImperativeHandle,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react"
@@ -72,12 +73,15 @@ export const Map = forwardRef<
     const mapRef = useRef<MapRef | null>(null)
     useImperativeHandle(ref, () => mapRef.current as MapRef)
 
-    useEffect(() => {
+    // useLayoutEffect fires synchronously after React commits, before the
+    // browser paints. This ensures MapLibre's style state is always updated
+    // in the same JS task as the React render that changed it — eliminating
+    // the window where MapLibre could composite a frame with stale style.
+    useLayoutEffect(() => {
       const map = mapRef.current?.getMap()
-      if (map && map.isStyleLoaded()) {
-        updateSources(map, layers, tileVersion)
-        updateLayers(map, baseMap, layers)
-      }
+      if (!map || !map.isStyleLoaded()) return
+      updateSources(map, layers, tileVersion)
+      updateLayers(map, baseMap, layers)
     }, [baseMap, layers, tileVersion])
 
     // When tileVersion increments (after a recompute completes), flush MapLibre's

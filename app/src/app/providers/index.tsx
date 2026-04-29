@@ -1,5 +1,4 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
 import type { PropsWithChildren } from "react"
 import { BrowserRouter } from "react-router-dom"
 
@@ -11,10 +10,10 @@ export const AppProviders = ({ children }: PropsWithChildren<object>) => {
     <BrowserRouter>
       <SidebarProvider>
         <QueryClientProvider client={queryClient}>
-          <ReactQueryDevtools
+          {/* <ReactQueryDevtools
             initialIsOpen={false}
             buttonPosition="top-right"
-          />
+          /> */}
           {children}
         </QueryClientProvider>
       </SidebarProvider>

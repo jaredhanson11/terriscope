@@ -208,7 +208,7 @@ export default function InitializePage() {
           previewRows={formik.values.previewRows}
           layerFields={formik.values.layers}
           dataFields={formik.values.data_fields}
-          isSubmitting={createMapMutation.isPending}
+          isSubmitting={createMapMutation.isPending || createMapMutation.isSuccess}
           onNameChange={(name) => void formik.setFieldValue("name", name)}
           onBack={() => {
             setActiveStepIdx(2)

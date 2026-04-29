@@ -31,9 +31,9 @@ interface ReviewStepProps {
   layerFields: LayerFields
   dataFields: DataFields
   isSubmitting?: boolean
-  onNameChange?: (name: string) => void
-  onComplete?: () => void
-  onBack?: () => void
+  onNameChange: (name: string) => void
+  onComplete: () => void
+  onBack: () => void
 }
 
 export default function ReviewStep({
@@ -70,7 +70,9 @@ export default function ReviewStep({
                 <Input
                   id="project-name"
                   value={name}
-                  onChange={(e) => onNameChange?.(e.target.value)}
+                  onChange={(e) => {
+                    onNameChange?.(e.target.value)
+                  }}
                   placeholder="Enter project name"
                   className="max-w-md"
                 />

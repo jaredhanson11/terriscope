@@ -30,6 +30,20 @@ function buildLabelExpression(
   ] as unknown as maplibregl.ExpressionSpecification
 }
 
+// Returns the MapLibre layer ID of the lowest data layer currently in the map.
+// Used to anchor basemap layers beneath all data layers when inserting them.
+function findFirstDataLayerId(
+  map: maplibregl.Map,
+  layers: LayerViewOptions,
+): string | undefined {
+  for (const layer of layers) {
+    const id = layer.id.toString()
+    if (map.getLayer(`layer-${id}-fill`)) return `layer-${id}-fill`
+    if (map.getLayer(`layer-${id}-selection`)) return `layer-${id}-selection`
+  }
+  return undefined
+}
+
 export function updateSources(
   map: maplibregl.Map,
   layers: LayerViewOptions,
@@ -68,98 +82,127 @@ export function updateLayers(
   baseMap: BaseMapName,
   layers: LayerViewOptions,
 ) {
+  // The lowest data layer currently in the map — basemap layers are inserted
+  // before this so they always render beneath the data.
+  const firstDataLayerId = findFirstDataLayerId(map, layers)
+
+  // Basemap raster layers: add once (below all data layers), then toggle
+  // visibility. Never remove — setLayoutProperty is the only mutation needed.
   Object.keys(BASE_MAP_SOURCES).forEach((name) => {
     const layerId = `base-map-${name}-layer`
     const sourceId = `base-map-${name}`
-    const isActive = baseMap === name
-    const isInLayers = map.getLayer(layerId)
-    if (isActive && !isInLayers) {
-      map.addLayer({ id: layerId, type: "raster", source: sourceId }, undefined)
-    } else if (!isActive && isInLayers) {
-      map.removeLayer(layerId)
+
+    if (!map.getLayer(layerId)) {
+      // Insert before the lowest data layer so basemap stays at the bottom.
+      map.addLayer(
+        { id: layerId, type: "raster", source: sourceId },
+        firstDataLayerId,
+      )
+    } else if (firstDataLayerId) {
+      // Re-anchor below data layers on every update. Without this, a basemap
+      // layer that was added before data layers existed stays below them, but
+      // if it ends up above (e.g. first time satellite/terrain tiles fully
+      // render), it would cover fills and borders until something re-ordered.
+      map.moveLayer(layerId, firstDataLayerId)
+    }
+    map.setLayoutProperty(
+      layerId,
+      "visibility",
+      baseMap === name ? "visible" : "none",
+    )
+  })
+
+  // Data layers are painted in four separate passes so that the groups stack
+  // correctly regardless of how many layers exist or which toggles are on:
+  //
+  //   fills (all layers)       ← bottom
+  //   selections (all layers)
+  //   outlines (all layers)
+  //   labels (all layers)      ← top
+  //
+  // Each pass appends to the top of the current stack (before=undefined), so
+  // running the passes in order naturally builds the right grouping. Layers are
+  // added exactly once; subsequent calls only call setLayoutProperty.
+
+  // Pass 1 — fills
+  layers.forEach(({ id, order, showFill }) => {
+    const fillLayerId = `layer-${id.toString()}-fill`
+    const sourceId = `layer-${id.toString()}`
+    const sourceLayer = order === 0 ? "zips" : "nodes"
+
+    if (!map.getLayer(fillLayerId)) {
+      map.addLayer({
+        id: fillLayerId,
+        type: "fill",
+        source: sourceId,
+        "source-layer": sourceLayer,
+        paint: {
+          "fill-color": ["coalesce", ["get", "color"], "#888888"],
+          "fill-opacity": 0.7,
+        },
+      })
+    }
+    map.setLayoutProperty(
+      fillLayerId,
+      "visibility",
+      showFill ? "visible" : "none",
+    )
+  })
+
+  // Pass 2 — selection highlights (always visible; opacity expression handles show/hide)
+  layers.forEach(({ id, order }) => {
+    const selectionLayerId = `layer-${id.toString()}-selection`
+    const sourceId = `layer-${id.toString()}`
+    const sourceLayer = order === 0 ? "zips" : "nodes"
+
+    if (!map.getLayer(selectionLayerId)) {
+      map.addLayer({
+        id: selectionLayerId,
+        type: "fill",
+        source: sourceId,
+        "source-layer": sourceLayer,
+        paint: {
+          "fill-color": "#2563eb",
+          "fill-opacity": [
+            "case",
+            ["boolean", ["feature-state", "selected"], false],
+            0.5,
+            0,
+          ],
+        },
+      })
     }
   })
 
-  layers.forEach((layerOption) => {
-    const {
-      id,
-      order,
-      showFill,
-      showOutline,
-      showLabel,
-      dataLabelField,
-    } = layerOption
-    const sourceLayer = order === 0 ? "zips" : "nodes"
-    const fillLayerId = `layer-${id.toString()}-fill`
-    const selectionLayerId = `layer-${id.toString()}-selection`
+  // Pass 3 — outlines
+  layers.forEach(({ id, order, showOutline }) => {
     const outlineLayerId = `layer-${id.toString()}-outline`
+    const sourceId = `layer-${id.toString()}`
+    const sourceLayer = order === 0 ? "zips" : "nodes"
+
+    if (!map.getLayer(outlineLayerId)) {
+      map.addLayer({
+        id: outlineLayerId,
+        type: "line",
+        source: sourceId,
+        "source-layer": sourceLayer,
+        paint: {
+          "line-color": "#000000",
+          "line-width": order === 0 ? 1 : 2,
+        },
+      })
+    }
+    map.setLayoutProperty(
+      outlineLayerId,
+      "visibility",
+      showOutline ? "visible" : "none",
+    )
+  })
+
+  // Pass 4 — labels (update text-field in place when dataLabelField changes)
+  layers.forEach(({ id, order, showLabel, dataLabelField }) => {
     const labelLayerId = `layer-${id.toString()}-label`
     const sourceId = `layer-${id.toString()}`
-
-    // Fill layer — color driven by the `color` MVT property set by the backend
-    const fillLayerExists = map.getLayer(fillLayerId)
-    if (showFill && !fillLayerExists) {
-      map.addLayer(
-        {
-          id: fillLayerId,
-          type: "fill",
-          source: sourceId,
-          "source-layer": sourceLayer,
-          paint: {
-            "fill-color": ["coalesce", ["get", "color"], "#888888"],
-            "fill-opacity": 0.7,
-          },
-        },
-        map.getLayer(selectionLayerId) ? selectionLayerId : undefined,
-      )
-    } else if (!showFill && fillLayerExists) {
-      map.removeLayer(fillLayerId)
-    }
-
-    // Selection highlight — always present, transparent until features are selected
-    if (!map.getLayer(selectionLayerId)) {
-      map.addLayer(
-        {
-          id: selectionLayerId,
-          type: "fill",
-          source: sourceId,
-          "source-layer": sourceLayer,
-          paint: {
-            "fill-color": "#2563eb",
-            "fill-opacity": [
-              "case",
-              ["boolean", ["feature-state", "selected"], false],
-              0.5,
-              0,
-            ],
-          },
-        },
-        map.getLayer(outlineLayerId) ? outlineLayerId : undefined,
-      )
-    }
-
-    // Outline layer
-    const outlineLayerExists = map.getLayer(outlineLayerId)
-    if (showOutline && !outlineLayerExists) {
-      map.addLayer(
-        {
-          id: outlineLayerId,
-          type: "line",
-          source: sourceId,
-          "source-layer": sourceLayer,
-          paint: {
-            "line-color": "#000000",
-            "line-width": order === 0 ? 1 : 2,
-          },
-        },
-        map.getLayer(labelLayerId) ? labelLayerId : undefined,
-      )
-    } else if (!showOutline && outlineLayerExists) {
-      map.removeLayer(outlineLayerId)
-    }
-
-    // Label layer — always on top.
-    // Visual weight scales with layer order so higher-level territories read more prominently.
     const textFieldExpr = buildLabelExpression(order === 0, dataLabelField)
     const labelSizeMin = Math.min(10 + order * 2, 16)
     const labelSizeMax = Math.min(13 + order * 4, 24)
@@ -169,48 +212,43 @@ export function updateLayers(
         : ["Open Sans Regular", "Arial Unicode MS Regular"]
     const labelHaloWidth = order === 0 ? 1.5 : order === 1 ? 2 : 2.5
 
-    const addLabelLayer = () => {
-      map.addLayer(
-        {
-          id: labelLayerId,
-          type: "symbol",
-          source: sourceId,
-          "source-layer": order === 0 ? "zip_labels" : "node_labels",
-          layout: {
-            "text-field": textFieldExpr,
-            "text-size": [
-              "interpolate",
-              ["linear"],
-              ["zoom"],
-              5,
-              labelSizeMin,
-              12,
-              labelSizeMax,
-            ],
-            "text-font": labelFont,
-            "text-max-width": 20,
-            "text-line-height": 1.5,
-            "text-justify": "center",
-          },
-          paint: {
-            "text-color": "#111111",
-            "text-halo-color": "rgba(255, 255, 255, 0.85)",
-            "text-halo-width": labelHaloWidth,
-            "text-halo-blur": 1,
-          },
+    if (!map.getLayer(labelLayerId)) {
+      map.addLayer({
+        id: labelLayerId,
+        type: "symbol",
+        source: sourceId,
+        "source-layer": order === 0 ? "zip_labels" : "node_labels",
+        layout: {
+          "text-field": textFieldExpr,
+          "text-size": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            5,
+            labelSizeMin,
+            12,
+            labelSizeMax,
+          ],
+          "text-font": labelFont,
+          "text-max-width": 20,
+          "text-line-height": 1.5,
+          "text-justify": "center",
         },
-        undefined,
-      )
-    }
-
-    const labelLayerExists = map.getLayer(labelLayerId)
-    if (!showLabel) {
-      if (labelLayerExists) map.removeLayer(labelLayerId)
+        paint: {
+          "text-color": "#111111",
+          "text-halo-color": "rgba(255, 255, 255, 0.85)",
+          "text-halo-width": labelHaloWidth,
+          "text-halo-blur": 1,
+        },
+      })
     } else {
-      // Always recreate — ensures spec stays in sync (safe since updateLayers is not hot-path).
-      if (labelLayerExists) map.removeLayer(labelLayerId)
-      addLabelLayer()
+      map.setLayoutProperty(labelLayerId, "text-field", textFieldExpr)
     }
+    map.setLayoutProperty(
+      labelLayerId,
+      "visibility",
+      showLabel ? "visible" : "none",
+    )
   })
 }
 

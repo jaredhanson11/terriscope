@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { type PropsWithChildren } from "react"
-import { useNavigate } from "react-router-dom"
+import { useLocation, useNavigate } from "react-router-dom"
 
 import { AppRoutes, PageName } from "@/app/routes"
 import { queries } from "@/queries/queries"
@@ -10,6 +10,7 @@ import { AppLoadingScreen } from "./loading-screen"
 
 export const AuthProvider = (props: PropsWithChildren) => {
   const navigate = useNavigate()
+  const location = useLocation()
   const userQuery = useQuery(queries.me())
   const mapsQuery = useQuery({
     ...queries.listMaps(),
@@ -24,7 +25,8 @@ export const AuthProvider = (props: PropsWithChildren) => {
   }
 
   if (userQuery.isSuccess && mapsQuery.isSuccess) {
-    if (mapsQuery.data.length === 0) {
+    const isInInitializeFlow = location.pathname.startsWith("/new")
+    if (mapsQuery.data.length === 0 && !isInInitializeFlow) {
       void navigate(AppRoutes.getRoute(PageName.Initialize))
     }
     return (
