@@ -1401,8 +1401,8 @@ export interface components {
             layer_name: string;
             /** Color */
             color: string;
-            /** Centroid */
-            centroid?: number[] | null;
+            /** Bbox */
+            bbox?: number[] | null;
         };
         /**
          * SearchResults

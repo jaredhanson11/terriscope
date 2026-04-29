@@ -191,8 +191,8 @@ class SearchResultItem(BaseModel):
     layer_id: int
     layer_name: str
     color: str
-    centroid: list[float] | None = None
-    """[lng, lat] derived from PostGIS geometry centroid. Null if geometry not yet computed."""
+    bbox: list[float] | None = None
+    """[west, south, east, north] bounding box. Clipped to continental US if the geometry overlaps it. Null if geometry not yet computed."""
 
     @model_validator(mode="after")
     def _validate_id_type(self) -> "SearchResultItem":

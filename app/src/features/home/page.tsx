@@ -82,7 +82,6 @@ import {
 } from "@/features/home/components/map"
 import { MergeDialog } from "@/features/home/components/merge-dialog"
 import { MoveDialog } from "@/features/home/components/move-dialog"
-import { NodeDetailSheet } from "@/features/home/components/node-detail-sheet"
 import {
   SearchBar,
   type SearchResultItem,
@@ -220,32 +219,43 @@ function HomePageContent() {
 
   const spatialSelectMutation = useSpatialSelectMutation()
 
-  // Search / detail sheet state
-  const [detailResult, setDetailResult] = useState<SearchResultItem | null>(
-    null,
-  )
-
-  // Close search detail sheet when the user makes a lasso/click selection
   const selectionCount =
     activeLayer?.order === 0 ? selectedZipCodes.length : selectedNodeIds.length
-  useEffect(() => {
-    if (selectionCount > 0) setDetailResult(null)
-  }, [selectionCount])
 
   const [hoveredHierarchy, setHoveredHierarchy] = useState<
     HoverHierarchyItem[]
   >([])
 
   const handleSearchSelect = (result: SearchResultItem) => {
-    // Fly map to the result's centroid if geometry is available
-    if (result.centroid && mapRef.current) {
-      mapRef.current.getMap().flyTo({
-        center: [result.centroid[0], result.centroid[1]],
-        zoom: result.type === "zip" ? 12 : 8,
-        duration: 1000,
-      })
+    const map = mapRef.current?.getMap()
+
+    if (result.bbox && map) {
+      const [west, south, east, north] = result.bbox as [number, number, number, number]
+      map.fitBounds([[west, south], [east, north]], { padding: 60, duration: 1000 })
     }
-    setDetailResult(result)
+
+    if (!map) return
+
+    // Clear visual state on the current active layer
+    if (activeLayerId != null) {
+      if (activeLayer?.order === 0) {
+        updateSelectedZipStates(map, activeLayerId, selectedZipCodes, [])
+      } else {
+        updateSelectedNodeStates(map, activeLayerId, selectedNodeIds, [])
+      }
+    }
+
+    setActiveLayerId(result.layer_id)
+
+    if (result.type === "zip") {
+      updateSelectedZipStates(map, result.layer_id, [], [result.id as string])
+      setSelectedZipCodes([result.id as string])
+      setSelectedNodeIds([])
+    } else {
+      updateSelectedNodeStates(map, result.layer_id, [], [result.id as number])
+      setSelectedNodeIds([result.id as number])
+      setSelectedZipCodes([])
+    }
   }
 
   // The layer one order above the active layer — used as the parent picker target
@@ -1141,13 +1151,6 @@ function HomePageContent() {
         mapRef={mapRef}
         layers={layers}
         baseMap={baseMap}
-      />
-      <NodeDetailSheet
-        result={detailResult}
-        layers={layerList}
-        onClose={() => {
-          setDetailResult(null)
-        }}
       />
       <SelectionSheet
         selectedNodeIds={selectedNodeIds}

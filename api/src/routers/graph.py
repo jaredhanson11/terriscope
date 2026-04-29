@@ -3,7 +3,7 @@
 from collections.abc import Sequence
 
 from fastapi import APIRouter, HTTPException
-from geoalchemy2.functions import ST_Centroid, ST_X, ST_Y
+from geoalchemy2.functions import ST_Centroid, ST_Envelope, ST_X, ST_XMax, ST_XMin, ST_Y, ST_YMax, ST_YMin
 from sqlalchemy import and_, delete, func, select
 from sqlalchemy.orm import undefer
 
@@ -900,6 +900,16 @@ def get_zip_with_geography_default(
     return ZipAssignment(zip_code=padded, layer_id=layer_id, parent_node_id=None, color="#FFFFFF")
 
 
+_CONUS_BBOX = (-124.736342, 24.521208, -66.945392, 49.384358)
+
+
+def _bbox_clipped_to_conus(west: float, south: float, east: float, north: float) -> list[float]:
+    cw, cs, ce, cn = _CONUS_BBOX
+    if west > ce or east < cw or south > cn or north < cs:
+        return [west, south, east, north]
+    return [max(west, cw), max(south, cs), min(east, ce), min(north, cn)]
+
+
 @graph_router.get("/search", response_model=SearchResults)
 def search_map(
     map_id: str,
@@ -933,8 +943,10 @@ def search_map(
                 NodeModel.layer_id,
                 NodeModel.name,
                 NodeModel.color,
-                ST_X(ST_Centroid(NodeModel.geom_z11)).label("lng"),  # type: ignore[arg-type]
-                ST_Y(ST_Centroid(NodeModel.geom_z11)).label("lat"),  # type: ignore[arg-type]
+                ST_XMin(ST_Envelope(NodeModel.geom_z11)).label("bbox_west"),  # type: ignore[arg-type]
+                ST_YMin(ST_Envelope(NodeModel.geom_z11)).label("bbox_south"),  # type: ignore[arg-type]
+                ST_XMax(ST_Envelope(NodeModel.geom_z11)).label("bbox_east"),  # type: ignore[arg-type]
+                ST_YMax(ST_Envelope(NodeModel.geom_z11)).label("bbox_north"),  # type: ignore[arg-type]
             )
             .where(NodeModel.layer_id.in_(node_layer_ids))
             .where(NodeModel.name.ilike(f"%{q}%"))
@@ -943,7 +955,11 @@ def search_map(
         ).all()
         for row in rows:
             layer = layer_map[row.layer_id]
-            centroid = [row.lng, row.lat] if row.lng is not None and row.lat is not None else None
+            bbox = (
+                _bbox_clipped_to_conus(row.bbox_west, row.bbox_south, row.bbox_east, row.bbox_north)
+                if row.bbox_west is not None
+                else None
+            )
             results.append(
                 SearchResultItem(
                     type="node",
@@ -952,7 +968,7 @@ def search_map(
                     layer_id=row.layer_id,
                     layer_name=layer.name,
                     color=row.color,
-                    centroid=centroid,
+                    bbox=bbox,
                 )
             )
 
@@ -961,15 +977,21 @@ def search_map(
         zip_rows = db.execute(  # type: ignore[arg-type]
             select(
                 ZipCodeGeography.zip_code,
-                ST_X(ST_Centroid(ZipCodeGeography.geom)).label("lng"),  # type: ignore[arg-type]
-                ST_Y(ST_Centroid(ZipCodeGeography.geom)).label("lat"),  # type: ignore[arg-type]
+                ST_XMin(ST_Envelope(ZipCodeGeography.geom)).label("bbox_west"),  # type: ignore[arg-type]
+                ST_YMin(ST_Envelope(ZipCodeGeography.geom)).label("bbox_south"),  # type: ignore[arg-type]
+                ST_XMax(ST_Envelope(ZipCodeGeography.geom)).label("bbox_east"),  # type: ignore[arg-type]
+                ST_YMax(ST_Envelope(ZipCodeGeography.geom)).label("bbox_north"),  # type: ignore[arg-type]
             )
             .where(ZipCodeGeography.zip_code.like(f"{q}%"))
             .order_by(ZipCodeGeography.zip_code)
             .limit(limit // 2 or 10)
         ).all()
         for row in zip_rows:
-            centroid = [row.lng, row.lat] if row.lng is not None and row.lat is not None else None
+            bbox = (
+                _bbox_clipped_to_conus(row.bbox_west, row.bbox_south, row.bbox_east, row.bbox_north)
+                if row.bbox_west is not None
+                else None
+            )
             results.append(
                 SearchResultItem(
                     type="zip",
@@ -978,7 +1000,7 @@ def search_map(
                     layer_id=zip_layer.id,
                     layer_name=zip_layer.name,
                     color="#FFFFFF",
-                    centroid=centroid,
+                    bbox=bbox,
                 )
             )
 
