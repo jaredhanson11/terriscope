@@ -61,7 +61,7 @@ function navigateAndWait(
     // If it's already settled (same bbox), resolve immediately.
     requestAnimationFrame(() => {
       if (map.isMoving() || map.isZooming() || !map.loaded()) {
-        map.once("idle", resolve)
+        void map.once("idle", resolve)
       } else {
         resolve()
       }
@@ -72,7 +72,11 @@ function navigateAndWait(
 function captureCanvas(map: MaplibreMap): Promise<Blob> {
   return new Promise((resolve, reject) => {
     map.getCanvas().toBlob((blob) => {
-      blob ? resolve(blob) : reject(new Error("Canvas capture failed"))
+      if (blob) {
+        resolve(blob)
+      } else {
+        reject(new Error("Canvas capture failed"))
+      }
     }, "image/png")
   })
 }
@@ -129,7 +133,9 @@ export function ExportPptDialog({
         credentials: "include",
       })
       if (!createRes.ok) {
-        throw new Error(`Failed to start export (${createRes.status})`)
+        throw new Error(
+          `Failed to start export (${createRes.status.toString()})`,
+        )
       }
       const { id: exportId, total_slides: totalSlides } =
         (await createRes.json()) as { id: string; total_slides: number }
@@ -146,7 +152,9 @@ export function ExportPptDialog({
           { credentials: "include" },
         )
         if (!nextRes.ok) {
-          throw new Error(`Failed to get next slide (${nextRes.status})`)
+          throw new Error(
+            `Failed to get next slide (${nextRes.status.toString()})`,
+          )
         }
         const next = (await nextRes.json()) as {
           done: boolean
@@ -396,12 +404,18 @@ function fallbackBlob(): Promise<Blob> {
   const canvas = document.createElement("canvas")
   canvas.width = 1
   canvas.height = 1
-  const ctx = canvas.getContext("2d")!
-  ctx.fillStyle = "#94a3b8"
-  ctx.fillRect(0, 0, 1, 1)
+  const ctx = canvas.getContext("2d")
+  if (ctx) {
+    ctx.fillStyle = "#94a3b8"
+    ctx.fillRect(0, 0, 1, 1)
+  }
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob((blob) => {
-      blob ? resolve(blob) : reject(new Error("canvas.toBlob failed"))
+      if (blob) {
+        resolve(blob)
+      } else {
+        reject(new Error("canvas.toBlob failed"))
+      }
     }, "image/png")
   })
 }
