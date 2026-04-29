@@ -57,13 +57,19 @@ function navigateAndWait(
         maxZoom: 12,
       },
     )
-    // After a frame, check whether the map is still moving before waiting for idle.
-    // If it's already settled (same bbox), resolve immediately.
+    // Double rAF after idle ensures WebGL has committed the final frame to the
+    // canvas buffer before toBlob() runs. A single rAF isn't enough in production.
+    const afterIdle = () => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => { resolve() })
+      })
+    }
+
     requestAnimationFrame(() => {
       if (map.isMoving() || map.isZooming() || !map.loaded()) {
-        void map.once("idle", resolve)
+        void map.once("idle", afterIdle)
       } else {
-        resolve()
+        afterIdle()
       }
     })
   })
