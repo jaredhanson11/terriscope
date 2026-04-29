@@ -635,7 +635,7 @@ function HomePageContent() {
                                 />
                               </div>
                               {/* Data label — one option per field+agg from data_field_config */}
-                              {mapDataFields.length > 0 && (
+                              {hasLabels && mapDataFields.length > 0 && (
                                 <div className="mt-1 pb-0.5">
                                   <p className="text-muted-foreground/70 px-1.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wider">
                                     Data label
