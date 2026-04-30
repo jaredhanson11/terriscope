@@ -4,6 +4,34 @@ import config from "@/app/config"
 import { fetchClient } from "@/fetch-client"
 import type { components } from "@/lib/api/v1"
 
+// Local types for invite/member API — replace with generated types after openapi:generate
+export type InviteStatus = "pending" | "accepted" | "declined"
+
+export interface MapInviteWithMap {
+  id: number
+  map_id: string
+  map_name: string
+  invited_by_name: string | null
+  invited_by_email: string
+  status: InviteStatus
+}
+
+export interface MapMember {
+  user_id: number
+  name: string | null
+  email: string
+  role: "OWNER" | "MEMBER"
+}
+
+export interface MapInvite {
+  id: number
+  map_id: string
+  invited_email: string
+  invited_by_name: string | null
+  invited_by_email: string
+  status: InviteStatus
+}
+
 type NodeQuery = components["schemas"]["NodeQuery"]
 type ZipQuery = components["schemas"]["ZipQuery"]
 
@@ -49,6 +77,8 @@ export const queries = {
   _uploads: () => ["uploads"],
   _me: () => [...queries._root(), "me"],
   _maps: () => [...queries._root(), "maps"],
+  _invites: () => [...queries._root(), "invites"],
+  _members: () => [...queries._root(), "members"],
   me: () =>
     queryOptions({
       queryKey: [...queries._me()],
@@ -182,6 +212,42 @@ export const queries = {
           throw new Error("Failed to fetch zip assignment")
         }
         return response.data
+      },
+    }),
+  listMyInvites: () =>
+    queryOptions({
+      queryKey: [...queries._invites(), "mine"],
+      queryFn: async () => {
+        const baseUrl = config.get("api_base_url")
+        const response = await fetch(`${baseUrl}/me/invites`, {
+          credentials: "include",
+        })
+        if (!response.ok) throw new Error("Failed to fetch invites")
+        return response.json() as Promise<MapInviteWithMap[]>
+      },
+    }),
+  listMapMembers: (mapId: string) =>
+    queryOptions({
+      queryKey: [...queries._members(), "map", mapId],
+      queryFn: async () => {
+        const baseUrl = config.get("api_base_url")
+        const response = await fetch(`${baseUrl}/maps/${mapId}/members`, {
+          credentials: "include",
+        })
+        if (!response.ok) throw new Error("Failed to fetch members")
+        return response.json() as Promise<MapMember[]>
+      },
+    }),
+  listMapInvites: (mapId: string) =>
+    queryOptions({
+      queryKey: [...queries._invites(), "map", mapId],
+      queryFn: async () => {
+        const baseUrl = config.get("api_base_url")
+        const response = await fetch(`${baseUrl}/maps/${mapId}/invites`, {
+          credentials: "include",
+        })
+        if (!response.ok) throw new Error("Failed to fetch map invites")
+        return response.json() as Promise<MapInvite[]>
       },
     }),
 }

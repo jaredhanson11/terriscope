@@ -5,6 +5,7 @@ import re
 import uuid
 
 from fastapi import APIRouter, HTTPException
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 
@@ -174,6 +175,40 @@ def list_maps(
         for m in maps
         if m.source_upload_id and m.source_upload_id in uploads_by_id
     ]
+
+
+class PatchMapDTO(BaseModel):
+    name: str
+
+
+@maps_router.patch("/{map_id}", response_model=Map)
+def patch_map(
+    map_id: str,
+    body: PatchMapDTO,
+    db: DatabaseSession,
+    current_user: CurrentUserDependency,
+    permission_service: PermissionsServiceDependency,
+) -> Map:
+    """Rename a map. Owner only."""
+    if not permission_service.check_for_map_access(
+        user_id=current_user.id, map_id=map_id, map_roles=["OWNER"]
+    ):
+        raise HTTPException(status_code=404, detail="Map not found")
+
+    map_model = db.get(MapModel, map_id)
+    if not map_model:
+        raise HTTPException(status_code=404, detail="Map not found")
+
+    map_model.name = body.name.strip()
+    db.commit()
+
+    if not map_model.source_upload_id:
+        raise HTTPException(status_code=500, detail="Map is missing source upload reference")
+    upload = db.get(MapUploadModel, map_model.source_upload_id)
+    if not upload:
+        raise HTTPException(status_code=500, detail="Map source upload record not found")
+
+    return Map.create(map_model, upload, active_job=None, active_export=None)
 
 
 @maps_router.get("/{map_id}", response_model=Map)

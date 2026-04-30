@@ -254,17 +254,23 @@ function ColorPicker({
                     ? "0 0 0 2px hsl(var(--foreground))"
                     : undefined,
               }}
-              onClick={() => onChange(preset)}
+              onClick={() => {
+                onChange(preset)
+              }}
             />
           ))}
         </div>
         <div className="mt-2.5 flex items-center gap-2">
           <label className="relative flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-full border-2 border-dashed border-border">
-            <span className="text-muted-foreground text-[10px] leading-none">+</span>
+            <span className="text-muted-foreground text-[10px] leading-none">
+              +
+            </span>
             <input
               type="color"
               value={value}
-              onChange={(e) => onChange(e.target.value)}
+              onChange={(e) => {
+                onChange(e.target.value)
+              }}
               className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
             />
           </label>
@@ -627,7 +633,11 @@ function ZipDetailView({
         parentNodeId,
         color,
       },
-      { onSuccess: () => setEditing(false) },
+      {
+        onSuccess: () => {
+          setEditing(false)
+        },
+      },
     )
   }
 
@@ -672,7 +682,9 @@ function ZipDetailView({
             <Button
               variant="ghost"
               size="icon-sm"
-              onClick={() => setEditing(true)}
+              onClick={() => {
+                setEditing(true)
+              }}
               className="shrink-0"
             >
               <IconPencil className="h-4 w-4" />

@@ -1468,6 +1468,57 @@
       }
     },
     "/maps/{map_id}": {
+      "patch": {
+        "tags": [
+          "Maps"
+        ],
+        "summary": "Patch Map",
+        "description": "Rename a map. Owner only.",
+        "operationId": "patch_map_maps__map_id__patch",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Map Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchMapDTO"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Map"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
       "get": {
         "tags": [
           "Maps"
@@ -1496,6 +1547,339 @@
                 }
               }
             }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/maps/{map_id}/invites": {
+      "get": {
+        "tags": [
+          "Invites"
+        ],
+        "summary": "List Map Invites",
+        "description": "List pending invites for a map. Owner only.",
+        "operationId": "list_map_invites_maps__map_id__invites_get",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Map Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MapInvite"
+                  },
+                  "title": "Response List Map Invites Maps  Map Id  Invites Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Invites"
+        ],
+        "summary": "Create Invite",
+        "description": "Invite a user by email to a map. Owner only.",
+        "operationId": "create_invite_maps__map_id__invites_post",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Map Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInviteDTO"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MapInvite"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/maps/{map_id}/invites/{invite_id}": {
+      "delete": {
+        "tags": [
+          "Invites"
+        ],
+        "summary": "Revoke Invite",
+        "description": "Revoke a pending invite. Owner only.",
+        "operationId": "revoke_invite_maps__map_id__invites__invite_id__delete",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Map Id"
+            }
+          },
+          {
+            "name": "invite_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Invite Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/maps/{map_id}/members": {
+      "get": {
+        "tags": [
+          "Members"
+        ],
+        "summary": "List Members",
+        "description": "List active members for a map. Accessible to all members.",
+        "operationId": "list_members_maps__map_id__members_get",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Map Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MapMember"
+                  },
+                  "title": "Response List Members Maps  Map Id  Members Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/maps/{map_id}/members/{user_id}": {
+      "delete": {
+        "tags": [
+          "Members"
+        ],
+        "summary": "Remove Member",
+        "description": "Remove a member from a map. Owner only. Cannot remove yourself.",
+        "operationId": "remove_member_maps__map_id__members__user_id__delete",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Map Id"
+            }
+          },
+          {
+            "name": "user_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "User Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/invites": {
+      "get": {
+        "tags": [
+          "Invites"
+        ],
+        "summary": "List My Invites",
+        "description": "List pending invites for the current user's email.",
+        "operationId": "list_my_invites_me_invites_get",
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/MapInviteWithMap"
+                  },
+                  "type": "array",
+                  "title": "Response List My Invites Me Invites Get"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/invites/{invite_id}/accept": {
+      "post": {
+        "tags": [
+          "Invites"
+        ],
+        "summary": "Accept Invite",
+        "description": "Accept a pending invite. Grants MEMBER access and marks the invite accepted.",
+        "operationId": "accept_invite_me_invites__invite_id__accept_post",
+        "parameters": [
+          {
+            "name": "invite_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Invite Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/invites/{invite_id}/decline": {
+      "post": {
+        "tags": [
+          "Invites"
+        ],
+        "summary": "Decline Invite",
+        "description": "Decline a pending invite.",
+        "operationId": "decline_invite_me_invites__invite_id__decline_post",
+        "parameters": [
+          {
+            "name": "invite_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Invite Id"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
           },
           "422": {
             "description": "Validation Error",
@@ -2170,6 +2554,21 @@
         "title": "CreateExportResponse",
         "description": "Returned immediately after a new export session is created."
       },
+      "CreateInviteDTO": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email",
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "CreateInviteDTO",
+        "description": "Request body for creating a map invite."
+      },
       "CreateLayer": {
         "properties": {
           "name": {
@@ -2615,6 +3014,108 @@
         "title": "MapImportState",
         "description": "Import lifecycle state embedded in Map responses.\n\nCovers the import phase (after POST /maps). The parse phase lives on MapUploadStatus.\nNon-nullable on Map \u2014 all maps in this system are created via the upload flow."
       },
+      "MapInvite": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "map_id": {
+            "type": "string",
+            "title": "Map Id"
+          },
+          "invited_email": {
+            "type": "string",
+            "title": "Invited Email"
+          },
+          "invited_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invited By Name"
+          },
+          "invited_by_email": {
+            "type": "string",
+            "title": "Invited By Email"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "accepted",
+              "declined"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "map_id",
+          "invited_email",
+          "invited_by_name",
+          "invited_by_email",
+          "status"
+        ],
+        "title": "MapInvite",
+        "description": "Pending invite as seen by the map owner."
+      },
+      "MapInviteWithMap": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "map_id": {
+            "type": "string",
+            "title": "Map Id"
+          },
+          "map_name": {
+            "type": "string",
+            "title": "Map Name"
+          },
+          "invited_by_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Invited By Name"
+          },
+          "invited_by_email": {
+            "type": "string",
+            "title": "Invited By Email"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "accepted",
+              "declined"
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "map_id",
+          "map_name",
+          "invited_by_name",
+          "invited_by_email",
+          "status"
+        ],
+        "title": "MapInviteWithMap",
+        "description": "Pending invite as seen by the invited user \u2014 includes map context."
+      },
       "MapJob": {
         "properties": {
           "id": {
@@ -2670,6 +3171,46 @@
         ],
         "title": "MapJob",
         "description": "Background recompute job for a map (geometry or data). Import lifecycle is tracked separately via MapImportState."
+      },
+      "MapMember": {
+        "properties": {
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "email": {
+            "type": "string",
+            "title": "Email"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "OWNER",
+              "MEMBER"
+            ],
+            "title": "Role"
+          }
+        },
+        "type": "object",
+        "required": [
+          "user_id",
+          "name",
+          "email",
+          "role"
+        ],
+        "title": "MapMember",
+        "description": "A user who has accepted access to a map."
       },
       "MapUploadFailed": {
         "properties": {
@@ -3206,6 +3747,19 @@
         ],
         "title": "PaginatedZipAssignments",
         "description": "Paginated zip assignments response."
+      },
+      "PatchMapDTO": {
+        "properties": {
+          "name": {
+            "type": "string",
+            "title": "Name"
+          }
+        },
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "title": "PatchMapDTO"
       },
       "Polygon": {
         "properties": {

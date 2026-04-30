@@ -377,6 +377,146 @@ export const useRequestPasswordResetMutation = () => {
   })
 }
 
+// ---------------------------------------------------------------------------
+// Map settings — rename
+// ---------------------------------------------------------------------------
+
+export const useRenameMapMutation = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (vars: { mapId: string; name: string }) => {
+      const baseUrl = config.get("api_base_url")
+      const response = await fetch(`${baseUrl}/maps/${vars.mapId}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: vars.name }),
+      })
+      if (!response.ok) throw new Error("Failed to rename map")
+    },
+    onSuccess: (_data, vars) => {
+      void queryClient.invalidateQueries({
+        queryKey: queries.getMap(vars.mapId).queryKey,
+      })
+      void queryClient.invalidateQueries({ queryKey: queries._maps() })
+    },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Invites — me-scoped (accept / decline)
+// ---------------------------------------------------------------------------
+
+export const useAcceptInviteMutation = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (inviteId: number) => {
+      const baseUrl = config.get("api_base_url")
+      const response = await fetch(
+        `${baseUrl}/me/invites/${String(inviteId)}/accept`,
+        { method: "POST", credentials: "include" },
+      )
+      if (!response.ok) throw new Error("Failed to accept invite")
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queries._invites(),
+      })
+      void queryClient.invalidateQueries({ queryKey: queries._maps() })
+    },
+  })
+}
+
+export const useDeclineInviteMutation = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (inviteId: number) => {
+      const baseUrl = config.get("api_base_url")
+      const response = await fetch(
+        `${baseUrl}/me/invites/${String(inviteId)}/decline`,
+        { method: "POST", credentials: "include" },
+      )
+      if (!response.ok) throw new Error("Failed to decline invite")
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queries._invites(),
+      })
+    },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Invites — map-scoped (create / revoke)
+// ---------------------------------------------------------------------------
+
+export const useCreateMapInviteMutation = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (vars: { mapId: string; email: string }) => {
+      const baseUrl = config.get("api_base_url")
+      const response = await fetch(`${baseUrl}/maps/${vars.mapId}/invites`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: vars.email }),
+      })
+      if (response.status === 409) {
+        const body = (await response.json()) as { detail?: string }
+        throw new Error(body.detail ?? "Invite already exists")
+      }
+      if (!response.ok) throw new Error("Failed to send invite")
+    },
+    onSuccess: (_data, vars) => {
+      void queryClient.invalidateQueries({
+        queryKey: queries.listMapInvites(vars.mapId).queryKey,
+      })
+    },
+  })
+}
+
+export const useRevokeMapInviteMutation = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (vars: { mapId: string; inviteId: number }) => {
+      const baseUrl = config.get("api_base_url")
+      const response = await fetch(
+        `${baseUrl}/maps/${vars.mapId}/invites/${String(vars.inviteId)}`,
+        { method: "DELETE", credentials: "include" },
+      )
+      if (!response.ok) throw new Error("Failed to revoke invite")
+    },
+    onSuccess: (_data, vars) => {
+      void queryClient.invalidateQueries({
+        queryKey: queries.listMapInvites(vars.mapId).queryKey,
+      })
+    },
+  })
+}
+
+// ---------------------------------------------------------------------------
+// Members — remove
+// ---------------------------------------------------------------------------
+
+export const useRemoveMapMemberMutation = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (vars: { mapId: string; userId: number }) => {
+      const baseUrl = config.get("api_base_url")
+      const response = await fetch(
+        `${baseUrl}/maps/${vars.mapId}/members/${String(vars.userId)}`,
+        { method: "DELETE", credentials: "include" },
+      )
+      if (!response.ok) throw new Error("Failed to remove member")
+    },
+    onSuccess: (_data, vars) => {
+      void queryClient.invalidateQueries({
+        queryKey: queries.listMapMembers(vars.mapId).queryKey,
+      })
+    },
+  })
+}
+
 export const useSpatialSelectMutation = () => {
   return useMutation({
     mutationFn: async (vars: { layerId: number; lasso: Polygon }) => {

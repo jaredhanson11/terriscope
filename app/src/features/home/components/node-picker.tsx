@@ -124,8 +124,7 @@ export function NodePicker({
   )
 
   const trimmedSearch = search.trim()
-  const isCreateSelected =
-    !!pendingCreate && pendingCreate === trimmedSearch
+  const isCreateSelected = !!pendingCreate && pendingCreate === trimmedSearch
 
   return (
     <div className="flex flex-col gap-2">

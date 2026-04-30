@@ -5,6 +5,8 @@ import LoginPage from "@/features/auth/login.page"
 import RegisterPage from "@/features/auth/register.page"
 import HomePage from "@/features/home/page"
 import InitializePage from "@/features/initialize/page"
+import InvitesPage from "@/features/invites/page"
+import MapSettingsPage from "@/features/map-settings/page"
 import SettingsPage from "@/features/settings/page"
 
 import { VersionsPage } from "./common/versions.page"
@@ -19,6 +21,8 @@ const PageName = {
   Login: "LoginPage",
   Register: "RegisterPage",
   Settings: "SettingsPage",
+  MapSettings: "MapSettingsPage",
+  Invites: "InvitesPage",
 } as const
 
 type PageName = (typeof PageName)[keyof typeof PageName]
@@ -52,6 +56,11 @@ export type RouteParamsType = {
     }
   }
   [PageName.InitializeProcessing]: {
+    path: {
+      mapId: string
+    }
+  }
+  [PageName.MapSettings]: {
     path: {
       mapId: string
     }
@@ -114,6 +123,16 @@ const Routes: Record<PageName, Route> = {
   [PageName.Settings]: {
     route: "/settings",
     component: <SettingsPage />,
+    protected: true,
+  },
+  [PageName.MapSettings]: {
+    route: "/maps/:mapId/settings",
+    component: <MapSettingsPage />,
+    protected: true,
+  },
+  [PageName.Invites]: {
+    route: "/invites",
+    component: <InvitesPage />,
     protected: true,
   },
 }

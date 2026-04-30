@@ -27,6 +27,7 @@ import { useMaps, useMe } from "@/app/providers/me-provider/context"
 import { AppRoutes, PageName } from "@/app/routes"
 import { BrandLogo } from "@/components/brand-logo"
 import { PageLayout } from "@/components/layout"
+import { NotificationsBell } from "@/components/notifications-bell"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import {
@@ -232,8 +233,19 @@ function HomePageContent() {
     const map = mapRef.current?.getMap()
 
     if (result.bbox && map) {
-      const [west, south, east, north] = result.bbox as [number, number, number, number]
-      map.fitBounds([[west, south], [east, north]], { padding: 60, duration: 1000 })
+      const [west, south, east, north] = result.bbox as [
+        number,
+        number,
+        number,
+        number,
+      ]
+      map.fitBounds(
+        [
+          [west, south],
+          [east, north],
+        ],
+        { padding: 60, duration: 1000 },
+      )
     }
 
     if (!map) return
@@ -404,7 +416,15 @@ function HomePageContent() {
                     </DropdownMenuItem>
                   ))}
                   <DropdownMenuSeparator />
-                  <DropdownMenuItem>
+                  <DropdownMenuItem
+                    onClick={() =>
+                      void navigate(
+                        AppRoutes.getRoute(PageName.MapSettings, {
+                          mapId: String(activeMap.id),
+                        }),
+                      )
+                    }
+                  >
                     <IconSettings className="h-4 w-4" />
                     <span>Map Settings</span>
                   </DropdownMenuItem>
@@ -728,7 +748,9 @@ function HomePageContent() {
                     </button>
 
                     <button
-                      onClick={() => setExportPptOpen(true)}
+                      onClick={() => {
+                        setExportPptOpen(true)
+                      }}
                       className="group flex w-full items-center gap-3 rounded-md border bg-card p-2.5 text-left transition-colors hover:bg-accent hover:border-accent-foreground/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     >
                       <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
@@ -826,6 +848,9 @@ function HomePageContent() {
               onSelect={handleSearchSelect}
               className="max-w-80 w-full"
             />
+            <div className="ml-auto">
+              <NotificationsBell />
+            </div>
           </div>
         </PageLayout.TopNav>
 

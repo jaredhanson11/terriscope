@@ -61,7 +61,9 @@ function navigateAndWait(
     // canvas buffer before toBlob() runs. A single rAF isn't enough in production.
     const afterIdle = () => {
       requestAnimationFrame(() => {
-        requestAnimationFrame(() => { resolve() })
+        requestAnimationFrame(() => {
+          resolve()
+        })
       })
     }
 

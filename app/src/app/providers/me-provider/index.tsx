@@ -16,19 +16,33 @@ export const AuthProvider = (props: PropsWithChildren) => {
     ...queries.listMaps(),
     enabled: !!userQuery.data,
   })
+  const invitesQuery = useQuery({
+    ...queries.listMyInvites(),
+    enabled: !!userQuery.data,
+  })
 
   if (
     (!userQuery.data && userQuery.isLoading) ||
-    (!mapsQuery.data && mapsQuery.isLoading)
+    (!mapsQuery.data && mapsQuery.isLoading) ||
+    (!invitesQuery.data && invitesQuery.isLoading)
   ) {
     return <AppLoadingScreen />
   }
 
-  if (userQuery.isSuccess && mapsQuery.isSuccess) {
-    const isInInitializeFlow = location.pathname.startsWith("/new")
-    if (mapsQuery.data.length === 0 && !isInInitializeFlow) {
-      void navigate(AppRoutes.getRoute(PageName.Initialize))
+  if (userQuery.isSuccess && mapsQuery.isSuccess && invitesQuery.isSuccess) {
+    const isNoMapsFlow =
+      !location.pathname.startsWith("/new") &&
+      !location.pathname.startsWith("/invites")
+
+    if (mapsQuery.data.length === 0 && isNoMapsFlow) {
+      const hasPendingInvites = invitesQuery.data.length > 0
+      void navigate(
+        hasPendingInvites
+          ? AppRoutes.getRoute(PageName.Invites)
+          : AppRoutes.getRoute(PageName.Initialize),
+      )
     }
+
     return (
       <MeContext.Provider
         value={{ user: userQuery.data, maps: mapsQuery.data }}

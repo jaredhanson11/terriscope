@@ -139,8 +139,8 @@ export function MoveDialog({
           </DialogTitle>
           <DialogDescription>
             Select a new parent{parentLayer ? ` ${parentLayer.name}` : ""}, or
-            choose "No parent" to unassign. Search and use "Create" to add a
-            new {parentLayer?.name.toLowerCase() ?? "node"} on the fly.
+            choose "No parent" to unassign. Search and use "Create" to add a new{" "}
+            {parentLayer?.name.toLowerCase() ?? "node"} on the fly.
           </DialogDescription>
         </DialogHeader>
 
@@ -158,7 +158,9 @@ export function MoveDialog({
               <div className="bg-muted flex items-center justify-between rounded-md px-3 py-2 text-sm">
                 <span>
                   Will create{" "}
-                  <span className="font-medium">&ldquo;{pendingCreate}&rdquo;</span>{" "}
+                  <span className="font-medium">
+                    &ldquo;{pendingCreate}&rdquo;
+                  </span>{" "}
                   as a new {parentLayer?.name.toLowerCase()}
                 </span>
                 <button

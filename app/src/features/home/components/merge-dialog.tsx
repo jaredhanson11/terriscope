@@ -92,8 +92,16 @@ export function MergeDialog({
     if (!name.trim()) return
     mergeNodesMutation.mutate(
       targetNodeId !== null
-        ? { nodeIds: selectedNodeIds, targetNodeId, parentNodeId: targetParentId }
-        : { nodeIds: selectedNodeIds, name: name.trim(), parentNodeId: targetParentId },
+        ? {
+            nodeIds: selectedNodeIds,
+            targetNodeId,
+            parentNodeId: targetParentId,
+          }
+        : {
+            nodeIds: selectedNodeIds,
+            name: name.trim(),
+            parentNodeId: targetParentId,
+          },
       {
         onSuccess: () => {
           onOpenChange(false)
