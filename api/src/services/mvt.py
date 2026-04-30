@@ -16,18 +16,34 @@ _SAFE_AGG_RE = re.compile(r"^(sum|avg|min|max)$")
 # Continental US bounding box (lon_min, lat_min, lon_max, lat_max), WGS84
 _US_BBOX = (-124.85, 24.39, -66.88, 49.38)
 
-_FILTER_BOUNDS_CTE = """
+_MERC_HALF = 20037508.3427892
+
+# Clamp the expanded envelope to the valid Web Mercator world before transforming.
+# Otherwise, tiles near the antimeridian (e.g. Alaska) overshoot ±20037508 in 3857,
+# and ST_Transform renormalizes those into the opposite hemisphere — producing a 4326
+# polygon that wraps the wrong way around the globe and excludes the actual tile area.
+_FILTER_BOUNDS_CTE = f"""
     filter_bounds AS (
         SELECT ST_Transform(
-            ST_Expand(
-                (SELECT geom FROM tile_bounds),
-                ST_Distance(
-                    ST_Point(ST_XMin((SELECT geom FROM tile_bounds)), ST_YMin((SELECT geom FROM tile_bounds))),
-                    ST_Point(ST_XMax((SELECT geom FROM tile_bounds)), ST_YMax((SELECT geom FROM tile_bounds)))
-                ) * 0.1
+            ST_MakeEnvelope(
+                GREATEST(ST_XMin(e.geom), -{_MERC_HALF}),
+                GREATEST(ST_YMin(e.geom), -{_MERC_HALF}),
+                LEAST(ST_XMax(e.geom),  {_MERC_HALF}),
+                LEAST(ST_YMax(e.geom),  {_MERC_HALF}),
+                3857
             ),
             4326
         ) AS geom
+        FROM (
+            SELECT ST_Expand(
+                tb.geom,
+                ST_Distance(
+                    ST_Point(ST_XMin(tb.geom), ST_YMin(tb.geom)),
+                    ST_Point(ST_XMax(tb.geom), ST_YMax(tb.geom))
+                ) * 0.1
+            ) AS geom
+            FROM tile_bounds tb
+        ) e
     )"""
 
 
