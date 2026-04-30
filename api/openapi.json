@@ -2810,8 +2810,26 @@
             "title": "Node Ids"
           },
           "name": {
-            "type": "string",
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Name"
+          },
+          "target_node_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Target Node Id"
           },
           "parent_node_id": {
             "anyOf": [
@@ -2828,11 +2846,10 @@
         "type": "object",
         "required": [
           "node_ids",
-          "name",
           "parent_node_id"
         ],
         "title": "MergeNodes",
-        "description": "Merge multiple nodes into a single new node.\n\nAll node_ids must belong to the same layer (order >= 1).\nChildren (child nodes or zip assignments) are reparented to the new node.\nparent_node_id must be in the layer directly above, or null."
+        "description": "Merge multiple nodes into a single new node.\n\nAll node_ids must belong to the same layer (order >= 1).\nChildren (child nodes or zip assignments) are reparented to the new node.\nparent_node_id must be in the layer directly above, or null.\n\nExactly one of name or target_node_id must be provided:\n- name: create a brand-new node with this name as the merge destination.\n- target_node_id: use an existing node (must be in node_ids) as the\n  destination; all other nodes' children are moved into it, then the\n  others are deleted."
       },
       "NextSlideResponse": {
         "properties": {
@@ -3397,7 +3414,7 @@
             "type": "string",
             "title": "Color"
           },
-          "centroid": {
+          "bbox": {
             "anyOf": [
               {
                 "items": {
@@ -3409,7 +3426,7 @@
                 "type": "null"
               }
             ],
-            "title": "Centroid"
+            "title": "Bbox"
           }
         },
         "type": "object",
