@@ -117,6 +117,12 @@ class NodeModel(Base, TimestampMixin):
             .correlate_except(child_alias)
             .scalar_subquery()
         )
+        cls.zip_count = column_property(
+            select(func.count(ZipAssignmentModel.id))
+            .where(ZipAssignmentModel.parent_node_id == cls.id)
+            .correlate_except(ZipAssignmentModel)
+            .scalar_subquery()
+        )
 
     @declared_attr.directive
     def __table_args__(cls):

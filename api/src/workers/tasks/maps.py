@@ -25,22 +25,21 @@ from src.workers import DatabaseTask, celery_app
 logger = logging.getLogger(__name__)
 
 _TERRITORY_PALETTE = [
-    "#E63946",
-    "#F4A261",
-    "#2A9D8F",
-    "#457B9D",
-    "#6A4C93",
-    "#F72585",
-    "#4CC9F0",
-    "#7CB518",
-    "#FB8500",
-    "#023E8A",
-    "#8338EC",
-    "#FF006E",
-    "#3A86FF",
-    "#06D6A0",
-    "#FFBE0B",
-    "#FB5607",
+    "#E41A1C",  # red
+    "#377EB8",  # blue
+    "#4DAF4A",  # green
+    "#984EA3",  # purple
+    "#FF7F00",  # orange
+    "#FFFF33",  # yellow
+    "#A65628",  # brown
+    "#F781BF",  # pink
+    "#999999",  # gray
+    "#66C2A5",  # teal
+    "#FC8D62",  # salmon
+    "#8DA0CB",  # soft blue
+    "#E78AC3",  # magenta
+    "#A6D854",  # lime
+    "#FFD92F",  # bright yellow
 ]
 
 
@@ -157,7 +156,8 @@ def _insert_zip_layer(
     zip_codes_in_file = rows_df[header].tolist()
 
     valid_zips = set(
-        task.db.execute(select(ZipCodeGeography.zip_code).where(ZipCodeGeography.zip_code.in_(zip_codes_in_file)))
+        task.db
+        .execute(select(ZipCodeGeography.zip_code).where(ZipCodeGeography.zip_code.in_(zip_codes_in_file)))
         .scalars()
         .all()
     )
@@ -262,7 +262,8 @@ def import_map_task(self: DatabaseTask, map_id: str) -> None:  # type: ignore[mi
 
         _set_import_step(self, upload, "Inserting nodes")
         layer_rows = (
-            self.db.execute(select(LayerModel).where(LayerModel.map_id == map_id).order_by(LayerModel.order.asc()))
+            self.db
+            .execute(select(LayerModel).where(LayerModel.map_id == map_id).order_by(LayerModel.order.asc()))
             .scalars()
             .all()
         )
@@ -350,7 +351,8 @@ def warm_map_mvt_cache_task(self: DatabaseTask, map_id: str) -> None:  # type: i
         return
 
     layers = (
-        self.db.execute(select(LayerModel).where(LayerModel.map_id == map_id).order_by(LayerModel.order.asc()))
+        self.db
+        .execute(select(LayerModel).where(LayerModel.map_id == map_id).order_by(LayerModel.order.asc()))
         .scalars()
         .all()
     )

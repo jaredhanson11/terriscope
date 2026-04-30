@@ -289,7 +289,7 @@ def get_node(
         color=node.color,
         name=node.name,
         parent_node_id=node.parent_node_id,
-        child_count=node.child_count,
+        child_count=node.zip_count if layer.order == 1 else node.child_count,
         data=node.data,
         ancestors=ancestors if ancestors else None,
     )

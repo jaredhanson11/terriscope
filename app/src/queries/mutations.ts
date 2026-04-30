@@ -271,6 +271,45 @@ export const useBulkDeleteNodesMutation = () => {
   })
 }
 
+export const useUpdateZipAssignmentMutation = () => {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (vars: {
+      layerId: number
+      zipCode: string
+      mapId: string
+      parentNodeId: number | null
+      color: string
+    }) => {
+      const response = await fetchClient.PUT(
+        "/zip-assignments/{layer_id}/{zip_code}",
+        {
+          params: {
+            path: { layer_id: vars.layerId, zip_code: vars.zipCode },
+          },
+          body: {
+            parent_node_id: vars.parentNodeId,
+            color: vars.color,
+          },
+        },
+      )
+      if (response.response.status !== 200 || !response.data) {
+        throw new Error("Failed to update zip assignment")
+      }
+      return { ...response.data, mapId: vars.mapId }
+    },
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({
+        queryKey: queries._root().concat(["zip-assignment"]),
+      })
+      void queryClient.invalidateQueries({ queryKey: queries._nodes() })
+      void queryClient.invalidateQueries({
+        queryKey: queries.getMap(data.mapId).queryKey,
+      })
+    },
+  })
+}
+
 export const useUpdateNodeMutation = () => {
   const queryClient = useQueryClient()
   return useMutation({

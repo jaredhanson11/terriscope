@@ -14,6 +14,11 @@ import { useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover"
 import { Separator } from "@/components/ui/separator"
 import {
   Sheet,
@@ -23,7 +28,10 @@ import {
 } from "@/components/ui/sheet"
 import { NodePicker } from "@/features/home/components/node-picker"
 import type { components } from "@/lib/api/v1"
-import { useUpdateNodeMutation } from "@/queries/mutations"
+import {
+  useUpdateNodeMutation,
+  useUpdateZipAssignmentMutation,
+} from "@/queries/mutations"
 import { queries } from "@/queries/queries"
 
 type Layer = components["schemas"]["Layer"]
@@ -194,6 +202,79 @@ function SheetBody({
 // Shared helpers
 // ---------------------------------------------------------------------------
 
+const COLOR_PRESETS = [
+  "#E41A1C",
+  "#377EB8",
+  "#4DAF4A",
+  "#984EA3",
+  "#FF7F00",
+  "#FFFF33",
+  "#A65628",
+  "#F781BF",
+  "#999999",
+  "#66C2A5",
+  "#FC8D62",
+  "#8DA0CB",
+  "#E78AC3",
+  "#A6D854",
+  "#FFD92F",
+]
+
+function ColorPicker({
+  value,
+  onChange,
+}: {
+  value: string
+  onChange: (color: string) => void
+}) {
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <button
+          type="button"
+          className="border-border mt-0.5 h-6 w-6 shrink-0 cursor-pointer rounded-full border-2 focus:outline-none"
+          style={{ backgroundColor: value }}
+        />
+      </PopoverTrigger>
+      <PopoverContent className="w-auto p-3" side="bottom" align="start">
+        <div className="grid grid-cols-5 gap-1.5">
+          {COLOR_PRESETS.map((preset) => (
+            <button
+              key={preset}
+              type="button"
+              className="h-6 w-6 cursor-pointer rounded-full border-2 transition-transform hover:scale-110 focus:outline-none"
+              style={{
+                backgroundColor: preset,
+                borderColor:
+                  value.toLowerCase() === preset.toLowerCase()
+                    ? "white"
+                    : "transparent",
+                boxShadow:
+                  value.toLowerCase() === preset.toLowerCase()
+                    ? "0 0 0 2px hsl(var(--foreground))"
+                    : undefined,
+              }}
+              onClick={() => onChange(preset)}
+            />
+          ))}
+        </div>
+        <div className="mt-2.5 flex items-center gap-2">
+          <label className="relative flex h-6 w-6 shrink-0 cursor-pointer items-center justify-center rounded-full border-2 border-dashed border-border">
+            <span className="text-muted-foreground text-[10px] leading-none">+</span>
+            <input
+              type="color"
+              value={value}
+              onChange={(e) => onChange(e.target.value)}
+              className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
+            />
+          </label>
+          <span className="text-muted-foreground text-xs">Custom</span>
+        </div>
+      </PopoverContent>
+    </Popover>
+  )
+}
+
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <p className="text-muted-foreground mb-2 text-[10px] font-semibold uppercase tracking-widest">
@@ -280,24 +361,14 @@ function NodeDetailView({
           </button>
         )}
         <div className="flex items-start gap-3 pr-8">
-          <label className="relative mt-0.5 shrink-0 cursor-pointer">
+          {editing ? (
+            <ColorPicker value={color} onChange={setColor} />
+          ) : (
             <span
-              className="border-border block h-6 w-6 rounded-full border-2"
-              style={{
-                backgroundColor: editing ? color : (node?.color ?? "#888"),
-              }}
+              className="border-border mt-0.5 block h-6 w-6 shrink-0 rounded-full border-2"
+              style={{ backgroundColor: node?.color ?? "#888" }}
             />
-            {editing && (
-              <input
-                type="color"
-                value={color}
-                onChange={(e) => {
-                  setColor(e.target.value)
-                }}
-                className="absolute inset-0 h-full w-full cursor-pointer opacity-0"
-              />
-            )}
-          </label>
+          )}
           <div className="min-w-0 flex-1">
             {editing ? (
               <Input
@@ -390,7 +461,12 @@ function NodeDetailView({
                 <Separator />
                 <div className="p-4">
                   <SectionLabel>Data</SectionLabel>
-                  {node.data ? (
+                  {!node.data && node.child_count > 0 ? (
+                    <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                      <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
+                      Computing…
+                    </div>
+                  ) : (
                     <div className="space-y-2">
                       {dataFieldConfig.flatMap((field) =>
                         field.aggregations.map((agg) => {
@@ -421,11 +497,6 @@ function NodeDetailView({
                           )
                         }),
                       )}
-                    </div>
-                  ) : (
-                    <div className="text-muted-foreground flex items-center gap-2 text-sm">
-                      <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
-                      Computing…
                     </div>
                   )}
                 </div>
@@ -512,6 +583,22 @@ function ZipDetailView({
     enabled: !!layerId,
   })
   const za = zipQuery.data
+  const updateMutation = useUpdateZipAssignmentMutation()
+
+  const [editing, setEditing] = useState(false)
+  const [color, setColor] = useState("")
+  const [parentNodeId, setParentNodeId] = useState<number | null>(null)
+
+  useEffect(() => {
+    if (za) {
+      setColor(za.color)
+      setParentNodeId(za.parent_node_id ?? null)
+    }
+  }, [za])
+
+  useEffect(() => {
+    setEditing(false)
+  }, [zipCode])
 
   const parentNodeQuery = useQuery({
     ...queries.getNode(za?.parent_node_id!),
@@ -526,6 +613,32 @@ function ZipDetailView({
     ? (layers.find((l) => l.id === parentNode.layer_id)?.name ?? "")
     : ""
 
+  const parentLayer = layers.find(
+    (l) => activeLayer && l.order === activeLayer.order + 1,
+  )
+
+  const handleSave = () => {
+    if (!za || !layerId) return
+    updateMutation.mutate(
+      {
+        layerId,
+        zipCode,
+        mapId: activeLayer?.map_id ?? "",
+        parentNodeId,
+        color,
+      },
+      { onSuccess: () => setEditing(false) },
+    )
+  }
+
+  const handleCancel = () => {
+    if (za) {
+      setColor(za.color)
+      setParentNodeId(za.parent_node_id ?? null)
+    }
+    setEditing(false)
+  }
+
   return (
     <>
       <SheetHeader className="border-border border-b p-4">
@@ -539,10 +652,14 @@ function ZipDetailView({
           </button>
         )}
         <div className="flex items-start gap-3 pr-8">
-          <span
-            className="border-border mt-0.5 block h-6 w-6 shrink-0 rounded-full border-2"
-            style={{ backgroundColor: za?.color ?? "#ffffff" }}
-          />
+          {editing ? (
+            <ColorPicker value={color} onChange={setColor} />
+          ) : (
+            <span
+              className="border-border mt-0.5 block h-6 w-6 shrink-0 rounded-full border-2"
+              style={{ backgroundColor: za?.color ?? "#ffffff" }}
+            />
+          )}
           <div className="min-w-0 flex-1">
             <SheetTitle className="text-base leading-tight">
               {zipCode}
@@ -551,6 +668,16 @@ function ZipDetailView({
               {activeLayer?.name ?? "Zip Code"}
             </Badge>
           </div>
+          {!editing && za && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setEditing(true)}
+              className="shrink-0"
+            >
+              <IconPencil className="h-4 w-4" />
+            </Button>
+          )}
         </div>
       </SheetHeader>
 
@@ -608,7 +735,7 @@ function ZipDetailView({
                 <div className="bg-muted flex items-center gap-3 rounded-md px-2 py-1.5">
                   <span
                     className="border-border h-2.5 w-2.5 shrink-0 rounded-full border"
-                    style={{ backgroundColor: za.color }}
+                    style={{ backgroundColor: editing ? color : za.color }}
                   />
                   <span className="text-muted-foreground w-20 shrink-0 truncate text-xs">
                     {activeLayer?.name ?? "Zip Code"}
@@ -625,44 +752,87 @@ function ZipDetailView({
                 <Separator />
                 <div className="p-4">
                   <SectionLabel>Data</SectionLabel>
-                  {za.data ? (
-                    <div className="space-y-2">
-                      {dataFieldConfig.map((field) => {
-                        const raw = za.data?.[field.field] as
-                          | number
-                          | null
-                          | undefined
-                        const formatted: string =
-                          typeof raw === "number"
-                            ? new Intl.NumberFormat().format(raw)
-                            : "—"
-                        return (
-                          <div
-                            key={field.field}
-                            className="flex items-center justify-between gap-4"
-                          >
-                            <span className="text-muted-foreground truncate text-sm">
-                              {field.label || field.field}
-                            </span>
-                            <span className="text-sm font-medium tabular-nums">
-                              {formatted}
-                            </span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  ) : (
-                    <div className="text-muted-foreground flex items-center gap-2 text-sm">
-                      <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
-                      Computing…
-                    </div>
-                  )}
+                  <div className="space-y-2">
+                    {dataFieldConfig.map((field) => {
+                      const raw = za.data?.[field.field] as
+                        | number
+                        | null
+                        | undefined
+                      const formatted: string =
+                        typeof raw === "number"
+                          ? new Intl.NumberFormat().format(raw)
+                          : "—"
+                      return (
+                        <div
+                          key={field.field}
+                          className="flex items-center justify-between gap-4"
+                        >
+                          <span className="text-muted-foreground truncate text-sm">
+                            {field.label || field.field}
+                          </span>
+                          <span className="text-sm font-medium tabular-nums">
+                            {formatted}
+                          </span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {editing && parentLayer && (
+              <>
+                <Separator />
+                <div className="p-4">
+                  <SectionLabel>Parent ({parentLayer.name})</SectionLabel>
+                  <NodePicker
+                    layerId={parentLayer.id}
+                    value={parentNodeId}
+                    onChange={setParentNodeId}
+                    noParentLabel="No parent"
+                  />
                 </div>
               </>
             )}
           </>
         )}
       </div>
+
+      {editing && (
+        <div className="border-border border-t p-4">
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1"
+              onClick={handleCancel}
+              disabled={updateMutation.isPending}
+            >
+              <IconX className="h-4 w-4" />
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              className="flex-1"
+              onClick={handleSave}
+              disabled={updateMutation.isPending}
+            >
+              {updateMutation.isPending ? (
+                <IconLoader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <IconCheck className="h-4 w-4" />
+              )}
+              Save
+            </Button>
+          </div>
+          {updateMutation.isError && (
+            <p className="text-destructive mt-2 text-xs">
+              {updateMutation.error.message}
+            </p>
+          )}
+        </div>
+      )}
     </>
   )
 }
