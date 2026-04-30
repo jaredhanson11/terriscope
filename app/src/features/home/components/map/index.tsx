@@ -282,7 +282,7 @@ export const Map = forwardRef<
           initialViewState={INITIAL_VIEW_STATE}
           mapStyle={EMPTY_STYLE}
           minZoom={4}
-          maxZoom={10}
+          maxZoom={14}
           ref={mapRef}
           onLoad={(evt) => {
             const map = evt.target
