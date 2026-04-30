@@ -43,7 +43,7 @@ export const useCreateMapMutation = () => {
         name: string
         header: string
         type: "text" | "number"
-        aggregations: ("sum" | "avg")[]
+        aggregations: ("sum" | "avg" | "min" | "max")[]
       }[]
     }) => {
       const response = await fetchClient.POST("/maps", {
@@ -302,7 +302,7 @@ export const useUpdateZipAssignmentMutation = () => {
     },
     onSuccess: (data) => {
       void queryClient.invalidateQueries({
-        queryKey: queries._root().concat(["zip-assignment"]),
+        queryKey: [queries._root(), ["zip-assignment"]],
       })
       void queryClient.invalidateQueries({ queryKey: queries._nodes() })
       void queryClient.invalidateQueries({
