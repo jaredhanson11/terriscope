@@ -145,6 +145,8 @@ function HomePageContent() {
   const importState = activeMap.import_state
   const isImporting = importState.status === "importing"
   const isImportFailed = importState.status === "failed"
+  const isRecomputing =
+    activeJob?.status === "pending" || activeJob?.status === "processing"
 
   const [baseMap, setBaseMap] = useState<BaseMapName>("osm")
 
@@ -991,6 +993,7 @@ function HomePageContent() {
                     variant="ghost"
                     size="sm"
                     className="rounded-full"
+                    disabled={isRecomputing}
                     onClick={() => {
                       setMoveOpen(true)
                     }}
@@ -1001,7 +1004,7 @@ function HomePageContent() {
                     variant="ghost"
                     size="sm"
                     className="rounded-full"
-                    disabled={isZipLayer || selectionCount < 2}
+                    disabled={isRecomputing || isZipLayer || selectionCount < 2}
                     title={
                       isZipLayer
                         ? "Cannot merge zip codes"
@@ -1019,6 +1022,7 @@ function HomePageContent() {
                     variant="ghost"
                     size="sm"
                     className="rounded-full text-destructive hover:text-destructive"
+                    disabled={isRecomputing}
                     onClick={() => {
                       setDeleteOpen(true)
                     }}

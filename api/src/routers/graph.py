@@ -1,9 +1,10 @@
 """Graph router."""
 
+import uuid
 from collections.abc import Sequence
 
 from fastapi import APIRouter, HTTPException
-from geoalchemy2.functions import ST_Centroid, ST_X, ST_Y
+from geoalchemy2.functions import ST_X, ST_Y, ST_Centroid
 from sqlalchemy import and_, delete, func, select
 from sqlalchemy.orm import undefer
 
@@ -11,6 +12,7 @@ from src.app.database import DatabaseSession
 from src.exceptions import TerramapsException
 from src.models.geography import ZipCodeGeography
 from src.models.graph import LayerModel, MapModel, NodeModel, ZipAssignmentModel
+from src.models.jobs import MapJobModel
 from src.schemas.dtos.graph import (
     AssignZip,
     BulkAssignZips,
@@ -38,6 +40,7 @@ from src.services.auth import CurrentUserDependency
 from src.services.computation import ComputationServiceDependency
 from src.services.graph import GraphServiceDependency
 from src.services.permissions import PermissionsServiceDependency
+from src.workers.tasks.maps import recompute_nodes_task
 
 graph_router = APIRouter(prefix="", tags=["Graph"])
 
@@ -47,6 +50,22 @@ def _bump_tile_version(db: DatabaseSession, map_id: str) -> None:
     map_model = db.get(MapModel, map_id)
     if map_model:
         map_model.tile_version += 1
+
+
+def _enqueue_recompute(db: DatabaseSession, map_id: str) -> str:
+    """Stage a pending MapJobModel recompute record and return its ID.
+
+    Caller must commit before dispatching the Celery task so the worker
+    sees the committed job row.
+    """
+    job_id = str(uuid.uuid4())
+    db.add(MapJobModel(
+        id=job_id,
+        map_id=map_id,
+        job_type="recompute_geometry",
+        status="pending",
+    ))
+    return job_id
 
 
 # ---------------------------------------------------------------------------
@@ -443,7 +462,6 @@ def bulk_reparent_nodes(
     graph_service: GraphServiceDependency,
     current_user: CurrentUserDependency,
     permission_service: PermissionsServiceDependency,
-    computation: ComputationServiceDependency,
 ):
     """Bulk reparent nodes to a new parent (or orphan them).
 
@@ -482,9 +500,11 @@ def bulk_reparent_nodes(
         affected_ids.add(data.parent_node_id)
 
     if affected_ids:
-        computation.recompute_from(affected_ids)
-    _bump_tile_version(db, map_id)
-    db.commit()
+        job_id = _enqueue_recompute(db, map_id)
+        db.commit()
+        recompute_nodes_task.delay(job_id, map_id, list(affected_ids))
+    else:
+        db.commit()
 
     return [
         Node(
@@ -506,7 +526,6 @@ def merge_nodes(
     graph_service: GraphServiceDependency,
     current_user: CurrentUserDependency,
     permission_service: PermissionsServiceDependency,
-    computation: ComputationServiceDependency,
 ):
     """Merge multiple nodes into a new node in the same layer.
 
@@ -529,15 +548,24 @@ def merge_nodes(
             raise HTTPException(403)
 
     map_id = next(iter(map_ids))
+
+    # Capture old parent IDs before the merge so we recompute regions that lose children.
+    old_parent_ids: set[int] = {
+        n.parent_node_id for n, _ in nodes_and_layers if n.parent_node_id is not None
+    }
+
     try:
         new_node = graph_service.merge_nodes(data)
     except TerramapsException as e:
         raise HTTPException(e.code if e.code in (400, 404) else 400, e.msg) from e
 
-    # new_node has inherited all children — recompute it and propagate up.
-    computation.recompute_from({new_node.id})
-    _bump_tile_version(db, map_id)
+    # new_node needs its own geometry computed; old parents may have lost children to a
+    # different region and must be recomputed to shed the stale geometry.
+    affected_ids = {new_node.id} | old_parent_ids
+
+    job_id = _enqueue_recompute(db, map_id)
     db.commit()
+    recompute_nodes_task.delay(job_id, map_id, list(affected_ids))
 
     return Node(
         id=new_node.id,
@@ -556,7 +584,6 @@ def bulk_delete_nodes(
     graph_service: GraphServiceDependency,
     current_user: CurrentUserDependency,
     permission_service: PermissionsServiceDependency,
-    computation: ComputationServiceDependency,
 ):
     """Bulk delete nodes, orphaning or reparenting their children first.
 
@@ -597,9 +624,11 @@ def bulk_delete_nodes(
         affected_ids.add(data.reparent_node_id)
 
     if affected_ids:
-        computation.recompute_from(affected_ids)
-    _bump_tile_version(db, map_id)
-    db.commit()
+        job_id = _enqueue_recompute(db, map_id)
+        db.commit()
+        recompute_nodes_task.delay(job_id, map_id, list(affected_ids))
+    else:
+        db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -725,7 +754,6 @@ def bulk_assign_zips(
     graph_service: GraphServiceDependency,
     current_user: CurrentUserDependency,
     permission_service: PermissionsServiceDependency,
-    computation: ComputationServiceDependency,
 ):
     """Bulk assign or unassign zip codes to a territory.
 
@@ -756,9 +784,11 @@ def bulk_assign_zips(
         affected_ids.add(data.parent_node_id)
 
     if affected_ids:
-        computation.recompute_from(affected_ids)
-    _bump_tile_version(db, layer.map_id)
-    db.commit()
+        job_id = _enqueue_recompute(db, layer.map_id)
+        db.commit()
+        recompute_nodes_task.delay(job_id, layer.map_id, list(affected_ids))
+    else:
+        db.commit()
     return {"updated": count}
 
 
