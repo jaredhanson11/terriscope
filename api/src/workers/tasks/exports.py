@@ -5,6 +5,7 @@ import logging
 from sqlalchemy import select
 
 from src.models.exports import MapExportModel, MapExportSlideModel
+from src.models.graph import LayerModel, MapModel
 from src.services.ppt_builder import build_pptx_buffer
 from src.services.s3 import S3Service
 from src.workers import DatabaseTask, celery_app
@@ -37,7 +38,15 @@ def generate_ppt_task(self: DatabaseTask, export_id: str) -> None:  # type: igno
         )
 
         s3 = S3Service()
-        buf = build_pptx_buffer(slides, s3)
+        map_model = self.db.get(MapModel, export.map_id)
+        cover_title = map_model.name if map_model else "Territory Report"
+        layer_names = {
+            layer.id: layer.name
+            for layer in self.db.execute(
+                select(LayerModel).where(LayerModel.map_id == export.map_id)
+            ).scalars().all()
+        }
+        buf = build_pptx_buffer(slides, s3, cover_title=cover_title, layer_names=layer_names)
 
         s3_key = f"{_S3_PREFIX}/{export_id}/report.pptx"
         s3.upload_private_file(

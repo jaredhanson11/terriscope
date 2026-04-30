@@ -1,7 +1,7 @@
 """PPT export service."""
 
 from collections import defaultdict
-from typing import Annotated, Any
+from typing import Annotated, Any, cast
 
 from fastapi import Depends
 from sqlalchemy import select, text
@@ -10,9 +10,63 @@ from sqlalchemy.orm import undefer
 from src.app.database import DatabaseSession
 from src.exceptions import TerramapsException
 from src.models.exports import MapExportModel, MapExportSlideModel
-from src.models.graph import LayerModel, NodeModel
+from src.models.graph import LayerModel, MapModel, NodeModel
 from src.services.base import BaseService
 from src.services.s3 import S3Service
+
+_AGG_LABELS: dict[str, str] = {"sum": "Sum", "avg": "Avg", "min": "Min", "max": "Max"}
+
+
+def _build_data_columns(
+    data_field_config: list[dict[str, Any]] | None,
+) -> list[tuple[str, str, str]]:
+    """Return [(field_key, agg, column_label)] for every number field x aggregation.
+
+    Slide data is built by iterating this list in order so all rows share the same
+    columns and the column ordering in the rendered table is deterministic.
+    """
+    if not data_field_config:
+        return []
+    columns: list[tuple[str, str, str]] = []
+    for cfg in data_field_config:
+        if cfg.get("type") != "number":
+            continue
+        aggs: list[str] = list(cfg.get("aggregations") or [])
+        if not aggs:
+            continue
+        field: str = cfg["field"]
+        label: str = cfg.get("label") or field
+        for agg in aggs:
+            agg_label = _AGG_LABELS.get(agg, agg.title())
+            columns.append((field, agg, f"{label} ({agg_label})"))
+    return columns
+
+
+def _breadcrumb(node: NodeModel, node_by_id: dict[int, NodeModel]) -> str:
+    """Walk the parent chain to root and join ancestor names with ' > '."""
+    chain = [node.name]
+    parent_id = node.parent_node_id
+    while parent_id is not None:
+        parent = node_by_id.get(parent_id)
+        if parent is None:
+            break
+        chain.append(parent.name)
+        parent_id = parent.parent_node_id
+    return " > ".join(reversed(chain))
+
+
+def _row_for_node(node: NodeModel, columns: list[tuple[str, str, str]]) -> dict[str, Any]:
+    """Build one slide table row: name + one cell per (field, agg) column."""
+    row: dict[str, Any] = {"name": node.name}
+    data: dict[str, Any] = node.data or {}
+    for field_key, agg, col_label in columns:
+        field_val = data.get(field_key)
+        if isinstance(field_val, dict):
+            agg_dict = cast(dict[str, Any], field_val)
+            row[col_label] = agg_dict.get(agg)
+        else:
+            row[col_label] = None
+    return row
 
 
 class PptExportService(BaseService):
@@ -30,6 +84,11 @@ class PptExportService(BaseService):
 
         Does not commit — caller owns the transaction.
         """
+        map_model = self.db.get(MapModel, map_id)
+        if not map_model:
+            raise TerramapsException(404, "Map not found.")
+        data_columns = _build_data_columns(map_model.data_field_config)
+
         layers = (
             self.db.execute(
                 select(LayerModel)
@@ -58,8 +117,10 @@ class PptExportService(BaseService):
         )
 
         children_by_parent: dict[int | None, list[NodeModel]] = defaultdict(list)
+        node_by_id: dict[int, NodeModel] = {}
         for node in nodes:
             children_by_parent[node.parent_node_id].append(node)
+            node_by_id[node.id] = node
 
         top_nodes = [n for n in children_by_parent[None] if n.layer_id == top_layer.id]
 
@@ -67,7 +128,7 @@ class PptExportService(BaseService):
         order = 0
 
         def _node_data(ns: list[NodeModel]) -> list[dict[str, Any]]:
-            return [{"name": n.name, **(n.data or {})} for n in ns]
+            return [_row_for_node(n, data_columns) for n in ns]
 
         # Root slide: all top-layer nodes together
         slides.append({
@@ -91,7 +152,7 @@ class PptExportService(BaseService):
                 child_layer = layer_by_id[children[0].layer_id]
                 slides.append({
                     "order": order,
-                    "title": parent_node.name,
+                    "title": _breadcrumb(parent_node, node_by_id),
                     "layer_id": child_layer.id,
                     "parent_node_id": parent_node.id,
                     "node_data": _node_data(children),
