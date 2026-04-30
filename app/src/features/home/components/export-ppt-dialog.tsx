@@ -1,4 +1,9 @@
-import { IconCheck, IconLoader2, IconPresentation } from "@tabler/icons-react"
+import {
+  IconCheck,
+  IconDownload,
+  IconLoader2,
+  IconPresentation,
+} from "@tabler/icons-react"
 import type { Map as MaplibreMap } from "maplibre-gl"
 import { type RefObject, useState } from "react"
 import type { MapRef } from "react-map-gl/maplibre"
@@ -104,6 +109,10 @@ export function ExportPptDialog({
   const [state, setState] = useState<State>("idle")
   const [slide, setSlide] = useState<SlideProgress | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [downloadInfo, setDownloadInfo] = useState<{
+    url: string
+    filename: string | null
+  } | null>(null)
   const [, setSearchParams] = useSearchParams()
 
   const clearExportParam = () => {
@@ -117,6 +126,7 @@ export function ExportPptDialog({
     setState("idle")
     setSlide(null)
     setError(null)
+    setDownloadInfo(null)
     clearExportParam()
   }
 
@@ -257,14 +267,49 @@ export function ExportPptDialog({
         throw new Error(`Failed to generate report (${generateRes.status})`)
       }
 
-      const pptxBlob = await generateRes.blob()
-      const url = URL.createObjectURL(pptxBlob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `${mapId} Territory Report.pptx`
-      a.click()
-      URL.revokeObjectURL(url)
+      // Poll until the worker finishes assembling and uploading the .pptx.
+      const POLL_INTERVAL_MS = 1500
 
+      const ready = await (async (): Promise<{
+        url: string
+        filename: string | null
+      }> => {
+        while (true) {
+          await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS))
+
+          const statusRes = await fetch(
+            `${base}/maps/${mapId}/exports/ppt/${exportId}`,
+            { credentials: "include" },
+          )
+          if (!statusRes.ok) {
+            throw new Error(
+              `Failed to poll export status (${statusRes.status.toString()})`,
+            )
+          }
+          const status = (await statusRes.json()) as {
+            id: string
+            status:
+              | "pending"
+              | "in_progress"
+              | "generating"
+              | "complete"
+              | "failed"
+            total_slides: number
+            pptx_url: string | null
+            filename: string | null
+            error: string | null
+          }
+
+          if (status.status === "failed") {
+            throw new Error(status.error ?? "Report generation failed.")
+          }
+          if (status.status === "complete" && status.pptx_url) {
+            return { url: status.pptx_url, filename: status.filename }
+          }
+        }
+      })()
+
+      setDownloadInfo(ready)
       setState("done")
       setSlide((prev) => (prev ? { ...prev, uploaded: totalSlides } : null))
     } catch (err) {
@@ -360,7 +405,7 @@ export function ExportPptDialog({
 
         {state === "done" && (
           <p className="text-sm text-muted-foreground">
-            Your PowerPoint report has been downloaded.
+            Your PowerPoint report is ready. The link expires in an hour.
           </p>
         )}
 
@@ -382,26 +427,54 @@ export function ExportPptDialog({
               <Button onClick={() => void handleExport()}>Start Export</Button>
             </>
           )}
-          {(state === "running" || state === "building") && (
+          {state === "running" && (
             <Button variant="outline" disabled>
               <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />
-              {state === "building" ? "Building…" : "Running…"}
+              Running…
             </Button>
           )}
-          {(state === "done" || state === "error") && (
+          {state === "building" && (
+            <Button disabled>
+              <IconLoader2 className="mr-2 h-4 w-4 animate-spin" />
+              Preparing download…
+            </Button>
+          )}
+          {state === "done" && (
             <>
-              {state === "error" && (
-                <Button variant="outline" onClick={reset}>
-                  Try Again
-                </Button>
-              )}
+              <Button
+                variant="outline"
+                onClick={() => {
+                  reset()
+                  onOpenChange(false)
+                }}
+              >
+                Close
+              </Button>
+              <Button asChild>
+                <a
+                  href={downloadInfo?.url ?? "#"}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  download={downloadInfo?.filename ?? undefined}
+                >
+                  <IconDownload className="mr-2 h-4 w-4" />
+                  Download report
+                </a>
+              </Button>
+            </>
+          )}
+          {state === "error" && (
+            <>
+              <Button variant="outline" onClick={reset}>
+                Try Again
+              </Button>
               <Button
                 onClick={() => {
                   reset()
                   onOpenChange(false)
                 }}
               >
-                {state === "done" ? "Done" : "Close"}
+                Close
               </Button>
             </>
           )}

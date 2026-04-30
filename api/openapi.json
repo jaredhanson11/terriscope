@@ -2142,8 +2142,60 @@
           "PPT Exports"
         ],
         "summary": "Generate Ppt",
-        "description": "Build and stream the .pptx territory report.\n\nFetches slide images from S3 one at a time, assembles the presentation\nwith python-pptx, and streams the result back to the caller.",
+        "description": "Enqueue the .pptx assembly task.\n\nVerifies all slides are uploaded, marks the export as 'generating',\ndispatches a Celery worker, and returns immediately. The client should\nthen poll GET /maps/{map_id}/exports/ppt/{export_id} for completion.\n\nIdempotent against re-entry while generating: returns the current state.",
         "operationId": "generate_ppt_maps__map_id__exports_ppt__export_id__generate_post",
+        "parameters": [
+          {
+            "name": "map_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Map Id"
+            }
+          },
+          {
+            "name": "export_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Export Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ExportStatusResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/maps/{map_id}/exports/ppt/{export_id}": {
+      "get": {
+        "tags": [
+          "PPT Exports"
+        ],
+        "summary": "Get Ppt Export Status",
+        "description": "Return the current status of an export.\n\nWhen status='complete', includes a short-lived presigned URL for the .pptx.\nWhen status='failed', includes the error reason.",
+        "operationId": "get_ppt_export_status_maps__map_id__exports_ppt__export_id__get",
         "parameters": [
           {
             "name": "map_id",
@@ -2169,7 +2221,9 @@
             "description": "Successful Response",
             "content": {
               "application/json": {
-                "schema": {}
+                "schema": {
+                  "$ref": "#/components/schemas/ExportStatusResponse"
+                }
               }
             }
           },
@@ -2184,9 +2238,7 @@
             }
           }
         }
-      }
-    },
-    "/maps/{map_id}/exports/ppt/{export_id}": {
+      },
       "delete": {
         "tags": [
           "PPT Exports"
@@ -2747,6 +2799,70 @@
         ],
         "title": "DataFieldSetup",
         "description": "DataFieldSetup."
+      },
+      "ExportStatusResponse": {
+        "properties": {
+          "id": {
+            "type": "string",
+            "title": "Id"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "in_progress",
+              "generating",
+              "complete",
+              "failed"
+            ],
+            "title": "Status"
+          },
+          "total_slides": {
+            "type": "integer",
+            "title": "Total Slides"
+          },
+          "pptx_url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pptx Url"
+          },
+          "filename": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Filename"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "status",
+          "total_slides"
+        ],
+        "title": "ExportStatusResponse",
+        "description": "Returned by GET /maps/{map_id}/exports/ppt/{export_id}.\n\npptx_url and filename are populated only when status='complete';\nerror is populated only when status='failed'."
       },
       "HTTPValidationError": {
         "properties": {

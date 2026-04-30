@@ -1,7 +1,7 @@
 """Builds a .pptx territory report from slide records and S3 images."""
 
+from collections.abc import Sequence
 from io import BytesIO
-from collections.abc import Generator, Sequence
 from typing import Any
 
 from PIL import Image as PILImage
@@ -104,12 +104,11 @@ def _add_slide(
             cell.text_frame.paragraphs[0].font.size = Pt(8)
 
 
-def build_pptx_chunks(
+def build_pptx_buffer(
     slides: Sequence[MapExportSlideModel],
     s3: S3Service,
-    chunk_size: int = 65536,
-) -> Generator[bytes, None, None]:
-    """Build the .pptx in memory (one S3 image at a time) then yield it in chunks."""
+) -> BytesIO:
+    """Build the .pptx in memory (one S3 image at a time) and return a seek-zeroed buffer."""
     prs = Presentation()
     prs.slide_width = _W
     prs.slide_height = _H
@@ -131,5 +130,4 @@ def build_pptx_chunks(
     buf = BytesIO()
     prs.save(buf)
     buf.seek(0)
-    while chunk := buf.read(chunk_size):
-        yield chunk
+    return buf

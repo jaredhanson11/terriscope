@@ -77,11 +77,26 @@ class S3Service:
         """Delete a private file."""
         self._delete(prefix="private", key=key)
 
-    def generate_presigned_url(self, *, key: str, prefix: PathPrefix, expires_in: int = 3600) -> str:
-        """Generate a pre-signed URL for temporary access to any object."""
+    def generate_presigned_url(
+        self,
+        *,
+        key: str,
+        prefix: PathPrefix,
+        expires_in: int = 3600,
+        response_content_disposition: str | None = None,
+    ) -> str:
+        """Generate a pre-signed URL for temporary access to any object.
+
+        If response_content_disposition is set, it overrides the object's stored
+        Content-Disposition for this signed request only — useful for forcing
+        an attachment download with a specific filename.
+        """
+        params: dict[str, Any] = {"Bucket": self._bucket, "Key": self._key(prefix, key)}
+        if response_content_disposition:
+            params["ResponseContentDisposition"] = response_content_disposition
         url: str = self._client.generate_presigned_url(
             "get_object",
-            Params={"Bucket": self._bucket, "Key": self._key(prefix, key)},
+            Params=params,
             ExpiresIn=expires_in,
         )
         return url

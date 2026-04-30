@@ -24,6 +24,12 @@ class MapExportModel(Base, TimestampMixin):
     status: Mapped[Literal["pending", "in_progress", "generating", "complete", "failed"]]
     total_slides: Mapped[int]
 
+    pptx_s3_key: Mapped[str | None] = mapped_column(nullable=True, default=None)
+    """Final assembled .pptx S3 key. Null until the generate task completes."""
+
+    error: Mapped[str | None] = mapped_column(nullable=True, default=None)
+    """Failure reason when status='failed'."""
+
     @declared_attr.directive
     def __table_args__(cls):
         return (Index("idx_map_exports_map_id", "map_id"),)

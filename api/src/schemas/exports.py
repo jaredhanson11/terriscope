@@ -1,5 +1,7 @@
 """PPT export schemas."""
 
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -30,3 +32,18 @@ class NextSlideResponse(BaseModel):
     bbox_max_lat: float | None = None
     total_slides: int
     uploaded_slides: int
+
+
+class ExportStatusResponse(BaseModel):
+    """Returned by GET /maps/{map_id}/exports/ppt/{export_id}.
+
+    pptx_url and filename are populated only when status='complete';
+    error is populated only when status='failed'.
+    """
+
+    id: str
+    status: Literal["pending", "in_progress", "generating", "complete", "failed"]
+    total_slides: int
+    pptx_url: str | None = None
+    filename: str | None = None
+    error: str | None = None

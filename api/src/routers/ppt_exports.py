@@ -4,31 +4,32 @@ Handles the full lifecycle of a map's PowerPoint territory report export.
 
 Routes:
     POST   /maps/{map_id}/exports/ppt                               — create export, pre-compute all slides
+    GET    /maps/{map_id}/exports/ppt/{export_id}                   — get current status + presigned download URL when complete
     GET    /maps/{map_id}/exports/ppt/{export_id}/next              — get next capture instruction (or done)
     POST   /maps/{map_id}/exports/ppt/{export_id}/slides/{slide_id} — upload screenshot for a slide
-    POST   /maps/{map_id}/exports/ppt/{export_id}/generate          — assemble + stream .pptx  [TODO: worker]
+    POST   /maps/{map_id}/exports/ppt/{export_id}/generate          — enqueue async assembly; client polls GET status
     DELETE /maps/{map_id}/exports/ppt/{export_id}                   — cancel and clean up
 """
 
 import uuid
 
 from fastapi import APIRouter, HTTPException, UploadFile
-from fastapi.responses import StreamingResponse
 from sqlalchemy import func, select
 
 from src.app.database import DatabaseSession
 from src.models.exports import MapExportModel, MapExportSlideModel
 from src.models.graph import MapModel
-from src.schemas.exports import CreateExportResponse, NextSlideResponse
+from src.schemas.exports import CreateExportResponse, ExportStatusResponse, NextSlideResponse
 from src.services.auth import CurrentUserDependency
 from src.services.permissions import PermissionsServiceDependency
-from src.services.ppt_builder import build_pptx_chunks
 from src.services.ppt_exports import PptExportServiceDependency
-from src.services.s3 import S3ServiceDependency
+from src.services.s3 import S3Service, S3ServiceDependency
+from src.workers.tasks.exports import generate_ppt_task
 
 ppt_exports_router = APIRouter(prefix="/maps", tags=["PPT Exports"])
 
 _S3_PREFIX = "map-exports"
+_DOWNLOAD_URL_TTL = 3600
 
 
 @ppt_exports_router.post("/{map_id}/exports/ppt", response_model=CreateExportResponse, status_code=201)
@@ -178,7 +179,7 @@ def upload_slide(
     db.commit()
 
 
-@ppt_exports_router.post("/{map_id}/exports/ppt/{export_id}/generate")
+@ppt_exports_router.post("/{map_id}/exports/ppt/{export_id}/generate", status_code=202)
 def generate_ppt(
     map_id: str,
     export_id: str,
@@ -186,11 +187,14 @@ def generate_ppt(
     current_user: CurrentUserDependency,
     permission_service: PermissionsServiceDependency,
     s3: S3ServiceDependency,
-) -> StreamingResponse:
-    """Build and stream the .pptx territory report.
+) -> ExportStatusResponse:
+    """Enqueue the .pptx assembly task.
 
-    Fetches slide images from S3 one at a time, assembles the presentation
-    with python-pptx, and streams the result back to the caller.
+    Verifies all slides are uploaded, marks the export as 'generating',
+    dispatches a Celery worker, and returns immediately. The client should
+    then poll GET /maps/{map_id}/exports/ppt/{export_id} for completion.
+
+    Idempotent against re-entry while generating: returns the current state.
     """
     if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER"]):
         raise HTTPException(status_code=404, detail="Map not found")
@@ -198,6 +202,9 @@ def generate_ppt(
     export = db.get(MapExportModel, export_id)
     if not export or export.map_id != map_id:
         raise HTTPException(status_code=404, detail="Export not found")
+
+    if export.status in ("generating", "complete"):
+        return _build_status_response(export, map_id, db, s3)
 
     any_missing = db.execute(
         select(func.count())
@@ -210,26 +217,68 @@ def generate_ppt(
     if any_missing:
         raise HTTPException(status_code=409, detail="Not all slides have been uploaded yet.")
 
-    slides = (
-        db.execute(
-            select(MapExportSlideModel)
-            .where(MapExportSlideModel.export_id == export_id)
-            .order_by(MapExportSlideModel.order)
-        )
-        .scalars()
-        .all()
-    )
+    if export.pptx_s3_key:
+        s3.delete_private_file(key=export.pptx_s3_key)
+        export.pptx_s3_key = None
 
-    map_model = db.get(MapModel, map_id)
-    filename = f"{map_model.name} Territory Report.pptx" if map_model else "Territory Report.pptx"
-
-    export.status = "complete"
+    export.status = "generating"
+    export.error = None
     db.commit()
 
-    return StreamingResponse(
-        build_pptx_chunks(slides, s3),
-        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    generate_ppt_task.delay(export_id)
+
+    return _build_status_response(export, map_id, db, s3)
+
+
+@ppt_exports_router.get("/{map_id}/exports/ppt/{export_id}", response_model=ExportStatusResponse)
+def get_ppt_export_status(
+    map_id: str,
+    export_id: str,
+    db: DatabaseSession,
+    current_user: CurrentUserDependency,
+    permission_service: PermissionsServiceDependency,
+    s3: S3ServiceDependency,
+) -> ExportStatusResponse:
+    """Return the current status of an export.
+
+    When status='complete', includes a short-lived presigned URL for the .pptx.
+    When status='failed', includes the error reason.
+    """
+    if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER"]):
+        raise HTTPException(status_code=404, detail="Map not found")
+
+    export = db.get(MapExportModel, export_id)
+    if not export or export.map_id != map_id:
+        raise HTTPException(status_code=404, detail="Export not found")
+
+    return _build_status_response(export, map_id, db, s3)
+
+
+def _build_status_response(
+    export: MapExportModel,
+    map_id: str,
+    db: DatabaseSession,
+    s3: S3Service,
+) -> ExportStatusResponse:
+    pptx_url: str | None = None
+    filename: str | None = None
+    if export.status == "complete" and export.pptx_s3_key:
+        map_model = db.get(MapModel, map_id)
+        filename = f"{map_model.name} Territory Report.pptx" if map_model else "Territory Report.pptx"
+        pptx_url = s3.generate_presigned_url(
+            key=export.pptx_s3_key,
+            prefix="private",
+            expires_in=_DOWNLOAD_URL_TTL,
+            response_content_disposition=f'attachment; filename="{filename}"',
+        )
+
+    return ExportStatusResponse(
+        id=export.id,
+        status=export.status,
+        total_slides=export.total_slides,
+        pptx_url=pptx_url,
+        filename=filename,
+        error=export.error,
     )
 
 

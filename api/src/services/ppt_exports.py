@@ -122,7 +122,7 @@ class PptExportService(BaseService):
         return export
 
     def cancel_export(self, export: MapExportModel, s3: S3Service) -> None:
-        """Remove all DB rows for this export.
+        """Remove all DB rows and S3 objects for this export.
 
         Does not commit — caller owns the transaction.
         """
@@ -135,6 +135,9 @@ class PptExportService(BaseService):
             if slide.image_s3_key:
                 s3.delete_private_file(key=slide.image_s3_key)
             self.db.delete(slide)
+
+        if export.pptx_s3_key:
+            s3.delete_private_file(key=export.pptx_s3_key)
 
         self.db.delete(export)
         self.db.flush()

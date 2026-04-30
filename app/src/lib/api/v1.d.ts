@@ -873,10 +873,13 @@ export interface paths {
         put?: never;
         /**
          * Generate Ppt
-         * @description Build and stream the .pptx territory report.
+         * @description Enqueue the .pptx assembly task.
          *
-         *     Fetches slide images from S3 one at a time, assembles the presentation
-         *     with python-pptx, and streams the result back to the caller.
+         *     Verifies all slides are uploaded, marks the export as 'generating',
+         *     dispatches a Celery worker, and returns immediately. The client should
+         *     then poll GET /maps/{map_id}/exports/ppt/{export_id} for completion.
+         *
+         *     Idempotent against re-entry while generating: returns the current state.
          */
         post: operations["generate_ppt_maps__map_id__exports_ppt__export_id__generate_post"];
         delete?: never;
@@ -892,7 +895,14 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        get?: never;
+        /**
+         * Get Ppt Export Status
+         * @description Return the current status of an export.
+         *
+         *     When status='complete', includes a short-lived presigned URL for the .pptx.
+         *     When status='failed', includes the error reason.
+         */
+        get: operations["get_ppt_export_status_maps__map_id__exports_ppt__export_id__get"];
         put?: never;
         post?: never;
         /**
@@ -1140,6 +1150,30 @@ export interface components {
              * @default []
              */
             aggregations: ("sum" | "avg" | "min" | "max")[];
+        };
+        /**
+         * ExportStatusResponse
+         * @description Returned by GET /maps/{map_id}/exports/ppt/{export_id}.
+         *
+         *     pptx_url and filename are populated only when status='complete';
+         *     error is populated only when status='failed'.
+         */
+        ExportStatusResponse: {
+            /** Id */
+            id: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "pending" | "in_progress" | "generating" | "complete" | "failed";
+            /** Total Slides */
+            total_slides: number;
+            /** Pptx Url */
+            pptx_url?: string | null;
+            /** Filename */
+            filename?: string | null;
+            /** Error */
+            error?: string | null;
         };
         /** HTTPValidationError */
         HTTPValidationError: {
@@ -3255,12 +3289,44 @@ export interface operations {
         requestBody?: never;
         responses: {
             /** @description Successful Response */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExportStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_ppt_export_status_maps__map_id__exports_ppt__export_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                map_id: string;
+                export_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": unknown;
+                    "application/json": components["schemas"]["ExportStatusResponse"];
                 };
             };
             /** @description Validation Error */
