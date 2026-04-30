@@ -4,7 +4,7 @@ import uuid
 from collections.abc import Sequence
 
 from fastapi import APIRouter, HTTPException
-from geoalchemy2.functions import ST_X, ST_Y, ST_Centroid, ST_Envelope, ST_XMax, ST_XMin, ST_YMax, ST_YMin
+from geoalchemy2.functions import ST_Envelope, ST_XMax, ST_XMin, ST_YMax, ST_YMin
 from sqlalchemy import and_, delete, func, select
 from sqlalchemy.orm import undefer
 
