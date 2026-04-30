@@ -53,6 +53,22 @@ def _bump_tile_version(db: DatabaseSession, map_id: str) -> None:
         map_model.tile_version += 1
 
 
+def _nuke_map_tile_cache(db: DatabaseSession, map_id: str) -> None:
+    """Delete every cached MVT tile for every layer in the map.
+
+    Why: name/color edits, deletes, and shrinking geometry can leave stale tiles
+    behind when invalidation is bbox-scoped or layer-scoped. Until each endpoint
+    is audited individually, prefer over-invalidation over stale-tile bugs.
+    """
+    db.execute(
+        delete(MvtTileCacheModel).where(
+            MvtTileCacheModel.layer_id.in_(
+                select(LayerModel.id).where(LayerModel.map_id == map_id)
+            )
+        )
+    )
+
+
 def _enqueue_recompute(db: DatabaseSession, map_id: str) -> str:
     """Stage a pending MapJobModel recompute record and return its ID.
 
@@ -161,6 +177,8 @@ def create_node(
         if e.code == 400 or e.code == 402:
             raise HTTPException(404, e.msg) from e
         raise HTTPException(400, e.msg) from e
+    _nuke_map_tile_cache(db, layer.map_id)
+    _bump_tile_version(db, layer.map_id)
     db.commit()
     return Node(
         id=new_node.id,
@@ -369,6 +387,7 @@ def update_node(
     if affected_ids:
         computation.recompute_from(affected_ids)
 
+    _nuke_map_tile_cache(db, layer.map_id)
     _bump_tile_version(db, layer.map_id)
     db.commit()
     return Node(
@@ -418,6 +437,7 @@ def delete_node(
     if old_parent_id is not None:
         computation.recompute_from({old_parent_id})
 
+    _nuke_map_tile_cache(db, layer.map_id)
     _bump_tile_version(db, layer.map_id)
     db.commit()
 
@@ -462,6 +482,7 @@ def bulk_update_node(
             )
         )
     for map_id in map_ids:
+        _nuke_map_tile_cache(db, map_id)
         _bump_tile_version(db, map_id)
     db.commit()
     return updated
@@ -509,6 +530,9 @@ def bulk_reparent_nodes(
     affected_ids = old_parent_ids
     if data.parent_node_id is not None:
         affected_ids.add(data.parent_node_id)
+
+    _nuke_map_tile_cache(db, map_id)
+    _bump_tile_version(db, map_id)
 
     if affected_ids:
         job_id = _enqueue_recompute(db, map_id)
@@ -573,6 +597,9 @@ def merge_nodes(
     # different region and must be recomputed to shed the stale geometry.
     affected_ids = {new_node.id} | old_parent_ids
 
+    _nuke_map_tile_cache(db, map_id)
+    _bump_tile_version(db, map_id)
+
     job_id = _enqueue_recompute(db, map_id)
     db.commit()
     recompute_nodes_task.delay(job_id, map_id, list(affected_ids))
@@ -631,6 +658,9 @@ def bulk_delete_nodes(
     if data.child_action == "reparent" and data.reparent_node_id is not None:
         # The reparent target gained new children and needs recomputing too.
         affected_ids.add(data.reparent_node_id)
+
+    _nuke_map_tile_cache(db, map_id)
+    _bump_tile_version(db, map_id)
 
     if affected_ids:
         job_id = _enqueue_recompute(db, map_id)
@@ -796,7 +826,8 @@ def bulk_assign_zips(
     if data.parent_node_id is not None:
         affected_ids.add(data.parent_node_id)
 
-    db.execute(delete(MvtTileCacheModel).where(MvtTileCacheModel.layer_id == layer_id))
+    _nuke_map_tile_cache(db, layer.map_id)
+    _bump_tile_version(db, layer.map_id)
 
     if affected_ids:
         job_id = _enqueue_recompute(db, layer.map_id)
@@ -844,7 +875,7 @@ def assign_zip(
 
     if affected_ids:
         computation.recompute_from(affected_ids)
-    db.execute(delete(MvtTileCacheModel).where(MvtTileCacheModel.layer_id == layer_id))
+    _nuke_map_tile_cache(db, layer.map_id)
     _bump_tile_version(db, layer.map_id)
     db.commit()
 
@@ -883,7 +914,7 @@ def reset_zip(
 
     if old_parent_id is not None:
         computation.recompute_from({old_parent_id})
-    db.execute(delete(MvtTileCacheModel).where(MvtTileCacheModel.layer_id == layer_id))
+    _nuke_map_tile_cache(db, layer.map_id)
     _bump_tile_version(db, layer.map_id)
     db.commit()
 

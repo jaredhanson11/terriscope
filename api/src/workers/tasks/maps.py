@@ -251,6 +251,13 @@ def recompute_nodes_task(self: DatabaseTask, job_id: str, map_id: str, affected_
         computation.recompute_from(affected)
         computation.compute_data_from(affected, map_id)
 
+        # Wipe every tile in the map: between handler return and now, clients
+        # may have triggered tile regeneration against in-flight (stale) geometry,
+        # which would have been cached. recompute_from's bbox-scoped invalidation
+        # won't catch those, so do a full sweep and bump tile_version.
+        all_layer_ids = set(self.db.execute(select(LayerModel.id).where(LayerModel.map_id == map_id)).scalars().all())
+        computation.invalidate_cache_for_layers(all_layer_ids)
+
         map_model = self.db.get(MapModel, map_id)
         if map_model:
             map_model.tile_version += 1
@@ -348,9 +355,7 @@ def import_map_task(self: DatabaseTask, map_id: str) -> None:  # type: ignore[mi
         _set_import_step(self, upload, "Computing geometry")
         computation = ComputationService(db=self.db)
         computation.recompute_all_layers(map_id)
-        all_layer_ids = set(
-            self.db.execute(select(LayerModel.id).where(LayerModel.map_id == map_id)).scalars().all()
-        )
+        all_layer_ids = set(self.db.execute(select(LayerModel.id).where(LayerModel.map_id == map_id)).scalars().all())
         if all_layer_ids:
             computation.invalidate_cache_for_layers(all_layer_ids)
             map_model.tile_version += 1
