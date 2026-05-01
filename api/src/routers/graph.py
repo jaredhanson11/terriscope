@@ -150,6 +150,46 @@ def get_layer(
     return Layer(id=layer.id, map_id=layer.map_id, name=layer.name, order=layer.order)
 
 
+# ---------------------------------------------------------------------------
+# Nodes (order >= 1 only)
+# ---------------------------------------------------------------------------
+
+
+@graph_router.post("/nodes", response_model=Node)
+def create_node(
+    node_data: CreateNode,
+    db: DatabaseSession,
+    graph_service: GraphServiceDependency,
+    current_user: CurrentUserDependency,
+    permission_service: PermissionsServiceDependency,
+):
+    """Create node."""
+    layer = db.get(LayerModel, node_data.layer_id)
+    if not layer or not permission_service.check_for_map_access(
+        user_id=current_user.id,
+        map_id=layer.map_id,
+        map_roles=["OWNER", "MEMBER"],
+    ):
+        raise HTTPException(403)
+    try:
+        new_node = graph_service.create_node(node_data=node_data)
+    except TerramapsException as e:
+        if e.code == 400 or e.code == 402:
+            raise HTTPException(404, e.msg) from e
+        raise HTTPException(400, e.msg) from e
+    _nuke_map_tile_cache(db, layer.map_id)
+    _bump_tile_version(db, layer.map_id)
+    db.commit()
+    return Node(
+        id=new_node.id,
+        layer_id=new_node.layer_id,
+        color=new_node.color,
+        name=new_node.name,
+        parent_node_id=new_node.parent_node_id,
+        child_count=new_node.child_count,
+    )
+
+
 def _resolve_node_query_map_id(db: DatabaseSession, body: NodeQuery) -> str:
     """Derive map_id from whichever anchor field is present in a NodeQuery."""
     if body.layer_id is not None:
@@ -191,7 +231,9 @@ def query_nodes(
         raise HTTPException(400, "Provide at least one of: layer_id, parent_node_id, ids")
 
     map_id = _resolve_node_query_map_id(db, body)
-    if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]):
+    if not permission_service.check_for_map_access(
+        user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]
+    ):
         raise HTTPException(403)
 
     conditions = []
@@ -481,7 +523,9 @@ def bulk_reparent_nodes(
 
     map_ids = {layer.map_id for _, layer in nodes_and_layers}
     for map_id in map_ids:
-        if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]):
+        if not permission_service.check_for_map_access(
+            user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]
+        ):
             raise HTTPException(403)
 
     map_id = next(iter(map_ids))
@@ -547,7 +591,9 @@ def merge_nodes(
 
     map_ids = {layer.map_id for _, layer in nodes_and_layers}
     for map_id in map_ids:
-        if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]):
+        if not permission_service.check_for_map_access(
+            user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]
+        ):
             raise HTTPException(403)
 
     map_id = next(iter(map_ids))
@@ -608,7 +654,9 @@ def bulk_delete_nodes(
 
     map_ids = {layer.map_id for _, layer in nodes_and_layers}
     for map_id in map_ids:
-        if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]):
+        if not permission_service.check_for_map_access(
+            user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]
+        ):
             raise HTTPException(403)
 
     map_id = next(iter(map_ids))

@@ -405,6 +405,48 @@
         }
       }
     },
+    "/nodes": {
+      "post": {
+        "tags": [
+          "Graph"
+        ],
+        "summary": "Create Node",
+        "description": "Create node.",
+        "operationId": "create_node_nodes_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateNode"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Node"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/nodes/query": {
       "post": {
         "tags": [
@@ -2632,6 +2674,42 @@
         ],
         "title": "CreateMap",
         "description": "DTO for POST /maps.\n\nReferences a previously uploaded and parsed document. The raw spreadsheet\ndata stays in S3 and is read by the background import worker."
+      },
+      "CreateNode": {
+        "properties": {
+          "parent_node_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Node Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "color": {
+            "type": "string",
+            "title": "Color"
+          },
+          "layer_id": {
+            "type": "integer",
+            "title": "Layer Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "parent_node_id",
+          "name",
+          "color",
+          "layer_id"
+        ],
+        "title": "CreateNode",
+        "description": "CreateNode."
       },
       "DataFieldConfig": {
         "properties": {

@@ -232,6 +232,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/nodes": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create Node
+         * @description Create node.
+         */
+        post: operations["create_node_nodes_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/nodes/query": {
         parameters: {
             query?: never;
@@ -1071,6 +1091,20 @@ export interface components {
             layers: components["schemas"]["LayerSetup"][];
             /** Data Fields */
             data_fields: components["schemas"]["DataFieldSetup"][];
+        };
+        /**
+         * CreateNode
+         * @description CreateNode.
+         */
+        CreateNode: {
+            /** Parent Node Id */
+            parent_node_id: number | null;
+            /** Name */
+            name: string;
+            /** Color */
+            color: string;
+            /** Layer Id */
+            layer_id: number;
         };
         /**
          * DataFieldConfig
@@ -2083,6 +2117,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Layer"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_node_nodes_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateNode"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Node"];
                 };
             };
             /** @description Validation Error */
