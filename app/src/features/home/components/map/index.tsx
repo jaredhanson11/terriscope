@@ -12,9 +12,20 @@ import {
 } from "react"
 import MapGL, { type MapProps, type MapRef } from "react-map-gl/maplibre"
 
+import config from "@/app/config"
+
 import type { LayerViewOptions } from "./config"
 import type { BaseMapName } from "./config"
 import { refreshTileSources, updateLayers, updateSources } from "./utils"
+
+const API_BASE_URL = config.get("api_base_url")
+
+// MVT tile (and /tiles/warm) requests are now authenticated, so MapLibre needs
+// to send the access_token cookie. By default it omits credentials on
+// cross-origin requests; only attach them to our API to avoid leaking cookies
+// to third-party tile/glyph hosts.
+const transformRequest: MapProps["transformRequest"] = (url) =>
+  url.startsWith(API_BASE_URL) ? { url, credentials: "include" } : { url }
 
 const EMPTY_STYLE = {
   version: 8 as const,
@@ -284,6 +295,7 @@ export const Map = forwardRef<
           minZoom={4}
           maxZoom={14}
           ref={mapRef}
+          transformRequest={transformRequest}
           onLoad={(evt) => {
             const map = evt.target
             updateSources(map, layers, tileVersion)
