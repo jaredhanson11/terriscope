@@ -177,6 +177,8 @@ def create_node(
         if e.code == 400 or e.code == 402:
             raise HTTPException(404, e.msg) from e
         raise HTTPException(400, e.msg) from e
+    _nuke_map_tile_cache(db, layer.map_id)
+    _bump_tile_version(db, layer.map_id)
     db.commit()
     return Node(
         id=new_node.id,
@@ -229,7 +231,9 @@ def query_nodes(
         raise HTTPException(400, "Provide at least one of: layer_id, parent_node_id, ids")
 
     map_id = _resolve_node_query_map_id(db, body)
-    if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]):
+    if not permission_service.check_for_map_access(
+        user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]
+    ):
         raise HTTPException(403)
 
     conditions = []
@@ -519,7 +523,9 @@ def bulk_reparent_nodes(
 
     map_ids = {layer.map_id for _, layer in nodes_and_layers}
     for map_id in map_ids:
-        if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]):
+        if not permission_service.check_for_map_access(
+            user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]
+        ):
             raise HTTPException(403)
 
     map_id = next(iter(map_ids))
@@ -585,7 +591,9 @@ def merge_nodes(
 
     map_ids = {layer.map_id for _, layer in nodes_and_layers}
     for map_id in map_ids:
-        if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]):
+        if not permission_service.check_for_map_access(
+            user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]
+        ):
             raise HTTPException(403)
 
     map_id = next(iter(map_ids))
@@ -646,7 +654,9 @@ def bulk_delete_nodes(
 
     map_ids = {layer.map_id for _, layer in nodes_and_layers}
     for map_id in map_ids:
-        if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]):
+        if not permission_service.check_for_map_access(
+            user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]
+        ):
             raise HTTPException(403)
 
     map_id = next(iter(map_ids))
