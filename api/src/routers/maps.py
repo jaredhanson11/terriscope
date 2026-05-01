@@ -189,9 +189,9 @@ def patch_map(
     current_user: CurrentUserDependency,
     permission_service: PermissionsServiceDependency,
 ) -> Map:
-    """Rename a map. Owner only."""
+    """Rename a map. Any map member."""
     if not permission_service.check_for_map_access(
-        user_id=current_user.id, map_id=map_id, map_roles=["OWNER"]
+        user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]
     ):
         raise HTTPException(status_code=404, detail="Map not found")
 

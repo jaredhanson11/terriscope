@@ -59,11 +59,11 @@ def remove_member(
     current_user: CurrentUserDependency,
     permission_service: PermissionsServiceDependency,
 ) -> None:
-    """Remove a member from a map. Owner only. Cannot remove yourself."""
+    """Remove a member from a map. Any map member. Cannot remove yourself."""
     if not permission_service.check_for_map_access(
-        user_id=current_user.id, map_id=map_id, map_roles=["OWNER"]
+        user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]
     ):
-        raise HTTPException(status_code=403, detail="Only the map owner can remove members")
+        raise HTTPException(status_code=403, detail="No access to this map")
 
     if user_id == current_user.id:
         raise HTTPException(status_code=400, detail="You cannot remove yourself from the map")

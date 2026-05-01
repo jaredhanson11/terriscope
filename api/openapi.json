@@ -405,48 +405,6 @@
         }
       }
     },
-    "/nodes": {
-      "post": {
-        "tags": [
-          "Graph"
-        ],
-        "summary": "Create Node",
-        "description": "Create node.",
-        "operationId": "create_node_nodes_post",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/CreateNode"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Node"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "/nodes/query": {
       "post": {
         "tags": [
@@ -1473,7 +1431,7 @@
           "Maps"
         ],
         "summary": "Patch Map",
-        "description": "Rename a map. Owner only.",
+        "description": "Rename a map. Any map member.",
         "operationId": "patch_map_maps__map_id__patch",
         "parameters": [
           {
@@ -1567,7 +1525,7 @@
           "Invites"
         ],
         "summary": "List Map Invites",
-        "description": "List pending invites for a map. Owner only.",
+        "description": "List pending invites for a map. Any map member.",
         "operationId": "list_map_invites_maps__map_id__invites_get",
         "parameters": [
           {
@@ -1612,7 +1570,7 @@
           "Invites"
         ],
         "summary": "Create Invite",
-        "description": "Invite a user by email to a map. Owner only.",
+        "description": "Invite a user by email to a map. Any map member.",
         "operationId": "create_invite_maps__map_id__invites_post",
         "parameters": [
           {
@@ -1665,7 +1623,7 @@
           "Invites"
         ],
         "summary": "Revoke Invite",
-        "description": "Revoke a pending invite. Owner only.",
+        "description": "Revoke a pending invite. Any map member.",
         "operationId": "revoke_invite_maps__map_id__invites__invite_id__delete",
         "parameters": [
           {
@@ -1757,7 +1715,7 @@
           "Members"
         ],
         "summary": "Remove Member",
-        "description": "Remove a member from a map. Owner only. Cannot remove yourself.",
+        "description": "Remove a member from a map. Any map member. Cannot remove yourself.",
         "operationId": "remove_member_maps__map_id__members__user_id__delete",
         "parameters": [
           {
@@ -2674,42 +2632,6 @@
         ],
         "title": "CreateMap",
         "description": "DTO for POST /maps.\n\nReferences a previously uploaded and parsed document. The raw spreadsheet\ndata stays in S3 and is read by the background import worker."
-      },
-      "CreateNode": {
-        "properties": {
-          "parent_node_id": {
-            "anyOf": [
-              {
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Parent Node Id"
-          },
-          "name": {
-            "type": "string",
-            "title": "Name"
-          },
-          "color": {
-            "type": "string",
-            "title": "Color"
-          },
-          "layer_id": {
-            "type": "integer",
-            "title": "Layer Id"
-          }
-        },
-        "type": "object",
-        "required": [
-          "parent_node_id",
-          "name",
-          "color",
-          "layer_id"
-        ],
-        "title": "CreateNode",
-        "description": "CreateNode."
       },
       "DataFieldConfig": {
         "properties": {

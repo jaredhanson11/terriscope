@@ -33,7 +33,7 @@ def export_ztt(
     if not permission_service.check_for_map_access(
         user_id=current_user.id,
         map_id=map_id,
-        map_roles=["OWNER"],
+        map_roles=["OWNER", "MEMBER"],
     ):
         raise HTTPException(403)
 

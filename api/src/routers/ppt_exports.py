@@ -47,7 +47,7 @@ def create_ppt_export(
     node hierarchy to pre-compute all slide records. Bbox computation is deferred
     to GET /next so this returns immediately.
     """
-    if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER"]):
+    if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]):
         raise HTTPException(status_code=404, detail="Map not found")
 
     map_model = db.get(MapModel, map_id)
@@ -87,7 +87,7 @@ def get_next_slide(
     bbox on first access via PostGIS. Returns done=True once all slides have been
     uploaded.
     """
-    if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER"]):
+    if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]):
         raise HTTPException(status_code=404, detail="Map not found")
 
     export = db.get(MapExportModel, export_id)
@@ -156,7 +156,7 @@ def upload_slide(
     Streams the image to S3 under a new UUID key and records it on the slide row.
     Idempotent: re-uploading replaces the previous S3 object.
     """
-    if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER"]):
+    if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]):
         raise HTTPException(status_code=404, detail="Map not found")
 
     export = db.get(MapExportModel, export_id)
@@ -196,7 +196,7 @@ def generate_ppt(
 
     Idempotent against re-entry while generating: returns the current state.
     """
-    if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER"]):
+    if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]):
         raise HTTPException(status_code=404, detail="Map not found")
 
     export = db.get(MapExportModel, export_id)
@@ -244,7 +244,7 @@ def get_ppt_export_status(
     When status='complete', includes a short-lived presigned URL for the .pptx.
     When status='failed', includes the error reason.
     """
-    if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER"]):
+    if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]):
         raise HTTPException(status_code=404, detail="Map not found")
 
     export = db.get(MapExportModel, export_id)
@@ -293,7 +293,7 @@ def cancel_ppt_export(
     s3: S3ServiceDependency,
 ) -> None:
     """Cancel an export and delete all associated S3 files and DB rows."""
-    if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER"]):
+    if not permission_service.check_for_map_access(user_id=current_user.id, map_id=map_id, map_roles=["OWNER", "MEMBER"]):
         raise HTTPException(status_code=404, detail="Map not found")
 
     export = db.get(MapExportModel, export_id)

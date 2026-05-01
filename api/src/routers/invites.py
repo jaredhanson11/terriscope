@@ -20,11 +20,11 @@ logger = logging.getLogger(__name__)
 map_invites_router = APIRouter(prefix="/maps/{map_id}/invites", tags=["Invites"])
 
 
-def _require_owner(map_id: str, current_user_id: int, permission_service: PermissionsServiceDependency) -> None:
+def _require_map_access(map_id: str, current_user_id: int, permission_service: PermissionsServiceDependency) -> None:
     if not permission_service.check_for_map_access(
-        user_id=current_user_id, map_id=map_id, map_roles=["OWNER"]
+        user_id=current_user_id, map_id=map_id, map_roles=["OWNER", "MEMBER"]
     ):
-        raise HTTPException(status_code=403, detail="Only the map owner can manage invites")
+        raise HTTPException(status_code=403, detail="No access to this map")
 
 
 @map_invites_router.get("", response_model=list[MapInvite])
@@ -34,8 +34,8 @@ def list_map_invites(
     current_user: CurrentUserDependency,
     permission_service: PermissionsServiceDependency,
 ) -> list[MapInvite]:
-    """List pending invites for a map. Owner only."""
-    _require_owner(map_id, current_user.id, permission_service)
+    """List pending invites for a map. Any map member."""
+    _require_map_access(map_id, current_user.id, permission_service)
 
     invites = (
         db.execute(
@@ -73,8 +73,8 @@ def create_invite(
     current_user: CurrentUserDependency,
     permission_service: PermissionsServiceDependency,
 ) -> MapInvite:
-    """Invite a user by email to a map. Owner only."""
-    _require_owner(map_id, current_user.id, permission_service)
+    """Invite a user by email to a map. Any map member."""
+    _require_map_access(map_id, current_user.id, permission_service)
 
     email = str(body.email).lower()
 
@@ -129,8 +129,8 @@ def revoke_invite(
     current_user: CurrentUserDependency,
     permission_service: PermissionsServiceDependency,
 ) -> None:
-    """Revoke a pending invite. Owner only."""
-    _require_owner(map_id, current_user.id, permission_service)
+    """Revoke a pending invite. Any map member."""
+    _require_map_access(map_id, current_user.id, permission_service)
 
     invite = db.execute(
         select(MapInviteModel).where(
