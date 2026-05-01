@@ -33,7 +33,7 @@ def get_tile(
     For order>=1 layers: queries pre-computed node geometries.
     Data fields from data_field_config are included as flat numeric properties.
     """
-    if z < 3 or z > 11:
+    if z < 3 or z > 14:
         raise HTTPException(status_code=400, detail="Invalid zoom level")
 
     # Auth must precede the cache lookup, so we pay one extra PK lookup per tile request

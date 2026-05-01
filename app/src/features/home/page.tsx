@@ -1013,10 +1013,28 @@ function HomePageContent() {
               ))}
             </div>
 
+            {/* Recomputing pill — shown when no selection */}
+            {isRecomputing && !hasSelection && (
+              <div className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2">
+                <div className="flex items-center gap-2 rounded-full border bg-background/95 px-3 py-1.5 shadow-lg backdrop-blur-sm">
+                  <IconLoader2 className="text-muted-foreground h-3.5 w-3.5 animate-spin" />
+                  <span className="text-muted-foreground text-sm font-medium">
+                    Recomputing…
+                  </span>
+                </div>
+              </div>
+            )}
+
             {/* Floating action bar — appears when something is selected */}
             {hasSelection && activeLayer && (
               <div className="absolute bottom-4 left-1/2 z-10 -translate-x-1/2">
                 <div className="flex items-center gap-1 rounded-full border bg-background/95 px-3 py-1.5 shadow-lg backdrop-blur-sm">
+                  {isRecomputing && (
+                    <>
+                      <IconLoader2 className="text-muted-foreground ml-1 h-3.5 w-3.5 animate-spin" />
+                      <Separator orientation="vertical" className="mx-1 h-4" />
+                    </>
+                  )}
                   <span className="text-sm font-medium px-1">
                     {selectionCount}{" "}
                     {pluralize(activeLayer.name, selectionCount)}
