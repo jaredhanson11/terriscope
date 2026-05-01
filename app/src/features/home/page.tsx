@@ -437,72 +437,6 @@ function HomePageContent() {
             </SidebarHeader>
 
             <SidebarContent>
-              {/* Active Layer */}
-              <SidebarGroup>
-                <SidebarGroupLabel>
-                  Active Layer
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <button className="text-muted-foreground hover:text-foreground ml-auto">
-                        <IconInfoCircle className="h-3.5 w-3.5" />
-                      </button>
-                    </PopoverTrigger>
-                    <PopoverContent side="right" className="w-80">
-                      <div className="space-y-2">
-                        <h4 className="font-semibold">Active Layer</h4>
-                        <p className="text-muted-foreground text-sm">
-                          Select which geographic layer you want to work with.
-                          All editing tools and selection operations will apply
-                          to this layer.
-                        </p>
-                        <div className="text-muted-foreground text-xs">
-                          <strong>Tip:</strong> Use keyboard shortcuts 1-4 to
-                          quickly switch between layers.
-                        </div>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
-                </SidebarGroupLabel>
-                <SidebarGroupContent>
-                  <Select
-                    value={activeLayerId?.toString()}
-                    onValueChange={(val) => {
-                      if (mapRef.current && activeLayerId) {
-                        if (activeLayer?.order === 0) {
-                          updateSelectedZipStates(
-                            mapRef.current.getMap(),
-                            activeLayerId,
-                            selectedZipCodes,
-                            [],
-                          )
-                          setSelectedZipCodes([])
-                        } else {
-                          updateSelectedNodeStates(
-                            mapRef.current.getMap(),
-                            activeLayerId,
-                            selectedNodeIds,
-                            [],
-                          )
-                          setSelectedNodeIds([])
-                        }
-                      }
-                      setActiveLayerId(parseInt(val))
-                    }}
-                  >
-                    <SelectTrigger className="w-full">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {layerList.map((layer) => (
-                        <SelectItem key={layer.id} value={layer.id.toString()}>
-                          {layer.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </SidebarGroupContent>
-              </SidebarGroup>
-
               {/* Base Map */}
               <SidebarGroup>
                 <SidebarGroupLabel>
@@ -569,14 +503,23 @@ function HomePageContent() {
                       const hasFill = fillLayerId === layer.id
                       const hasBorder = borderLayerIds.has(layer.id)
                       const hasLabels = labelLayerIds.has(layer.id)
+                      const isActive = activeLayerId === layer.id
                       // Build label options: "Name" plus one entry per field+aggregation combo
                       const mapDataFields = activeMap.data_field_config ?? []
 
                       return (
                         <Collapsible key={layer.id}>
-                          <CollapsibleTrigger className="group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground">
+                          <CollapsibleTrigger
+                            className={`group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-sidebar-accent hover:text-sidebar-accent-foreground ${isActive ? "bg-sidebar-accent/40" : ""}`}
+                          >
+                            <span
+                              aria-hidden="true"
+                              className={`h-1.5 w-1.5 shrink-0 rounded-full transition-colors ${isActive ? "bg-primary" : "bg-transparent"}`}
+                            />
                             <IconChevronDown className="text-muted-foreground h-3.5 w-3.5 shrink-0 transition-transform group-data-[state=closed]:-rotate-90" />
-                            <span className="flex-1 truncate text-left font-medium">
+                            <span
+                              className={`flex-1 truncate text-left ${isActive ? "font-semibold" : "font-medium"}`}
+                            >
                               {layer.name}
                             </span>
                             <div className="flex items-center gap-1">
@@ -971,46 +914,89 @@ function HomePageContent() {
               </div>
             )}
 
-            <div className="absolute bottom-4 left-4 flex flex-col gap-0.5 rounded-lg border bg-background/90 p-1 shadow-md backdrop-blur-sm">
-              {(
-                [
-                  {
-                    tool: "pan",
-                    icon: IconHandGrab,
-                    label: "Pan",
-                    shortcut: "V",
-                  },
-                  {
-                    tool: "select",
-                    icon: IconLasso,
-                    label: "Select",
-                    shortcut: "L",
-                  },
-                ] as const
-              ).map(({ tool, icon: Icon, label, shortcut }) => (
-                <Tooltip key={tool}>
-                  <TooltipTrigger asChild>
-                    <button
-                      onClick={() => {
-                        setCurrentTool(tool)
-                      }}
-                      className={`rounded p-2 transition-colors ${
-                        currentTool === tool
-                          ? "bg-primary text-primary-foreground"
-                          : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                      }`}
-                    >
-                      <Icon className="h-4 w-4" />
-                    </button>
-                  </TooltipTrigger>
-                  <TooltipContent side="right">
-                    {label}
-                    <kbd className="bg-muted text-muted-foreground ml-2 rounded px-1 py-0.5 font-mono text-[10px]">
-                      {shortcut}
-                    </kbd>
-                  </TooltipContent>
-                </Tooltip>
-              ))}
+            <div className="absolute bottom-4 left-4 flex flex-col items-start gap-2">
+              <Select
+                value={activeLayerId?.toString()}
+                onValueChange={(val) => {
+                  if (mapRef.current && activeLayerId) {
+                    if (activeLayer?.order === 0) {
+                      updateSelectedZipStates(
+                        mapRef.current.getMap(),
+                        activeLayerId,
+                        selectedZipCodes,
+                        [],
+                      )
+                      setSelectedZipCodes([])
+                    } else {
+                      updateSelectedNodeStates(
+                        mapRef.current.getMap(),
+                        activeLayerId,
+                        selectedNodeIds,
+                        [],
+                      )
+                      setSelectedNodeIds([])
+                    }
+                  }
+                  setActiveLayerId(parseInt(val))
+                }}
+              >
+                <SelectTrigger className="h-auto w-auto min-w-36 max-w-48 rounded-lg border bg-background/90 px-3 py-1.5 shadow-md backdrop-blur-sm">
+                  <div className="flex min-w-0 flex-1 items-center gap-1.5">
+                    <span className="text-muted-foreground shrink-0 text-xs">
+                      Active
+                    </span>
+                    <SelectValue />
+                  </div>
+                </SelectTrigger>
+                <SelectContent>
+                  {layerList.map((layer) => (
+                    <SelectItem key={layer.id} value={layer.id.toString()}>
+                      {layer.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="flex flex-col gap-0.5 rounded-lg border bg-background/90 p-1 shadow-md backdrop-blur-sm">
+                {(
+                  [
+                    {
+                      tool: "pan",
+                      icon: IconHandGrab,
+                      label: "Pan",
+                      shortcut: "V",
+                    },
+                    {
+                      tool: "select",
+                      icon: IconLasso,
+                      label: "Select",
+                      shortcut: "L",
+                    },
+                  ] as const
+                ).map(({ tool, icon: Icon, label, shortcut }) => (
+                  <Tooltip key={tool}>
+                    <TooltipTrigger asChild>
+                      <button
+                        onClick={() => {
+                          setCurrentTool(tool)
+                        }}
+                        className={`rounded p-2 transition-colors ${
+                          currentTool === tool
+                            ? "bg-primary text-primary-foreground"
+                            : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                        }`}
+                      >
+                        <Icon className="h-4 w-4" />
+                      </button>
+                    </TooltipTrigger>
+                    <TooltipContent side="right">
+                      {label}
+                      <kbd className="bg-muted text-muted-foreground ml-2 rounded px-1 py-0.5 font-mono text-[10px]">
+                        {shortcut}
+                      </kbd>
+                    </TooltipContent>
+                  </Tooltip>
+                ))}
+              </div>
             </div>
 
             {/* Floating action bar — appears when something is selected */}

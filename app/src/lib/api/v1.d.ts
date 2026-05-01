@@ -232,26 +232,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/nodes": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /**
-         * Create Node
-         * @description Create node.
-         */
-        post: operations["create_node_nodes_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/nodes/query": {
         parameters: {
             query?: never;
@@ -596,7 +576,7 @@ export interface paths {
         head?: never;
         /**
          * Patch Map
-         * @description Rename a map. Owner only.
+         * @description Rename a map. Any map member.
          */
         patch: operations["patch_map_maps__map_id__patch"];
         trace?: never;
@@ -610,13 +590,13 @@ export interface paths {
         };
         /**
          * List Map Invites
-         * @description List pending invites for a map. Owner only.
+         * @description List pending invites for a map. Any map member.
          */
         get: operations["list_map_invites_maps__map_id__invites_get"];
         put?: never;
         /**
          * Create Invite
-         * @description Invite a user by email to a map. Owner only.
+         * @description Invite a user by email to a map. Any map member.
          */
         post: operations["create_invite_maps__map_id__invites_post"];
         delete?: never;
@@ -637,7 +617,7 @@ export interface paths {
         post?: never;
         /**
          * Revoke Invite
-         * @description Revoke a pending invite. Owner only.
+         * @description Revoke a pending invite. Any map member.
          */
         delete: operations["revoke_invite_maps__map_id__invites__invite_id__delete"];
         options?: never;
@@ -677,7 +657,7 @@ export interface paths {
         post?: never;
         /**
          * Remove Member
-         * @description Remove a member from a map. Owner only. Cannot remove yourself.
+         * @description Remove a member from a map. Any map member. Cannot remove yourself.
          */
         delete: operations["remove_member_maps__map_id__members__user_id__delete"];
         options?: never;
@@ -1091,20 +1071,6 @@ export interface components {
             layers: components["schemas"]["LayerSetup"][];
             /** Data Fields */
             data_fields: components["schemas"]["DataFieldSetup"][];
-        };
-        /**
-         * CreateNode
-         * @description CreateNode.
-         */
-        CreateNode: {
-            /** Parent Node Id */
-            parent_node_id: number | null;
-            /** Name */
-            name: string;
-            /** Color */
-            color: string;
-            /** Layer Id */
-            layer_id: number;
         };
         /**
          * DataFieldConfig
@@ -2117,39 +2083,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Layer"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_node_nodes_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["CreateNode"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["Node"];
                 };
             };
             /** @description Validation Error */

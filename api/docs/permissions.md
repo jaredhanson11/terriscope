@@ -148,8 +148,8 @@ All checked via `_check_layer_access`, which accepts any map role.
 
 | Method | Path | Auth | Roles | Notes |
 | --- | --- | --- | --- | --- |
-| GET | `/tiles/{layer_id}/{z}/{x}/{y}.pbf` | Map | `OWNER`, `MEMBER` | Auth precedes cache lookup; ~1 extra indexed PK lookup per tile. `Cache-Control` is `private`. |
-| GET | `/tiles/warm?map_id=` | Map | `OWNER`, `MEMBER` | Enqueues a Celery cache-warming task. |
+| GET | `/tiles/{layer_id}/{z}/{x}/{y}.pbf` | Public | — | **GAP** — auth was reverted because it crashed in production. See Known Gaps. |
+| GET | `/tiles/warm?map_id=` | Public | — | **GAP** — no auth; enqueues a Celery task on demand. |
 
 ## Spatial — `src/routers/spatial.py`
 
@@ -199,8 +199,14 @@ section in sync if the router is mounted later.
 
 ## Known Gaps & Inconsistencies
 
-None currently flagged. Re-add entries here when audit reveals new gaps, then
-remove once fixed.
+1. **MVT tile endpoints are public.** `GET /tiles/{layer_id}/{z}/{x}/{y}.pbf`
+   and `GET /tiles/warm` have no auth. Anyone who can guess a `layer_id` can
+   fetch its tiles, including data fields baked into tile properties. Auth was
+   added once and reverted after it crashed in production — re-attempt needs
+   to investigate the failure mode (likely cookie/CORS-related) before
+   re-enabling. The frontend already sends `credentials: "include"` on
+   `${api_base_url}/...` requests via `transformRequest`
+   ([app/src/features/home/components/map/index.tsx](../../app/src/features/home/components/map/index.tsx)), so the client side is ready.
 
 ### Open questions worth a follow-up
 
@@ -210,10 +216,6 @@ remove once fixed.
   to be tighter than data operations, restore `OWNER`-only on
   `DELETE /maps/{map_id}/members/{user_id}` and the three
   `/maps/{map_id}/invites` routes.
-- **MVT auth cost.** Every tile request now performs a layer PK lookup +
-  permission lookup before checking the tile cache. Cheap today; revisit if
-  tile QPS climbs (e.g. add a small in-process layer→map_id cache, or move
-  auth to an API gateway).
 
 ---
 
