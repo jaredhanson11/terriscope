@@ -23,6 +23,10 @@ def get_db_driver(app_name: str = "api") -> tuple[Engine, sessionmaker[Session]]
         app_settings.database.db_url,
         echo=app_settings.database.echo,
         connect_args={"application_name": app_name},
+        pool_size=20,
+        max_overflow=20,
+        pool_pre_ping=True,
+        pool_recycle=1800,
     )
     session_factory = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     return engine, session_factory
