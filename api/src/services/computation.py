@@ -225,12 +225,12 @@ class ComputationService(BaseService):
         sql = text("""
             WITH zip_unions AS (
                 SELECT za.parent_node_id AS pid,
-                       ST_UnaryUnion(ST_Collect(gz.geom_z3))       AS g3,
-                       ST_UnaryUnion(ST_Collect(gz.geom_z3_merc))  AS g3_merc,
-                       ST_UnaryUnion(ST_Collect(gz.geom_z7))       AS g7,
-                       ST_UnaryUnion(ST_Collect(gz.geom_z7_merc))  AS g7_merc,
-                       ST_UnaryUnion(ST_Collect(gz.geom_z11))      AS g11,
-                       ST_UnaryUnion(ST_Collect(gz.geom_z11_merc)) AS g11_merc
+                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(gz.geom_z3)), 3)       AS g3,
+                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(gz.geom_z3_merc)), 3)  AS g3_merc,
+                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(gz.geom_z7)), 3)       AS g7,
+                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(gz.geom_z7_merc)), 3)  AS g7_merc,
+                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(gz.geom_z11)), 3)      AS g11,
+                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(gz.geom_z11_merc)), 3) AS g11_merc
                 FROM zip_assignments za
                 JOIN geography_zip_codes gz ON gz.zip_code = za.zip_code
                 WHERE za.parent_node_id = ANY(:node_ids)
@@ -262,12 +262,12 @@ class ComputationService(BaseService):
         sql = text("""
             WITH child_unions AS (
                 SELECT c.parent_node_id AS pid,
-                       ST_UnaryUnion(ST_Collect(c.geom_z3))       AS g3,
-                       ST_UnaryUnion(ST_Collect(c.geom_z3_merc))  AS g3_merc,
-                       ST_UnaryUnion(ST_Collect(c.geom_z7))       AS g7,
-                       ST_UnaryUnion(ST_Collect(c.geom_z7_merc))  AS g7_merc,
-                       ST_UnaryUnion(ST_Collect(c.geom_z11))      AS g11,
-                       ST_UnaryUnion(ST_Collect(c.geom_z11_merc)) AS g11_merc
+                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(c.geom_z3)), 3)       AS g3,
+                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(c.geom_z3_merc)), 3)  AS g3_merc,
+                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(c.geom_z7)), 3)       AS g7,
+                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(c.geom_z7_merc)), 3)  AS g7_merc,
+                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(c.geom_z11)), 3)      AS g11,
+                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(c.geom_z11_merc)), 3) AS g11_merc
                 FROM nodes c
                 WHERE c.parent_node_id = ANY(:node_ids)
                 GROUP BY c.parent_node_id
