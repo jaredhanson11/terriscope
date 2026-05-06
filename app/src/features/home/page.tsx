@@ -160,6 +160,9 @@ function HomePageContent() {
   const [labelLayerIds, setLabelLayerIds] = useState<Set<number>>(
     () => new Set(defaultLayer ? [defaultLayer.id] : []),
   )
+  const [dataDotsLayerIds, setDataDotsLayerIds] = useState<Set<number>>(
+    () => new Set(),
+  )
   const [currentTool, setCurrentTool] = useState<"pan" | "select">("pan")
   const logoutMutation = useLogoutMutation()
 
@@ -322,8 +325,17 @@ function HomePageContent() {
         showOutline: borderLayerIds.has(_layer.id),
         showLabel: labelLayerIds.has(_layer.id),
         dataLabelField: dataLabelFields[_layer.id] ?? null,
+        showDataDots: dataDotsLayerIds.has(_layer.id),
+        dataStats: _layer.data_stats ?? null,
       })),
-    [layerList, fillLayerId, borderLayerIds, labelLayerIds, dataLabelFields],
+    [
+      layerList,
+      fillLayerId,
+      borderLayerIds,
+      labelLayerIds,
+      dataLabelFields,
+      dataDotsLayerIds,
+    ],
   )
 
   const toggleFill = (layerId: number) => {
@@ -341,6 +353,15 @@ function HomePageContent() {
 
   const toggleLabel = (layerId: number) => {
     setLabelLayerIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(layerId)) next.delete(layerId)
+      else next.add(layerId)
+      return next
+    })
+  }
+
+  const toggleDataDots = (layerId: number) => {
+    setDataDotsLayerIds((prev) => {
       const next = new Set(prev)
       if (next.has(layerId)) next.delete(layerId)
       else next.add(layerId)
@@ -607,6 +628,20 @@ function HomePageContent() {
                                   }}
                                 />
                               </div>
+                              {hasLabels && (
+                                <div className="flex items-center justify-between rounded px-1.5 py-1">
+                                  <span className="text-muted-foreground text-xs">
+                                    Data dots
+                                  </span>
+                                  <Switch
+                                    size="sm"
+                                    checked={dataDotsLayerIds.has(layer.id)}
+                                    onCheckedChange={() => {
+                                      toggleDataDots(layer.id)
+                                    }}
+                                  />
+                                </div>
+                              )}
                               {/* Data label — one option per field+agg from data_field_config */}
                               {hasLabels && mapDataFields.length > 0 && (
                                 <div className="mt-1 pb-0.5">

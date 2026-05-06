@@ -29,6 +29,7 @@ from src.schemas.dtos.graph import (
 )
 from src.schemas.graph import (
     Layer,
+    LayerDataStats,
     Node,
     NodeAncestor,
     PaginatedNodes,
@@ -38,7 +39,7 @@ from src.schemas.graph import (
     ZipAssignment,
 )
 from src.services.auth import CurrentUserDependency
-from src.services.computation import ComputationServiceDependency
+from src.services.computation import ComputationService, ComputationServiceDependency
 from src.services.graph import GraphServiceDependency
 from src.services.permissions import PermissionsServiceDependency
 from src.workers.tasks.maps import recompute_nodes_task
@@ -110,12 +111,36 @@ def create_layer(
     return Layer(id=new_layer.id, name=new_layer.name, order=new_layer.order, map_id=new_layer.map_id)
 
 
+def _layer_data_stats(
+    computation_service: ComputationService,
+    map_model: MapModel | None,
+    layer: LayerModel,
+) -> dict[str, LayerDataStats] | None:
+    """Compute live min/max per MVT property for a layer, or None if no fields."""
+    if not map_model or not map_model.data_field_config:
+        return None
+    number_fields = [
+        f for f in map_model.data_field_config
+        if f.get("type") == "number" and f.get("aggregations")
+    ]
+    if not number_fields:
+        return None
+    raw = computation_service.compute_layer_data_stats(layer.id, layer.order, number_fields)
+    if not raw:
+        return None
+    return {
+        k: LayerDataStats(min=v["min"], max=v["max"], p5=v["p5"], p95=v["p95"])
+        for k, v in raw.items()
+    }
+
+
 @graph_router.get("/layers", response_model=list[Layer])
 def list_layers(
     db: DatabaseSession,
     map_id: str,
     current_user: CurrentUserDependency,
     permission_service: PermissionsServiceDependency,
+    computation_service: ComputationServiceDependency,
 ) -> list[Layer]:
     """List layers."""
     if not permission_service.check_for_map_access(
@@ -124,8 +149,15 @@ def list_layers(
         map_roles=["OWNER", "MEMBER"],
     ):
         raise HTTPException(403, "User does not have permission to this map.")
+    map_model = db.get(MapModel, map_id)
     return [
-        Layer(id=layer.id, map_id=map_id, name=layer.name, order=layer.order)
+        Layer(
+            id=layer.id,
+            map_id=map_id,
+            name=layer.name,
+            order=layer.order,
+            data_stats=_layer_data_stats(computation_service, map_model, layer),
+        )
         for layer in db.execute(select(LayerModel).where(LayerModel.map_id == map_id)).scalars().all()
     ]
 
@@ -136,6 +168,7 @@ def get_layer(
     db: DatabaseSession,
     current_user: CurrentUserDependency,
     permission_service: PermissionsServiceDependency,
+    computation_service: ComputationServiceDependency,
 ):
     """Get a layer by id."""
     layer = db.get(LayerModel, layer_id)
@@ -147,7 +180,14 @@ def get_layer(
         map_roles=["OWNER", "MEMBER"],
     ):
         raise HTTPException(403)
-    return Layer(id=layer.id, map_id=layer.map_id, name=layer.name, order=layer.order)
+    map_model = db.get(MapModel, layer.map_id)
+    return Layer(
+        id=layer.id,
+        map_id=layer.map_id,
+        name=layer.name,
+        order=layer.order,
+        data_stats=_layer_data_stats(computation_service, map_model, layer),
+    )
 
 
 # ---------------------------------------------------------------------------

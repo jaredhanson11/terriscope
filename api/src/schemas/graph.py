@@ -109,6 +109,23 @@ class Map(BaseModel):
         )
 
 
+class LayerDataStats(BaseModel):
+    """Min/max + p5/p95 range of an MVT-side data property across one layer.
+
+    Drives client-side dot magnitude normalization so the frontend can scale
+    visual encoding (size, color) against the layer's actual data range
+    without baking the normalization into MVT tiles. p5/p95 are used for
+    winsorized normalization so a single outlier doesn't compress the bulk
+    of the distribution into a tiny visual range; min/max are kept for
+    reference and tooltips.
+    """
+
+    min: float
+    max: float
+    p5: float
+    p95: float
+
+
 class Layer(BaseModel):
     """Layer."""
 
@@ -116,6 +133,11 @@ class Layer(BaseModel):
     map_id: str
     name: str
     order: int
+    data_stats: dict[str, LayerDataStats] | None = None
+    """MVT-property-name → {min, max} for every numeric field exposed in tiles.
+    For order=0 layers keys are flat field names ("sales"); for order>=1 layers
+    keys are "{field}_{agg}" matching the MVT property naming.
+    """
 
 
 class NodeAncestor(BaseModel):

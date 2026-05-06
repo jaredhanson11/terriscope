@@ -1204,6 +1204,31 @@ export interface components {
             name: string;
             /** Order */
             order: number;
+            /** Data Stats */
+            data_stats?: {
+                [key: string]: components["schemas"]["LayerDataStats"];
+            } | null;
+        };
+        /**
+         * LayerDataStats
+         * @description Min/max + p5/p95 range of an MVT-side data property across one layer.
+         *
+         *     Drives client-side dot magnitude normalization so the frontend can scale
+         *     visual encoding (size, color) against the layer's actual data range
+         *     without baking the normalization into MVT tiles. p5/p95 are used for
+         *     winsorized normalization so a single outlier doesn't compress the bulk
+         *     of the distribution into a tiny visual range; min/max are kept for
+         *     reference and tooltips.
+         */
+        LayerDataStats: {
+            /** Min */
+            min: number;
+            /** Max */
+            max: number;
+            /** P5 */
+            p5: number;
+            /** P95 */
+            p95: number;
         };
         /**
          * LayerSetup

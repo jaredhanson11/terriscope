@@ -13,6 +13,7 @@ from src.models.graph import LayerModel, MapModel, NodeModel
 from src.services.base import BaseService
 
 _SAFE_FIELD_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+_SAFE_AGG_RE = re.compile(r"^(sum|avg|min|max)$")
 
 logger = logging.getLogger(__name__)
 
@@ -210,6 +211,93 @@ class ComputationService(BaseService):
     def _compute_data_node_layer(self, node_ids: set[int], fields: list[dict[str, Any]]) -> None:
         """Aggregate child node data into order>1 nodes."""
         self._run_data_agg(node_ids, fields, "nodes c", "c")
+
+    # ------------------------------------------------------------------
+    # Layer data stats — for client-side dot magnitude normalization
+    # ------------------------------------------------------------------
+
+    def compute_layer_data_stats(
+        self,
+        layer_id: int,
+        order: int,
+        fields: list[dict[str, Any]],
+    ) -> dict[str, dict[str, float]]:
+        """Return MVT-property-name → {min, max, p5, p95} for every (field, agg) on a layer.
+
+        Single-pass scan of zip_assignments (order=0) or nodes (order>=1) that
+        computes MIN/MAX and the 5th/95th percentiles for every field × aggregation
+        combo at once. Percentiles drive winsorized client-side normalization so
+        a single outlier doesn't crush the bulk of the distribution; min/max are
+        kept alongside for reference (tooltips, future encodings).
+
+        Keys mirror the MVT property names (flat field for zip layer,
+        "{field}_{agg}" for node layers) so the frontend uses the same string
+        when reading feature properties and looking up the range.
+        """
+        if not fields:
+            return {}
+
+        select_parts: list[str] = []
+        result_keys: list[tuple[str, str | None]] = []
+        for f in fields:
+            fname = f["field"]
+            if not _SAFE_FIELD_RE.match(fname):
+                raise ValueError(f"Unsafe field key: {fname!r}")
+            if order == 0:
+                expr = f"(data->>'{fname}')::numeric"
+                select_parts.append(f"MIN({expr}) AS \"{fname}__min\"")
+                select_parts.append(f"MAX({expr}) AS \"{fname}__max\"")
+                select_parts.append(
+                    f"percentile_cont(0.05) WITHIN GROUP (ORDER BY {expr}) AS \"{fname}__p5\""
+                )
+                select_parts.append(
+                    f"percentile_cont(0.95) WITHIN GROUP (ORDER BY {expr}) AS \"{fname}__p95\""
+                )
+                result_keys.append((fname, None))
+            else:
+                aggs: list[Any] = list(f.get("aggregations") or [])
+                for agg_raw in aggs:
+                    agg = str(agg_raw)
+                    if not _SAFE_AGG_RE.match(agg):
+                        continue
+                    expr = f"(data->'{fname}'->>'{agg}')::numeric"
+                    select_parts.append(f"MIN({expr}) AS \"{fname}_{agg}__min\"")
+                    select_parts.append(f"MAX({expr}) AS \"{fname}_{agg}__max\"")
+                    select_parts.append(
+                        f"percentile_cont(0.05) WITHIN GROUP (ORDER BY {expr}) AS \"{fname}_{agg}__p5\""
+                    )
+                    select_parts.append(
+                        f"percentile_cont(0.95) WITHIN GROUP (ORDER BY {expr}) AS \"{fname}_{agg}__p95\""
+                    )
+                    result_keys.append((fname, agg))
+
+        if not select_parts:
+            return {}
+
+        from_clause = "zip_assignments" if order == 0 else "nodes"
+        sql = text(  # noqa: S608 — field/agg names validated above
+            f"SELECT {', '.join(select_parts)} FROM {from_clause} WHERE layer_id = :layer_id"
+        )
+        row = self.db.execute(sql, {"layer_id": layer_id}).mappings().one_or_none()
+        if not row:
+            return {}
+
+        out: dict[str, dict[str, float]] = {}
+        for fname, agg in result_keys:
+            key = fname if agg is None else f"{fname}_{agg}"
+            mn = row[f"{key}__min"]
+            mx = row[f"{key}__max"]
+            p5 = row[f"{key}__p5"]
+            p95 = row[f"{key}__p95"]
+            if mn is None or mx is None or p5 is None or p95 is None:
+                continue
+            out[key] = {
+                "min": float(mn),
+                "max": float(mx),
+                "p5": float(p5),
+                "p95": float(p95),
+            }
+        return out
 
     # ------------------------------------------------------------------
     # Geometry helpers

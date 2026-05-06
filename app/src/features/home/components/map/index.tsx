@@ -116,6 +116,23 @@ export const Map = forwardRef<
     const [lassoPoints, setLassoPoints] = useState<[number, number][]>([])
     const mouseDownPixel = useRef<{ x: number; y: number } | null>(null)
 
+    // Cursor-pinned tooltip for the data-dot. Reads the chosen MVT data label
+    // property directly from the hovered feature so the value lines up with
+    // the dot's size/color (which are normalized off the same property
+    // against the layer's min/max).
+    const [dotTooltip, setDotTooltip] = useState<{
+      x: number
+      y: number
+      name: string
+      field: string
+      value: number | null
+      // DEBUG[dot-classification]: 0–100 normalized magnitude used to drive
+      // the dot's size/color. Mirrors the paint expression for verification.
+      // Remove this field (and its render block / compute site) when no
+      // longer needed — grep `DEBUG[dot-classification]`.
+      debugClassification: number | null
+    } | null>(null)
+
     // Update lasso visualization as it's being drawn
     useEffect(() => {
       const map = mapRef.current?.getMap()
@@ -195,10 +212,11 @@ export const Map = forwardRef<
         return
       }
 
+      const map = mapRef.current?.getMap()
+      if (!map) return
+      const currentLayers = layersRef.current
+
       if (onHover) {
-        const map = mapRef.current?.getMap()
-        if (!map) return
-        const currentLayers = layersRef.current
         const selectionLayerIds = currentLayers
           .map((l) => `layer-${l.id.toString()}-selection`)
           .filter((id) => map.getLayer(id))
@@ -233,6 +251,71 @@ export const Map = forwardRef<
         }
         onHover(items)
       }
+
+      // Data-dot tooltip — only against visible dot layers.
+      const dotLayerIds = currentLayers
+        .map((l) => `layer-${l.id.toString()}-dots`)
+        .filter(
+          (id) =>
+            map.getLayer(id) &&
+            map.getLayoutProperty(id, "visibility") !== "none",
+        )
+      if (dotLayerIds.length === 0) {
+        if (dotTooltip) setDotTooltip(null)
+        return
+      }
+      const dotFeatures = map.queryRenderedFeatures(e.point, {
+        layers: dotLayerIds,
+      })
+      if (dotFeatures.length === 0) {
+        if (dotTooltip) setDotTooltip(null)
+        return
+      }
+      const f = dotFeatures[0]
+      const match = /^layer-(\d+)-dots$/.exec(f.layer.id)
+      if (!match) return
+      const layerId = parseInt(match[1])
+      const layerOption = currentLayers.find((l) => l.id === layerId)
+      if (!layerOption?.dataLabelField) {
+        if (dotTooltip) setDotTooltip(null)
+        return
+      }
+      const isZip = layerOption.order === 0
+      const name = isZip
+        ? (f.properties.zip_code as string)
+        : ((f.properties.name as string | undefined) ?? "")
+      const rawValue = f.properties[layerOption.dataLabelField] as
+        | number
+        | string
+        | null
+        | undefined
+      const value =
+        rawValue == null || rawValue === ""
+          ? null
+          : typeof rawValue === "number"
+            ? rawValue
+            : Number(rawValue)
+      // DEBUG[dot-classification]: mirror the paint expression's winsorized
+      // normalization — `clamp((value − p5) / (p95 − p5), 0, 1) * 100`,
+      // falling back to min/max when the percentile window collapses.
+      // Remove with the matching state field and render block.
+      const stats = layerOption.dataStats?.[layerOption.dataLabelField]
+      const debugLo =
+        stats && stats.p5 < stats.p95 ? stats.p5 : (stats?.min ?? 0)
+      const debugHi =
+        stats && stats.p5 < stats.p95 ? stats.p95 : (stats?.max ?? 0)
+      const debugClassification =
+        value != null && stats && debugHi > debugLo
+          ? Math.max(0, Math.min(1, (value - debugLo) / (debugHi - debugLo))) * 100
+          : null
+      setDotTooltip({
+        x: e.point.x,
+        y: e.point.y,
+        name,
+        field: layerOption.dataLabelField,
+        value,
+        debugClassification,
+      })
     }
 
     // Mouse UP - click = single select, drag = lasso
@@ -288,7 +371,10 @@ export const Map = forwardRef<
           onMouseDown={handleMouseDown}
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
-          onMouseOut={onHoverEnd}
+          onMouseOut={() => {
+            setDotTooltip(null)
+            onHoverEnd?.()
+          }}
           cursor={currentTool === "select" ? "crosshair" : "grab"}
           initialViewState={INITIAL_VIEW_STATE}
           mapStyle={EMPTY_STYLE}
@@ -306,6 +392,41 @@ export const Map = forwardRef<
           maxParallelImageRequests={6}
           canvasContextAttributes={{ preserveDrawingBuffer: true }}
         />
+        {dotTooltip && (
+          <div
+            className="pointer-events-none absolute z-10 rounded-md border bg-background/95 px-2 py-1 shadow-md backdrop-blur-sm"
+            style={{
+              left: dotTooltip.x + 14,
+              top: dotTooltip.y + 14,
+            }}
+          >
+            <div className="text-xs font-medium leading-tight">
+              {dotTooltip.name}
+            </div>
+            <div className="text-muted-foreground text-[11px] leading-tight">
+              <span className="font-mono">{dotTooltip.field}</span>:{" "}
+              <span className="font-mono">
+                {dotTooltip.value == null
+                  ? "—"
+                  : dotTooltip.value.toLocaleString(undefined, {
+                      maximumFractionDigits: 4,
+                    })}
+              </span>
+            </div>
+            {/* DEBUG[dot-classification]: shows the 0–100 magnitude that
+                drives dot size/color. Remove this block (and the matching
+                state field + compute site) when the styling looks right. */}
+            {dotTooltip.debugClassification !== null && (
+              <div className="mt-0.5 border-t pt-0.5 text-[10px] leading-tight text-amber-600">
+                debug: classification{" "}
+                <span className="font-mono">
+                  {dotTooltip.debugClassification.toFixed(1)}
+                </span>{" "}
+                / 100
+              </div>
+            )}
+          </div>
+        )}
       </div>
     )
   },

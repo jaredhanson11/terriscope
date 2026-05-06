@@ -2909,6 +2909,20 @@
           "order": {
             "type": "integer",
             "title": "Order"
+          },
+          "data_stats": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "$ref": "#/components/schemas/LayerDataStats"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Stats"
           }
         },
         "type": "object",
@@ -2920,6 +2934,35 @@
         ],
         "title": "Layer",
         "description": "Layer."
+      },
+      "LayerDataStats": {
+        "properties": {
+          "min": {
+            "type": "number",
+            "title": "Min"
+          },
+          "max": {
+            "type": "number",
+            "title": "Max"
+          },
+          "p5": {
+            "type": "number",
+            "title": "P5"
+          },
+          "p95": {
+            "type": "number",
+            "title": "P95"
+          }
+        },
+        "type": "object",
+        "required": [
+          "min",
+          "max",
+          "p5",
+          "p95"
+        ],
+        "title": "LayerDataStats",
+        "description": "Min/max + p5/p95 range of an MVT-side data property across one layer.\n\nDrives client-side dot magnitude normalization so the frontend can scale\nvisual encoding (size, color) against the layer's actual data range\nwithout baking the normalization into MVT tiles. p5/p95 are used for\nwinsorized normalization so a single outlier doesn't compress the bulk\nof the distribution into a tiny visual range; min/max are kept for\nreference and tooltips."
       },
       "LayerSetup": {
         "properties": {
