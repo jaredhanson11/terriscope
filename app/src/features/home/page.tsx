@@ -74,6 +74,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip"
 import { activeMapStorageKey } from "@/lib/active-map-storage"
+import {
+  DataLegend,
+  type LegendLayer,
+} from "@/features/home/components/data-legend"
 import { DeleteDialog } from "@/features/home/components/delete-dialog"
 import { ExportPptDialog } from "@/features/home/components/export-ppt-dialog"
 import { ExportZttDialog } from "@/features/home/components/export-ztt-dialog"
@@ -132,8 +136,21 @@ function HomePageContent() {
   const [dataLabelFields, setDataLabelFields] = useState<
     Record<number, string | null>
   >({})
-  const setDataLabelField = (layerId: number, field: string | null) => {
+  // Layers with the "Value" chip on (text line under the name label). Gated
+  // upstream by the dataOverlayLayerIds master toggle.
+  const [dataValueLayerIds, setDataValueLayerIds] = useState<Set<number>>(
+    () => new Set(),
+  )
+  const setDataLabelField = (layerId: number, field: string) => {
     setDataLabelFields((prev) => ({ ...prev, [layerId]: field }))
+  }
+  const toggleDataValue = (layerId: number) => {
+    setDataValueLayerIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(layerId)) next.delete(layerId)
+      else next.add(layerId)
+      return next
+    })
   }
   const queryClient = useQueryClient()
   const maps = useMaps()
@@ -163,6 +180,15 @@ function HomePageContent() {
   const [dataDotsLayerIds, setDataDotsLayerIds] = useState<Set<number>>(
     () => new Set(),
   )
+  // Master per-layer switch that gates the entire Data overlay block (Field +
+  // Display subsections). When off the layer's chosen field/value/dot prefs
+  // persist but nothing renders. First time turned on for a layer, we
+  // auto-pick the first available field and enable the Value chip so the
+  // user sees something immediately.
+  const [dataOverlayLayerIds, setDataOverlayLayerIds] = useState<Set<number>>(
+    () => new Set(),
+  )
+  const [legendDismissed, setLegendDismissed] = useState(false)
   const [currentTool, setCurrentTool] = useState<"pan" | "select">("pan")
   const logoutMutation = useLogoutMutation()
 
@@ -318,25 +344,55 @@ function HomePageContent() {
 
   const layers = useMemo(
     () =>
-      layerList.map((_layer) => ({
-        id: _layer.id,
-        order: _layer.order,
-        showFill: fillLayerId === _layer.id,
-        showOutline: borderLayerIds.has(_layer.id),
-        showLabel: labelLayerIds.has(_layer.id),
-        dataLabelField: dataLabelFields[_layer.id] ?? null,
-        showDataDots: dataDotsLayerIds.has(_layer.id),
-        dataStats: _layer.data_stats ?? null,
-      })),
+      layerList.map((_layer) => {
+        const overlayOn = dataOverlayLayerIds.has(_layer.id)
+        return {
+          id: _layer.id,
+          order: _layer.order,
+          showFill: fillLayerId === _layer.id,
+          showOutline: borderLayerIds.has(_layer.id),
+          showLabel: labelLayerIds.has(_layer.id),
+          dataLabelField: overlayOn
+            ? (dataLabelFields[_layer.id] ?? null)
+            : null,
+          showDataValue: overlayOn && dataValueLayerIds.has(_layer.id),
+          showDataDots: overlayOn && dataDotsLayerIds.has(_layer.id),
+          dataStats: _layer.data_stats ?? null,
+        }
+      }),
     [
       layerList,
       fillLayerId,
       borderLayerIds,
       labelLayerIds,
       dataLabelFields,
+      dataValueLayerIds,
       dataDotsLayerIds,
+      dataOverlayLayerIds,
     ],
   )
+
+  const legendLayers = useMemo<LegendLayer[]>(() => {
+    const result: LegendLayer[] = []
+    // Render legend top-down (highest order first) to match the visual stack
+    // of layers: top territories on top of the legend, zips at the bottom.
+    for (const layer of [...layerList].sort((a, b) => b.order - a.order)) {
+      if (!dataOverlayLayerIds.has(layer.id)) continue
+      if (!dataDotsLayerIds.has(layer.id)) continue
+      const field = dataLabelFields[layer.id] ?? null
+      if (!field) continue
+      const stats = layer.data_stats?.[field]
+      if (!stats) continue
+      result.push({
+        id: layer.id,
+        name: layer.name,
+        field,
+        stats,
+        order: layer.order,
+      })
+    }
+    return result
+  }, [layerList, dataOverlayLayerIds, dataDotsLayerIds, dataLabelFields])
 
   const toggleFill = (layerId: number) => {
     setFillLayerId((prev) => (prev === layerId ? null : layerId))
@@ -347,6 +403,38 @@ function HomePageContent() {
       const next = new Set(prev)
       if (next.has(layerId)) next.delete(layerId)
       else next.add(layerId)
+      return next
+    })
+  }
+
+  const toggleDataOverlay = (layerId: number, layerOrder: number) => {
+    setDataOverlayLayerIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(layerId)) {
+        next.delete(layerId)
+        return next
+      }
+      next.add(layerId)
+      // First-time / recovery defaults: ensure a field is selected and at
+      // least one display chip is on so toggling the master switch always
+      // shows something. Field config can be empty (no overlay possible).
+      const fields = activeMap.data_field_config ?? []
+      if (fields.length > 0) {
+        const currentField = dataLabelFields[layerId] ?? null
+        if (!currentField) {
+          const first = fields[0]
+          const defaultField =
+            layerOrder === 0
+              ? first.field
+              : `${first.field}_${first.aggregations[0] ?? "sum"}`
+          setDataLabelFields((m) => ({ ...m, [layerId]: defaultField }))
+        }
+        const valueOn = dataValueLayerIds.has(layerId)
+        const dotOn = dataDotsLayerIds.has(layerId)
+        if (!valueOn && !dotOn) {
+          setDataValueLayerIds((s) => new Set(s).add(layerId))
+        }
+      }
       return next
     })
   }
@@ -557,7 +645,7 @@ function HomePageContent() {
                               <span
                                 className={`rounded px-1 py-0.5 font-mono text-[10px] font-semibold leading-none transition-colors ${hasLabels ? "bg-primary text-primary-foreground" : "text-muted-foreground/50"}`}
                               >
-                                L
+                                N
                               </span>
                               <button
                                 className="text-muted-foreground/50 hover:text-foreground ml-0.5 transition-colors"
@@ -618,7 +706,7 @@ function HomePageContent() {
                               </div>
                               <div className="flex items-center justify-between rounded px-1.5 py-1">
                                 <span className="text-muted-foreground text-xs">
-                                  Labels
+                                  Name
                                 </span>
                                 <Switch
                                   size="sm"
@@ -628,66 +716,108 @@ function HomePageContent() {
                                   }}
                                 />
                               </div>
-                              {hasLabels && (
-                                <div className="flex items-center justify-between rounded px-1.5 py-1">
-                                  <span className="text-muted-foreground text-xs">
-                                    Data dots
-                                  </span>
-                                  <Switch
-                                    size="sm"
-                                    checked={dataDotsLayerIds.has(layer.id)}
-                                    onCheckedChange={() => {
-                                      toggleDataDots(layer.id)
-                                    }}
-                                  />
-                                </div>
-                              )}
-                              {/* Data label — one option per field+agg from data_field_config */}
-                              {hasLabels && mapDataFields.length > 0 && (
-                                <div className="mt-1 pb-0.5">
-                                  <p className="text-muted-foreground/70 px-1.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wider">
-                                    Data label
-                                  </p>
-                                  {[
-                                    {
-                                      mvtProp: null as string | null,
-                                      label: "None",
-                                    },
-                                    ...(layer.order === 0
-                                      ? mapDataFields.map((f) => ({
-                                          mvtProp: f.field,
-                                          label: f.label || f.field,
-                                        }))
-                                      : mapDataFields.flatMap((f) =>
-                                          f.aggregations.map((agg) => ({
-                                            mvtProp: `${f.field}_${agg}`,
-                                            label: `${f.label || f.field} (${agg})`,
-                                          })),
-                                        )),
-                                  ].map(({ mvtProp, label }) => {
-                                    const isActive =
-                                      (dataLabelFields[layer.id] ?? null) ===
-                                      mvtProp
-                                    return (
-                                      <button
-                                        key={mvtProp ?? "none"}
-                                        onClick={() => {
-                                          setDataLabelField(layer.id, mvtProp)
-                                        }}
-                                        className={`flex w-full items-center gap-2 rounded px-1.5 py-0.5 text-left transition-colors ${
-                                          isActive
-                                            ? "text-primary"
-                                            : "text-muted-foreground hover:text-foreground"
-                                        }`}
-                                      >
-                                        <span
-                                          className={`h-1.5 w-1.5 shrink-0 rounded-full ${isActive ? "bg-primary" : "bg-muted-foreground/25"}`}
-                                        />
-                                        <span className="text-xs">{label}</span>
-                                      </button>
-                                    )
-                                  })}
-                                </div>
+                              {/* Data overlay master switch. When on, reveals
+                                  Field (single-select, no None option) and
+                                  Display (multi-select chips) subsections. */}
+                              {mapDataFields.length > 0 && (
+                                <>
+                                  <div className="flex items-center justify-between rounded px-1.5 py-1">
+                                    <span className="text-muted-foreground text-xs">
+                                      Data overlay
+                                    </span>
+                                    <Switch
+                                      size="sm"
+                                      checked={dataOverlayLayerIds.has(
+                                        layer.id,
+                                      )}
+                                      onCheckedChange={() => {
+                                        toggleDataOverlay(
+                                          layer.id,
+                                          layer.order,
+                                        )
+                                      }}
+                                    />
+                                  </div>
+                                  {dataOverlayLayerIds.has(layer.id) && (
+                                    <div className="mt-0.5 ml-1 space-y-2 border-l pl-2 py-1">
+                                      <div>
+                                        <p className="text-muted-foreground/70 px-1.5 pb-0.5 text-[10px] font-semibold uppercase tracking-wider">
+                                          Field
+                                        </p>
+                                        {(layer.order === 0
+                                          ? mapDataFields.map((f) => ({
+                                              mvtProp: f.field,
+                                              label: f.label || f.field,
+                                            }))
+                                          : mapDataFields.flatMap((f) =>
+                                              f.aggregations.map((agg) => ({
+                                                mvtProp: `${f.field}_${agg}`,
+                                                label: `${f.label || f.field} (${agg})`,
+                                              })),
+                                            )
+                                        ).map(({ mvtProp, label }) => {
+                                          const isActive =
+                                            (dataLabelFields[layer.id] ??
+                                              null) === mvtProp
+                                          return (
+                                            <button
+                                              key={mvtProp}
+                                              onClick={() => {
+                                                setDataLabelField(
+                                                  layer.id,
+                                                  mvtProp,
+                                                )
+                                              }}
+                                              className={`flex w-full items-center gap-2 rounded px-1.5 py-0.5 text-left transition-colors ${
+                                                isActive
+                                                  ? "text-primary"
+                                                  : "text-muted-foreground hover:text-foreground"
+                                              }`}
+                                            >
+                                              <span
+                                                className={`h-1.5 w-1.5 shrink-0 rounded-full ${isActive ? "bg-primary" : "bg-muted-foreground/25"}`}
+                                              />
+                                              <span className="text-xs">
+                                                {label}
+                                              </span>
+                                            </button>
+                                          )
+                                        })}
+                                      </div>
+                                      <div>
+                                        <p className="text-muted-foreground/70 px-1.5 pb-1 text-[10px] font-semibold uppercase tracking-wider">
+                                          Display
+                                        </p>
+                                        <div className="flex flex-wrap gap-1.5 px-1.5">
+                                          <button
+                                            onClick={() => {
+                                              toggleDataValue(layer.id)
+                                            }}
+                                            className={`rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                                              dataValueLayerIds.has(layer.id)
+                                                ? "border-primary bg-primary/10 text-primary"
+                                                : "border-border text-muted-foreground hover:text-foreground"
+                                            }`}
+                                          >
+                                            Value
+                                          </button>
+                                          <button
+                                            onClick={() => {
+                                              toggleDataDots(layer.id)
+                                            }}
+                                            className={`rounded-md border px-2 py-0.5 text-[11px] font-medium transition-colors ${
+                                              dataDotsLayerIds.has(layer.id)
+                                                ? "border-primary bg-primary/10 text-primary"
+                                                : "border-border text-muted-foreground hover:text-foreground"
+                                            }`}
+                                          >
+                                            Dot
+                                          </button>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  )}
+                                </>
                               )}
                             </div>
                           </CollapsibleContent>
@@ -948,6 +1078,19 @@ function HomePageContent() {
                 </div>
               </div>
             )}
+
+            <DataLegend
+              layers={legendLayers}
+              dataFieldConfig={activeMap.data_field_config ?? []}
+              dismissed={legendDismissed}
+              onDismiss={() => {
+                setLegendDismissed(true)
+              }}
+              onRestore={() => {
+                setLegendDismissed(false)
+              }}
+              shiftedLeft={hasSelection}
+            />
 
             <div className="absolute bottom-4 left-4 flex flex-col items-start gap-2">
               <Select

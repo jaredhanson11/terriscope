@@ -19,9 +19,11 @@ export type LayerViewOption = {
   showFill: boolean
   showOutline: boolean
   showLabel: boolean
-  /** MVT property name (e.g. "customers_sum") to render as a second styled line below the name label. Null disables the data line. */
+  /** MVT property name (e.g. "customers_sum") chosen as the data overlay field. Null disables the overlay entirely. */
   dataLabelField: string | null
-  /** Render a sized/colored circle at the label centroid instead of the text label. Visualizes the data field magnitude. */
+  /** When true and labels are visible, render the field's value as a second styled line below the name label. */
+  showDataValue: boolean
+  /** Render a sized/colored circle at the label centroid. Visualizes the data field magnitude. Independent of showLabel. */
   showDataDots: boolean
   /** Per-layer min/max for every numeric MVT property, from GET /layers. Drives dot normalization. */
   dataStats: LayerDataStats | null

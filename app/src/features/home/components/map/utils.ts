@@ -9,7 +9,9 @@ import {
   type LayerViewOptions,
 } from "./config"
 
-const DOT_COLOR_STOPS = [
+/** 5-stop palette used for both the rendered dots and the on-map legend.
+ *  Each stop maps to a 20% slice of the winsorized [p5, p95] range. */
+export const DOT_COLOR_STOPS = [
   "#3b82f6", // 0.0–0.2  blue
   "#10b981", // 0.2–0.4  green
   "#eab308", // 0.4–0.6  yellow
@@ -173,26 +175,43 @@ function buildLabelDotOffsetExpr(
   ]
 }
 
-// Two-line format expression: name (dark) + optional data value (blue, smaller)
+// Builds a label expression for one of four modes the user can toggle into:
+//   showName + value  → "Name\nvalue"  (name dark, value blue/smaller)
+//   showName only     → "Name"
+//   value only        → "value"        (blue/smaller, on its own)
+//   neither           → null caller skips rendering
 function buildLabelExpression(
-  isZipLayer = false,
-  dataLabelField: string | null = null,
-): maplibregl.ExpressionSpecification {
+  isZipLayer: boolean,
+  showName: boolean,
+  dataLabelField: string | null,
+): maplibregl.ExpressionSpecification | null {
   const nameExpr: maplibregl.ExpressionSpecification = isZipLayer
     ? ["get", "zip_code"]
     : ["get", "name"]
 
-  if (!dataLabelField) return nameExpr
+  if (showName && !dataLabelField) return nameExpr
 
-  return [
-    "format",
-    nameExpr,
-    {},
-    "\n",
-    {},
-    ["coalesce", ["to-string", ["get", dataLabelField]], "—"],
-    { "text-color": "#2563eb", "font-scale": 0.82 },
-  ] as unknown as maplibregl.ExpressionSpecification
+  if (!showName && dataLabelField) {
+    return [
+      "format",
+      ["coalesce", ["to-string", ["get", dataLabelField]], "—"],
+      { "text-color": "#2563eb" },
+    ] as unknown as maplibregl.ExpressionSpecification
+  }
+
+  if (showName && dataLabelField) {
+    return [
+      "format",
+      nameExpr,
+      {},
+      "\n",
+      {},
+      ["coalesce", ["to-string", ["get", dataLabelField]], "—"],
+      { "text-color": "#2563eb", "font-scale": 0.82 },
+    ] as unknown as maplibregl.ExpressionSpecification
+  }
+
+  return null
 }
 
 // Returns the MapLibre layer ID of the lowest data layer currently in the map.
@@ -364,19 +383,22 @@ export function updateLayers(
     )
   })
 
-  // Pass 4 — labels. When dots are on, render only the node/zip name and pin
-  // it just above the dot so its bottom edge sits flush with the dot's top
-  // (offset tracks the dot's radius, which scales with norm and zoom).
-  // Otherwise render the standard name + optional data line, centered.
-  layers.forEach(({ id, order, showLabel, dataLabelField, showDataDots, dataStats }) => {
+  // Pass 4 — labels. The text symbol layer is shared by both the name label
+  // (showLabel switch) and the data value (showDataValue chip). Either, both,
+  // or neither can be active. When dots are on we anchor the label above the
+  // dot so they don't overlap.
+  layers.forEach(({ id, order, showLabel, dataLabelField, showDataValue, showDataDots, dataStats }) => {
     const labelLayerId = `layer-${id.toString()}-label`
     const sourceId = `layer-${id.toString()}`
     const norm = buildDotNorm(dataLabelField, dataStats)
     const dotsActive = showDataDots && norm !== null
+    const valueActive = showDataValue && dataLabelField !== null
     const textFieldExpr = buildLabelExpression(
       order === 0,
-      dotsActive ? null : dataLabelField,
+      showLabel,
+      valueActive ? dataLabelField : null,
     )
+    const labelVisible = textFieldExpr !== null
     const labelSizeMin = Math.min(10 + order * 2, 16)
     const labelSizeMax = Math.min(13 + order * 4, 24)
     const labelFont =
@@ -395,7 +417,7 @@ export function updateLayers(
         source: sourceId,
         "source-layer": order === 0 ? "zip_labels" : "node_labels",
         layout: {
-          "text-field": textFieldExpr,
+          "text-field": textFieldExpr ?? "",
           "text-size": [
             "interpolate",
             ["linear"],
@@ -419,7 +441,7 @@ export function updateLayers(
           "text-halo-blur": 1,
         },
       })
-    } else {
+    } else if (textFieldExpr !== null) {
       map.setLayoutProperty(labelLayerId, "text-field", textFieldExpr)
       map.setLayoutProperty(labelLayerId, "text-anchor", textAnchor)
       map.setLayoutProperty(labelLayerId, "text-offset", textOffset)
@@ -427,7 +449,7 @@ export function updateLayers(
     map.setLayoutProperty(
       labelLayerId,
       "visibility",
-      showLabel ? "visible" : "none",
+      labelVisible ? "visible" : "none",
     )
   })
 
@@ -435,9 +457,9 @@ export function updateLayers(
   // color encode the magnitude of the layer's chosen data label field,
   // normalized against the layer-wide min/max returned by GET /layers. Hides
   // when no field is selected, no stats exist for the field, or the user
-  // hasn't toggled dots on. Paint is rebuilt on every call so changes to
-  // the active field/stats are reflected.
-  layers.forEach(({ id, order, showLabel, showDataDots, dataLabelField, dataStats }) => {
+  // hasn't toggled dots on. Independent of showLabel so dots can render alone.
+  // Paint is rebuilt on every call so changes to the active field/stats are reflected.
+  layers.forEach(({ id, order, showDataDots, dataLabelField, dataStats }) => {
     const dotsLayerId = `layer-${id.toString()}-dots`
     const sourceId = `layer-${id.toString()}`
 
@@ -466,7 +488,7 @@ export function updateLayers(
       ? ["!=", ["to-number", ["get", dataLabelField], 0], 0]
       : null
     map.setFilter(dotsLayerId, dotFilter)
-    const visible = showLabel && showDataDots && paint !== null
+    const visible = showDataDots && paint !== null
     map.setLayoutProperty(dotsLayerId, "visibility", visible ? "visible" : "none")
   })
 }
