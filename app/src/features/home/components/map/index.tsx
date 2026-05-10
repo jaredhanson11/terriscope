@@ -126,11 +126,6 @@ export const Map = forwardRef<
       name: string
       field: string
       value: number | null
-      // DEBUG[dot-classification]: 0–100 normalized magnitude used to drive
-      // the dot's size/color. Mirrors the paint expression for verification.
-      // Remove this field (and its render block / compute site) when no
-      // longer needed — grep `DEBUG[dot-classification]`.
-      debugClassification: number | null
     } | null>(null)
 
     // Update lasso visualization as it's being drawn
@@ -295,26 +290,12 @@ export const Map = forwardRef<
           : typeof rawValue === "number"
             ? rawValue
             : Number(rawValue)
-      // DEBUG[dot-classification]: mirror the paint expression's winsorized
-      // normalization — `clamp((value − p5) / (p95 − p5), 0, 1) * 100`,
-      // falling back to min/max when the percentile window collapses.
-      // Remove with the matching state field and render block.
-      const stats = layerOption.dataStats?.[layerOption.dataLabelField]
-      const debugLo =
-        stats && stats.p5 < stats.p95 ? stats.p5 : (stats?.min ?? 0)
-      const debugHi =
-        stats && stats.p5 < stats.p95 ? stats.p95 : (stats?.max ?? 0)
-      const debugClassification =
-        value != null && stats && debugHi > debugLo
-          ? Math.max(0, Math.min(1, (value - debugLo) / (debugHi - debugLo))) * 100
-          : null
       setDotTooltip({
         x: e.point.x,
         y: e.point.y,
         name,
         field: layerOption.dataLabelField,
         value,
-        debugClassification,
       })
     }
 
@@ -413,18 +394,6 @@ export const Map = forwardRef<
                     })}
               </span>
             </div>
-            {/* DEBUG[dot-classification]: shows the 0–100 magnitude that
-                drives dot size/color. Remove this block (and the matching
-                state field + compute site) when the styling looks right. */}
-            {dotTooltip.debugClassification !== null && (
-              <div className="mt-0.5 border-t pt-0.5 text-[10px] leading-tight text-amber-600">
-                debug: classification{" "}
-                <span className="font-mono">
-                  {dotTooltip.debugClassification.toFixed(1)}
-                </span>{" "}
-                / 100
-              </div>
-            )}
           </div>
         )}
       </div>
