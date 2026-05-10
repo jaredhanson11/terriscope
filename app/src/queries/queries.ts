@@ -34,6 +34,7 @@ export interface MapInvite {
 
 type NodeQuery = components["schemas"]["NodeQuery"]
 type ZipQuery = components["schemas"]["ZipQuery"]
+type SpatialSummaryRequest = components["schemas"]["SpatialSummaryRequest"]
 
 // Local type for upload status — replace with generated path type after openapi:generate
 type UploadStatusData =
@@ -199,6 +200,19 @@ export const queries = {
         }
         return response.data
       },
+    }),
+  getSelectionSummary: (body: SpatialSummaryRequest) =>
+    queryOptions({
+      queryKey: [...queries._root(), "selection-summary", body],
+      queryFn: async () => {
+        const response = await fetchClient.POST("/spatial/summary", { body })
+        if (!response.data || response.response.status !== 200) {
+          throw new Error("Failed to fetch selection summary")
+        }
+        return response.data
+      },
+      enabled:
+        (body.node_ids?.length ?? 0) > 0 || (body.zip_codes?.length ?? 0) > 0,
     }),
   getZipAssignment: (layerId: number, zipCode: string) =>
     queryOptions({

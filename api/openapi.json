@@ -1936,6 +1936,48 @@
         }
       }
     },
+    "/spatial/summary": {
+      "post": {
+        "tags": [
+          "Spatial"
+        ],
+        "summary": "Summarize Selection",
+        "description": "Roll up `data` across a selection of zips (order=0) or nodes (order>=1).\n\nMirrors the rollup math used by the recompute task: sum-of-sums, naive\navg-of-avgs, min-of-mins, max-of-maxes \u2014 so a selection of children shows\nthe same numbers their shared parent would.",
+        "operationId": "summarize_selection_spatial_summary_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpatialSummaryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpatialSummaryResponse"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/maps/{map_id}/export/ztt": {
       "get": {
         "tags": [
@@ -4221,6 +4263,59 @@
           "nodes"
         ],
         "title": "SpatialSelectResponse"
+      },
+      "SpatialSummaryRequest": {
+        "properties": {
+          "layer_id": {
+            "type": "integer",
+            "title": "Layer Id"
+          },
+          "node_ids": {
+            "items": {
+              "type": "integer"
+            },
+            "type": "array",
+            "title": "Node Ids",
+            "default": []
+          },
+          "zip_codes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Zip Codes",
+            "default": []
+          }
+        },
+        "type": "object",
+        "required": [
+          "layer_id"
+        ],
+        "title": "SpatialSummaryRequest"
+      },
+      "SpatialSummaryResponse": {
+        "properties": {
+          "count": {
+            "type": "integer",
+            "title": "Count"
+          },
+          "data": {
+            "additionalProperties": {
+              "additionalProperties": {
+                "type": "number"
+              },
+              "type": "object"
+            },
+            "type": "object",
+            "title": "Data"
+          }
+        },
+        "type": "object",
+        "required": [
+          "count",
+          "data"
+        ],
+        "title": "SpatialSummaryResponse"
       },
       "UpdateMeDTO": {
         "properties": {

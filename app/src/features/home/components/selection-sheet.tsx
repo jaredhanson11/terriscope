@@ -182,6 +182,7 @@ function SheetBody({
       <NodeListView
         selectedNodeIds={selectedNodeIds}
         activeLayer={activeLayer}
+        dataFieldConfig={dataFieldConfig}
         count={count}
         onFocusNode={setFocusedNodeId}
       />
@@ -192,9 +193,81 @@ function SheetBody({
     <ZipListView
       selectedZipCodes={selectedZipCodes}
       activeLayer={activeLayer}
+      dataFieldConfig={dataFieldConfig}
       count={count}
       onFocusZip={setFocusedZipCode}
     />
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Summary section — rolled-up data stats over the entire selection
+// ---------------------------------------------------------------------------
+
+function SelectionSummarySection({
+  activeLayer,
+  dataFieldConfig,
+  selectedNodeIds,
+  selectedZipCodes,
+}: {
+  activeLayer: Layer | undefined
+  dataFieldConfig: DataFieldConfig[]
+  selectedNodeIds: number[]
+  selectedZipCodes: string[]
+}) {
+  const summaryQuery = useQuery({
+    ...queries.getSelectionSummary({
+      layer_id: activeLayer?.id ?? 0,
+      node_ids: selectedNodeIds,
+      zip_codes: selectedZipCodes,
+    }),
+    enabled:
+      !!activeLayer &&
+      dataFieldConfig.length > 0 &&
+      (selectedNodeIds.length > 0 || selectedZipCodes.length > 0),
+  })
+
+  if (dataFieldConfig.length === 0) return null
+
+  const data = summaryQuery.data?.data
+
+  return (
+    <div className="border-border shrink-0 border-b p-4">
+      <SectionLabel>Summary</SectionLabel>
+      {summaryQuery.isPending && (
+        <div className="text-muted-foreground flex items-center gap-2 text-sm">
+          <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
+          Computing…
+        </div>
+      )}
+      {!summaryQuery.isPending && (
+        <div className="space-y-2">
+          {dataFieldConfig.flatMap((field) =>
+            field.aggregations.map((agg) => {
+              const raw = data?.[field.field]?.[agg]
+              const formatted: string =
+                typeof raw === "number"
+                  ? new Intl.NumberFormat().format(raw)
+                  : "—"
+              return (
+                <div
+                  key={`${field.field}-${agg}`}
+                  className="flex items-center justify-between gap-4"
+                >
+                  <span className="text-muted-foreground truncate text-sm">
+                    {field.label || field.field}{" "}
+                    <span className="text-muted-foreground/60">({agg})</span>
+                  </span>
+                  <span className="text-sm font-medium tabular-nums">
+                    {formatted}
+                  </span>
+                </div>
+              )
+            }),
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -418,6 +491,51 @@ function NodeDetailView({
 
         {node && (
           <>
+            {dataFieldConfig.length > 0 && (
+              <div className="p-4">
+                <SectionLabel>Data</SectionLabel>
+                {!node.data && node.child_count > 0 ? (
+                  <div className="text-muted-foreground flex items-center gap-2 text-sm">
+                    <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
+                    Computing…
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {dataFieldConfig.flatMap((field) =>
+                      field.aggregations.map((agg) => {
+                        const raw = (
+                          node.data?.[field.field] as
+                            | Record<string, number>
+                            | undefined
+                        )?.[agg]
+                        const formatted: string =
+                          typeof raw === "number"
+                            ? new Intl.NumberFormat().format(raw)
+                            : "—"
+                        return (
+                          <div
+                            key={`${field.field}-${agg}`}
+                            className="flex items-center justify-between gap-4"
+                          >
+                            <span className="text-muted-foreground truncate text-sm">
+                              {field.label || field.field}{" "}
+                              <span className="text-muted-foreground/60">
+                                ({agg})
+                              </span>
+                            </span>
+                            <span className="text-sm font-medium tabular-nums">
+                              {formatted}
+                            </span>
+                          </div>
+                        )
+                      }),
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {dataFieldConfig.length > 0 && <Separator />}
             <div className="p-4">
               <SectionLabel>Hierarchy</SectionLabel>
               <div className="space-y-px">
@@ -461,53 +579,6 @@ function NodeDetailView({
                 </div>
               </div>
             </div>
-
-            {dataFieldConfig.length > 0 && (
-              <>
-                <Separator />
-                <div className="p-4">
-                  <SectionLabel>Data</SectionLabel>
-                  {!node.data && node.child_count > 0 ? (
-                    <div className="text-muted-foreground flex items-center gap-2 text-sm">
-                      <IconLoader2 className="h-3.5 w-3.5 animate-spin" />
-                      Computing…
-                    </div>
-                  ) : (
-                    <div className="space-y-2">
-                      {dataFieldConfig.flatMap((field) =>
-                        field.aggregations.map((agg) => {
-                          const raw = (
-                            node.data?.[field.field] as
-                              | Record<string, number>
-                              | undefined
-                          )?.[agg]
-                          const formatted: string =
-                            typeof raw === "number"
-                              ? new Intl.NumberFormat().format(raw)
-                              : "—"
-                          return (
-                            <div
-                              key={`${field.field}-${agg}`}
-                              className="flex items-center justify-between gap-4"
-                            >
-                              <span className="text-muted-foreground truncate text-sm">
-                                {field.label || field.field}{" "}
-                                <span className="text-muted-foreground/60">
-                                  ({agg})
-                                </span>
-                              </span>
-                              <span className="text-sm font-medium tabular-nums">
-                                {formatted}
-                              </span>
-                            </div>
-                          )
-                        }),
-                      )}
-                    </div>
-                  )}
-                </div>
-              </>
-            )}
 
             {editing && parentLayer && (
               <>
@@ -702,6 +773,38 @@ function ZipDetailView({
 
         {za && (
           <>
+            {dataFieldConfig.length > 0 && (
+              <div className="p-4">
+                <SectionLabel>Data</SectionLabel>
+                <div className="space-y-2">
+                  {dataFieldConfig.map((field) => {
+                    const raw = za.data?.[field.field] as
+                      | number
+                      | null
+                      | undefined
+                    const formatted: string =
+                      typeof raw === "number"
+                        ? new Intl.NumberFormat().format(raw)
+                        : "—"
+                    return (
+                      <div
+                        key={field.field}
+                        className="flex items-center justify-between gap-4"
+                      >
+                        <span className="text-muted-foreground truncate text-sm">
+                          {field.label || field.field}
+                        </span>
+                        <span className="text-sm font-medium tabular-nums">
+                          {formatted}
+                        </span>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+
+            {dataFieldConfig.length > 0 && <Separator />}
             <div className="p-4">
               <SectionLabel>Hierarchy</SectionLabel>
               <div className="space-y-px">
@@ -758,40 +861,6 @@ function ZipDetailView({
                 </div>
               </div>
             </div>
-
-            {dataFieldConfig.length > 0 && (
-              <>
-                <Separator />
-                <div className="p-4">
-                  <SectionLabel>Data</SectionLabel>
-                  <div className="space-y-2">
-                    {dataFieldConfig.map((field) => {
-                      const raw = za.data?.[field.field] as
-                        | number
-                        | null
-                        | undefined
-                      const formatted: string =
-                        typeof raw === "number"
-                          ? new Intl.NumberFormat().format(raw)
-                          : "—"
-                      return (
-                        <div
-                          key={field.field}
-                          className="flex items-center justify-between gap-4"
-                        >
-                          <span className="text-muted-foreground truncate text-sm">
-                            {field.label || field.field}
-                          </span>
-                          <span className="text-sm font-medium tabular-nums">
-                            {formatted}
-                          </span>
-                        </div>
-                      )
-                    })}
-                  </div>
-                </div>
-              </>
-            )}
 
             {editing && parentLayer && (
               <>
@@ -856,11 +925,13 @@ function ZipDetailView({
 function NodeListView({
   selectedNodeIds,
   activeLayer,
+  dataFieldConfig,
   count,
   onFocusNode,
 }: {
   selectedNodeIds: number[]
   activeLayer: Layer | undefined
+  dataFieldConfig: DataFieldConfig[]
   count: number
   onFocusNode: (id: number) => void
 }) {
@@ -888,16 +959,31 @@ function NodeListView({
     setPage(1)
   }
 
+  const sectionLabel = pluralize(activeLayer?.name ?? "Item", count)
+
   return (
     <>
-      <SheetHeader className="border-border border-b p-4">
-        <SheetTitle className="text-base">
-          {count} {pluralize(activeLayer?.name ?? "item", count)} selected
-        </SheetTitle>
-        <div className="relative mt-2">
+      <SheetHeader className="border-border shrink-0 border-b p-4">
+        <div className="flex min-h-11 items-center">
+          <SheetTitle className="text-base">
+            {count} {sectionLabel} selected
+          </SheetTitle>
+        </div>
+      </SheetHeader>
+
+      <SelectionSummarySection
+        activeLayer={activeLayer}
+        dataFieldConfig={dataFieldConfig}
+        selectedNodeIds={selectedNodeIds}
+        selectedZipCodes={[]}
+      />
+
+      <div className="border-border shrink-0 border-b p-4">
+        <SectionLabel>{sectionLabel}</SectionLabel>
+        <div className="relative">
           <IconSearch className="text-muted-foreground absolute top-2.5 left-2.5 h-4 w-4" />
           <Input
-            placeholder="Filter selection…"
+            placeholder={`Filter ${sectionLabel.toLowerCase()}…`}
             value={search}
             onChange={(e) => {
               handleSearchChange(e.target.value)
@@ -905,7 +991,7 @@ function NodeListView({
             className="pl-8"
           />
         </div>
-      </SheetHeader>
+      </div>
 
       <div className="flex-1 overflow-y-auto">
         {nodesQuery.isPending && (
@@ -976,11 +1062,13 @@ function NodeListView({
 function ZipListView({
   selectedZipCodes,
   activeLayer,
+  dataFieldConfig,
   count,
   onFocusZip,
 }: {
   selectedZipCodes: string[]
   activeLayer: Layer | undefined
+  dataFieldConfig: DataFieldConfig[]
   count: number
   onFocusZip: (zip: string) => void
 }) {
@@ -1011,16 +1099,31 @@ function ZipListView({
     setPage(1)
   }
 
+  const sectionLabel = pluralize(activeLayer?.name ?? "Item", count)
+
   return (
     <>
-      <SheetHeader className="border-border border-b p-4">
-        <SheetTitle className="text-base">
-          {count} {pluralize(activeLayer?.name ?? "item", count)} selected
-        </SheetTitle>
-        <div className="relative mt-2">
+      <SheetHeader className="border-border shrink-0 border-b p-4">
+        <div className="flex min-h-11 items-center">
+          <SheetTitle className="text-base">
+            {count} {sectionLabel} selected
+          </SheetTitle>
+        </div>
+      </SheetHeader>
+
+      <SelectionSummarySection
+        activeLayer={activeLayer}
+        dataFieldConfig={dataFieldConfig}
+        selectedNodeIds={[]}
+        selectedZipCodes={selectedZipCodes}
+      />
+
+      <div className="border-border shrink-0 border-b p-4">
+        <SectionLabel>{sectionLabel}</SectionLabel>
+        <div className="relative">
           <IconSearch className="text-muted-foreground absolute top-2.5 left-2.5 h-4 w-4" />
           <Input
-            placeholder="Filter by zip code…"
+            placeholder={`Filter ${sectionLabel.toLowerCase()}…`}
             value={search}
             onChange={(e) => {
               handleSearchChange(e.target.value)
@@ -1028,7 +1131,7 @@ function ZipListView({
             className="pl-8"
           />
         </div>
-      </SheetHeader>
+      </div>
 
       <div className="flex-1 overflow-y-auto">
         {zipsQuery.isPending && (

@@ -152,8 +152,108 @@ class ComputationService(BaseService):
             else:
                 self._compute_data_node_layer(node_ids, number_fields)
 
+    def compute_summary_for_selection(
+        self,
+        layer: LayerModel,
+        fields: list[dict[str, Any]],
+        node_ids: list[int] | None = None,
+        zip_codes: list[str] | None = None,
+    ) -> dict[str, dict[str, float]]:
+        """Aggregate `data` for a live selection set and return a dict shaped like NodeModel.data.
+
+        For order=0 layers, pass zip_codes; rows are read from zip_assignments
+        (flat scalars) for the given layer + zip set. For order>=1 layers, pass
+        node_ids; rows are read from nodes (nested {sum,avg,min,max}). The
+        rollup math mirrors the parent recompute exactly (sum-of-sums,
+        avg-of-avgs, min-of-mins, max-of-maxes), so a selection of children
+        produces the same numbers their shared parent would carry.
+        """
+        if not fields:
+            return {}
+
+        for f in fields:
+            if not _SAFE_FIELD_RE.match(f["field"]):
+                raise ValueError(f"Unsafe field key: {f['field']!r}")
+
+        if layer.order == 0:
+            if not zip_codes:
+                return {}
+            from_clause = "zip_assignments za"
+            alias = "za"
+            flat = True
+            where_sql = "za.layer_id = :layer_id AND za.zip_code = ANY(:keys)"
+            params: dict[str, Any] = {"layer_id": layer.id, "keys": list(zip_codes)}
+        else:
+            if not node_ids:
+                return {}
+            from_clause = "nodes n"
+            alias = "n"
+            flat = False
+            where_sql = "n.id = ANY(:keys)"
+            params = {"keys": list(node_ids)}
+
+        select_parts: list[str] = []
+        for f in fields:
+            fname = f["field"]
+            precision = f.get("precision", 4)
+            exprs = self._field_rollup_exprs(fname, alias, flat=flat, precision=precision)
+            for key, expr in exprs.items():
+                select_parts.append(f"{expr} AS \"{fname}__{key}\"")
+
+        sql = text(  # noqa: S608 — field names validated; identifiers fixed.
+            f"SELECT {', '.join(select_parts)} FROM {from_clause} WHERE {where_sql}"
+        )
+        row = self.db.execute(sql, params).mappings().one_or_none()
+        if not row:
+            return {}
+
+        out: dict[str, dict[str, float]] = {}
+        for f in fields:
+            fname = f["field"]
+            sum_val = row[f"{fname}__sum_val"]
+            avg_val = row[f"{fname}__avg_val"]
+            min_val = row[f"{fname}__min_val"]
+            max_val = row[f"{fname}__max_val"]
+            if sum_val is None and avg_val is None and min_val is None and max_val is None:
+                continue
+            out[fname] = {
+                "sum": float(sum_val) if sum_val is not None else 0.0,
+                "avg": float(avg_val) if avg_val is not None else 0.0,
+                "min": float(min_val) if min_val is not None else 0.0,
+                "max": float(max_val) if max_val is not None else 0.0,
+            }
+        return out
+
     @staticmethod
-    def _data_branch(fname: str, from_clause: str, alias: str, flat: bool = False, precision: int = 4) -> str:
+    def _field_value_expr(fname: str, alias: str, agg: str, flat: bool) -> str:
+        """SQL expression that reads a single (field, agg) value from a row's data JSONB.
+
+        fname must be pre-validated against _SAFE_FIELD_RE; agg must be one of
+        sum/avg/min/max. flat=True reads a scalar directly (leaf zip rows); flat=False
+        reads from the nested {sum,avg,min,max} shape (rolled-up node rows).
+        """
+        if flat:
+            return f"({alias}.data->>'{fname}')::numeric"
+        return f"({alias}.data->'{fname}'->>'{agg}')::numeric"
+
+    @classmethod
+    def _field_rollup_exprs(cls, fname: str, alias: str, flat: bool, precision: int = 4) -> dict[str, str]:
+        """Build SUM/AVG/MIN/MAX rollup expressions for a single field.
+
+        Returns {sum_val, avg_val, min_val, max_val} -> SQL expression. Both the
+        bulk parent rollup (compute_data_*) and the live selection summary
+        (compute_summary_for_selection) read the same per-row data through these,
+        so the JSONB shape lives in one place.
+        """
+        return {
+            "sum_val": f"ROUND(SUM({cls._field_value_expr(fname, alias, 'sum', flat)}), {precision})",
+            "avg_val": f"ROUND(AVG({cls._field_value_expr(fname, alias, 'avg', flat)}), {precision})",
+            "min_val": f"MIN({cls._field_value_expr(fname, alias, 'min', flat)})",
+            "max_val": f"MAX({cls._field_value_expr(fname, alias, 'max', flat)})",
+        }
+
+    @classmethod
+    def _data_branch(cls, fname: str, from_clause: str, alias: str, flat: bool = False, precision: int = 4) -> str:
         """Build one UNION ALL branch for a single data field.
 
         fname is pre-validated against _SAFE_FIELD_RE — no injection risk.
@@ -162,23 +262,13 @@ class ComputationService(BaseService):
         flat=True reads a scalar value directly (zip layer); flat=False reads nested {sum,avg,min,max}.
         precision controls ROUND() applied to sum and avg before storage (min/max preserve full precision).
         """
-        if flat:
-            return (
-                f"SELECT {alias}.parent_node_id, '{fname}'::text AS key_name,"  # noqa: S608
-                f" ROUND(SUM(({alias}.data->>'{fname}')::numeric), {precision}) AS sum_val,"
-                f" ROUND(AVG(({alias}.data->>'{fname}')::numeric), {precision}) AS avg_val,"
-                f" MIN(({alias}.data->>'{fname}')::numeric) AS min_val,"
-                f" MAX(({alias}.data->>'{fname}')::numeric) AS max_val"
-                f" FROM {from_clause}"
-                f" WHERE {alias}.parent_node_id = ANY(:node_ids) AND {alias}.data ? '{fname}'"
-                f" GROUP BY {alias}.parent_node_id"
-            )
+        exprs = cls._field_rollup_exprs(fname, alias, flat=flat, precision=precision)
         return (
             f"SELECT {alias}.parent_node_id, '{fname}'::text AS key_name,"  # noqa: S608
-            f" ROUND(SUM(({alias}.data->'{fname}'->>'sum')::numeric), {precision}) AS sum_val,"
-            f" ROUND(AVG(({alias}.data->'{fname}'->>'avg')::numeric), {precision}) AS avg_val,"
-            f" MIN(({alias}.data->'{fname}'->>'min')::numeric) AS min_val,"
-            f" MAX(({alias}.data->'{fname}'->>'max')::numeric) AS max_val"
+            f" {exprs['sum_val']} AS sum_val,"
+            f" {exprs['avg_val']} AS avg_val,"
+            f" {exprs['min_val']} AS min_val,"
+            f" {exprs['max_val']} AS max_val"
             f" FROM {from_clause}"
             f" WHERE {alias}.parent_node_id = ANY(:node_ids) AND {alias}.data ? '{fname}'"
             f" GROUP BY {alias}.parent_node_id"

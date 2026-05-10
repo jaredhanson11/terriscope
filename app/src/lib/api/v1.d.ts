@@ -768,6 +768,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/spatial/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Summarize Selection
+         * @description Roll up `data` across a selection of zips (order=0) or nodes (order>=1).
+         *
+         *     Mirrors the rollup math used by the recompute task: sum-of-sums, naive
+         *     avg-of-avgs, min-of-mins, max-of-maxes — so a selection of children shows
+         *     the same numbers their shared parent would.
+         */
+        post: operations["summarize_selection_spatial_summary_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/maps/{map_id}/export/ztt": {
         parameters: {
             query?: never;
@@ -1721,6 +1745,32 @@ export interface components {
              * @default []
              */
             zip_codes: string[];
+        };
+        /** SpatialSummaryRequest */
+        SpatialSummaryRequest: {
+            /** Layer Id */
+            layer_id: number;
+            /**
+             * Node Ids
+             * @default []
+             */
+            node_ids: number[];
+            /**
+             * Zip Codes
+             * @default []
+             */
+            zip_codes: string[];
+        };
+        /** SpatialSummaryResponse */
+        SpatialSummaryResponse: {
+            /** Count */
+            count: number;
+            /** Data */
+            data: {
+                [key: string]: {
+                    [key: string]: number;
+                };
+            };
         };
         /**
          * UpdateMeDTO
@@ -3159,6 +3209,39 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SpatialSelectResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    summarize_selection_spatial_summary_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SpatialSummaryRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SpatialSummaryResponse"];
                 };
             };
             /** @description Validation Error */
