@@ -80,7 +80,7 @@ function buildDotPaint(
 
   if (norm.kind === "constant") {
     return {
-      radius: ["interpolate", ["linear"], ["zoom"], 5, 8, 12, 16],
+      radius: ["interpolate", ["linear"], ["zoom"], 5, 1.6, 12, 3.2],
       color: DOT_CONSTANT_FALLBACK_COLOR,
     }
   }
@@ -91,9 +91,9 @@ function buildDotPaint(
       ["linear"],
       ["zoom"],
       5,
-      ["interpolate", ["linear"], norm.expr, 0, 3, 1, 14],
+      ["interpolate", ["linear"], norm.expr, 0, 2.4, 1, 4.2],
       12,
-      ["interpolate", ["linear"], norm.expr, 0, 6, 1, 28],
+      ["interpolate", ["linear"], norm.expr, 0, 4.8, 1, 8.4],
     ],
     color: [
       "step",
@@ -131,21 +131,21 @@ function buildLabelDotOffsetExpr(
   const gap = LABEL_DOT_GAP_PX
 
   if (norm.kind === "constant") {
-    // Constant medium dot from buildDotPaint: radius 8px @ z5, 16px @ z12.
+    // Constant medium dot from buildDotPaint: radius 1.6px @ z5, 3.2px @ z12.
     return [
       "interpolate",
       ["linear"],
       ["zoom"],
       5,
-      ["literal", [0, -(8 + gap) / labelSizeMin]],
+      ["literal", [0, -(1.6 + gap) / labelSizeMin]],
       12,
-      ["literal", [0, -(16 + gap) / labelSizeMax]],
+      ["literal", [0, -(3.2 + gap) / labelSizeMax]],
     ]
   }
 
   // Mirrors buildDotPaint's circle-radius:
-  // z=5  → radius 3px @ norm0 → 14px @ norm1
-  // z=12 → radius 6px @ norm0 → 28px @ norm1
+  // z=5  → radius 2.4px @ norm0 → 4.2px @ norm1
+  // z=12 → radius 4.8px @ norm0 → 8.4px @ norm1
   return [
     "interpolate",
     ["linear"],
@@ -156,9 +156,9 @@ function buildLabelDotOffsetExpr(
       ["linear"],
       norm.expr,
       0,
-      ["literal", [0, -(3 + gap) / labelSizeMin]],
+      ["literal", [0, -(2.4 + gap) / labelSizeMin]],
       1,
-      ["literal", [0, -(14 + gap) / labelSizeMin]],
+      ["literal", [0, -(4.2 + gap) / labelSizeMin]],
     ],
     12,
     [
@@ -166,9 +166,9 @@ function buildLabelDotOffsetExpr(
       ["linear"],
       norm.expr,
       0,
-      ["literal", [0, -(6 + gap) / labelSizeMax]],
+      ["literal", [0, -(4.8 + gap) / labelSizeMax]],
       1,
-      ["literal", [0, -(28 + gap) / labelSizeMax]],
+      ["literal", [0, -(8.4 + gap) / labelSizeMax]],
     ],
   ]
 }
@@ -450,9 +450,7 @@ export function updateLayers(
         paint: {
           "circle-radius": 0,
           "circle-color": DOT_CONSTANT_FALLBACK_COLOR,
-          "circle-opacity": 0.85,
-          "circle-stroke-color": "rgba(255, 255, 255, 0.95)",
-          "circle-stroke-width": 1.5,
+          "circle-opacity": 1,
         },
       })
     }
@@ -462,6 +460,12 @@ export function updateLayers(
       map.setPaintProperty(dotsLayerId, "circle-radius", paint.radius)
       map.setPaintProperty(dotsLayerId, "circle-color", paint.color)
     }
+    // Hide dots for features whose value is 0 (or null/missing). to-number's
+    // two-arg form falls back to 0 when the field is null/missing/non-numeric.
+    const dotFilter: maplibregl.FilterSpecification | null = dataLabelField
+      ? ["!=", ["to-number", ["get", dataLabelField], 0], 0]
+      : null
+    map.setFilter(dotsLayerId, dotFilter)
     const visible = showLabel && showDataDots && paint !== null
     map.setLayoutProperty(dotsLayerId, "visibility", visible ? "visible" : "none")
   })
