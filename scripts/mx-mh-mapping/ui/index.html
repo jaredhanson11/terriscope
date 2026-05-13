@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>MX/MH Zip Reassignment</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root { --red: #dc2626; --yellow: #f59e0b; --blue: #1d4ed8; --gray: #6b7280; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; height: 100%; font: 14px/1.4 system-ui, sans-serif; }
+  body { display: flex; flex-direction: column; }
+  header {
+    display: flex; align-items: center; gap: 12px; padding: 8px 16px;
+    background: #1f2937; color: white; flex: 0 0 auto;
+  }
+  header h1 { margin: 0; font-size: 16px; font-weight: 600; }
+  header select, header button {
+    padding: 4px 10px; font: inherit; border-radius: 4px; border: 1px solid #374151;
+    background: #374151; color: white; cursor: pointer;
+  }
+  header button:hover { background: #4b5563; }
+  header button.primary { background: var(--blue); border-color: var(--blue); }
+  header .spacer { flex: 1; }
+  header .progress { color: #9ca3af; font-size: 13px; }
+  .body { flex: 1; display: flex; min-height: 0; }
+  aside {
+    flex: 0 0 240px; border-right: 1px solid #e5e7eb; overflow-y: auto;
+    background: #f9fafb;
+  }
+  aside h2 { font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em;
+             color: var(--gray); margin: 12px 16px 4px; }
+  aside ul { list-style: none; margin: 0; padding: 0; }
+  aside li {
+    padding: 8px 16px; cursor: pointer; border-left: 3px solid transparent;
+    display: flex; justify-content: space-between; gap: 8px;
+  }
+  aside li:hover { background: #e5e7eb; }
+  aside li.current { background: #fef3c7; border-left-color: var(--red); font-weight: 600; }
+  aside li .status { color: var(--gray); font-size: 12px; }
+  aside li.assigned .status { color: #059669; font-weight: 600; }
+  aside li.skipped .status { color: #9ca3af; font-style: italic; }
+  #map { flex: 1; }
+  .leaflet-tooltip { font-weight: 600; }
+  .empty-state {
+    display: flex; align-items: center; justify-content: center; height: 100%;
+    color: var(--gray); flex-direction: column; gap: 8px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>MX/MH Reassignment</h1>
+  <select id="zip-select"></select>
+  <span class="progress" id="progress">—</span>
+  <span class="spacer"></span>
+  <button id="prev-poly-btn" title="Previous polygon (p)">‹ Prev</button>
+  <button id="next-poly-btn" title="Next polygon (n)">Next ›</button>
+  <button id="undo-btn" title="Undo current assignment (u)">Undo</button>
+  <button id="skip-btn" title="Mark as skipped (s)">Skip</button>
+  <button id="export-btn" class="primary" title="Download CSV">Export CSV</button>
+</header>
+
+<div class="body">
+  <aside>
+    <h2>Polygons in this zip</h2>
+    <ul id="poly-list"></ul>
+    <h2>Tips</h2>
+    <div style="padding: 0 16px 16px; color: var(--gray); font-size: 12px;">
+      Click a <span style="color: var(--blue); font-weight: 600;">blue</span> neighbor zip to
+      assign the <span style="color: var(--red); font-weight: 600;">red</span> polygon to it.
+      <br><br>
+      Other unassigned polygons in this zip are <span style="color: var(--yellow); font-weight: 600;">yellow</span>.
+      <br><br>
+      Keys: <kbd>n</kbd> next, <kbd>p</kbd> prev, <kbd>s</kbd> skip, <kbd>u</kbd> undo.
+    </div>
+  </aside>
+  <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const STORAGE_KEY = 'mx-mh-assignments-v2';
+
+const state = {
+  manifest: null,
+  zipIndex: 0,
+  data: null,
+  polyIndex: 0,
+  assignments: loadAssignments(),
+  map: null,
+  layers: { targets: null, neighbors: null },
+};
+
+function loadAssignments() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; }
+  catch { return {}; }
+}
+function saveAssignments() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(state.assignments));
+}
+
+function currentZip() { return state.manifest.zips[state.zipIndex].zip_code; }
+function targets() { return state.data.features.filter(f => f.properties.kind === 'target'); }
+function neighbors() { return state.data.features.filter(f => f.properties.kind === 'neighbor'); }
+function keyFor(idx) { return `${currentZip()}:${idx}`; }
+
+function findFirstUnassigned() {
+  for (const t of targets()) {
+    if (!(keyFor(t.properties.poly_index) in state.assignments)) {
+      return t.properties.poly_index;
+    }
+  }
+  return targets()[0]?.properties.poly_index ?? 0;
+}
+
+function currentTargetFeature() {
+  return targets().find(t => t.properties.poly_index === state.polyIndex);
+}
+
+function recordAssignment(assignedZip /* string | null */) {
+  const t = currentTargetFeature();
+  state.assignments[keyFor(state.polyIndex)] = {
+    zip: assignedZip,
+    centroid_lon: t.properties.centroid[0],
+    centroid_lat: t.properties.centroid[1],
+    area_m2: t.properties.area_m2,
+  };
+  saveAssignments();
+}
+
+async function init() {
+  state.manifest = await fetch('../output/manifest.json').then(r => r.json());
+
+  const select = document.getElementById('zip-select');
+  state.manifest.zips.forEach((z, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = `${z.zip_code} (${z.target_count} polys)`;
+    select.appendChild(opt);
+  });
+  select.addEventListener('change', e => loadZip(parseInt(e.target.value)));
+
+  state.map = L.map('map').setView([39.5, -98.5], 4);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© OpenStreetMap',
+    maxZoom: 19,
+  }).addTo(state.map);
+
+  document.getElementById('skip-btn').addEventListener('click', skipCurrent);
+  document.getElementById('undo-btn').addEventListener('click', undoCurrent);
+  document.getElementById('next-poly-btn').addEventListener('click', () => navigatePoly(+1));
+  document.getElementById('prev-poly-btn').addEventListener('click', () => navigatePoly(-1));
+  document.getElementById('export-btn').addEventListener('click', exportCSV);
+  document.addEventListener('keydown', onKey);
+
+  await loadZip(0);
+}
+
+function onKey(e) {
+  if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (e.key === 's') skipCurrent();
+  else if (e.key === 'u') undoCurrent();
+  else if (e.key === 'n') navigatePoly(+1);
+  else if (e.key === 'p') navigatePoly(-1);
+}
+
+async function loadZip(zipIndex) {
+  state.zipIndex = zipIndex;
+  const z = state.manifest.zips[zipIndex];
+  state.data = await fetch(`../output/${z.file}`).then(r => r.json());
+  state.polyIndex = findFirstUnassigned();
+  document.getElementById('zip-select').value = zipIndex;
+  render();
+}
+
+function render() {
+  for (const k of Object.keys(state.layers)) {
+    if (state.layers[k]) { state.map.removeLayer(state.layers[k]); state.layers[k] = null; }
+  }
+
+  const ts = targets();
+  const ns = neighbors();
+  const current = ts.find(t => t.properties.poly_index === state.polyIndex);
+
+  state.layers.neighbors = L.geoJSON(ns, {
+    style: { color: '#1d4ed8', weight: 1, fillOpacity: 0.12, fillColor: '#3b82f6' },
+    onEachFeature: (feature, layer) => {
+      layer.bindTooltip(feature.properties.zip_code, { sticky: true, direction: 'top' });
+      layer.on('click', () => assignCurrent(feature.properties.zip_code));
+      layer.on('mouseover', () => layer.setStyle({ fillOpacity: 0.4, weight: 2 }));
+      layer.on('mouseout', () => layer.setStyle({ fillOpacity: 0.12, weight: 1 }));
+    },
+  }).addTo(state.map);
+
+  state.layers.targets = L.geoJSON(ts, {
+    style: f => {
+      const isCurrent = f.properties.poly_index === state.polyIndex;
+      const assigned = keyFor(f.properties.poly_index) in state.assignments;
+      if (isCurrent) {
+        return { color: '#991b1b', weight: 3, fillOpacity: 0.55, fillColor: '#ef4444' };
+      }
+      if (assigned) {
+        return { color: '#374151', weight: 1, fillOpacity: 0.25, fillColor: '#9ca3af' };
+      }
+      return { color: '#b45309', weight: 2, fillOpacity: 0.45, fillColor: '#fbbf24' };
+    },
+    onEachFeature: (feature, layer) => {
+      layer.on('click', () => {
+        state.polyIndex = feature.properties.poly_index;
+        render();
+      });
+    },
+  }).addTo(state.map);
+  state.layers.targets.bringToFront();
+
+  if (current) {
+    const b = L.geoJSON(current).getBounds();
+    state.map.fitBounds(b, { padding: [60, 60], maxZoom: 13 });
+  }
+
+  updateSidebar();
+}
+
+function updateSidebar() {
+  const ts = targets();
+  document.getElementById('progress').textContent =
+    `${currentZip()} — polygon ${state.polyIndex + 1} of ${ts.length}`;
+
+  const list = document.getElementById('poly-list');
+  list.innerHTML = '';
+  for (const t of ts) {
+    const idx = t.properties.poly_index;
+    const key = keyFor(idx);
+    const li = document.createElement('li');
+    if (idx === state.polyIndex) li.classList.add('current');
+    let statusText = 'pending';
+    if (key in state.assignments) {
+      const v = state.assignments[key];
+      if (v.zip === null) { li.classList.add('skipped'); statusText = 'skipped'; }
+      else { li.classList.add('assigned'); statusText = `→ ${v.zip}`; }
+    }
+    li.innerHTML = `<span>#${idx}</span><span class="status">${statusText}</span>`;
+    li.addEventListener('click', () => { state.polyIndex = idx; render(); });
+    list.appendChild(li);
+  }
+}
+
+function assignCurrent(neighborZip) {
+  recordAssignment(neighborZip);
+  advance();
+}
+
+function skipCurrent() {
+  recordAssignment(null);
+  advance();
+}
+
+function undoCurrent() {
+  delete state.assignments[keyFor(state.polyIndex)];
+  saveAssignments();
+  render();
+}
+
+function navigatePoly(delta) {
+  const ts = targets();
+  const newIdx = state.polyIndex + delta;
+  if (newIdx >= 0 && newIdx < ts.length) {
+    state.polyIndex = newIdx;
+    render();
+  } else if (delta > 0 && state.zipIndex < state.manifest.zips.length - 1) {
+    loadZip(state.zipIndex + 1);
+  } else if (delta < 0 && state.zipIndex > 0) {
+    loadZip(state.zipIndex - 1);
+  }
+}
+
+function advance() {
+  const ts = targets();
+  for (let i = state.polyIndex + 1; i < ts.length; i++) {
+    if (!(keyFor(i) in state.assignments)) {
+      state.polyIndex = i; render(); return;
+    }
+  }
+  for (let i = 0; i < state.polyIndex; i++) {
+    if (!(keyFor(i) in state.assignments)) {
+      state.polyIndex = i; render(); return;
+    }
+  }
+  if (state.zipIndex < state.manifest.zips.length - 1) {
+    loadZip(state.zipIndex + 1);
+  } else {
+    render();
+    alert('All zips complete. Export CSV when ready.');
+  }
+}
+
+function exportCSV() {
+  const header = ['filler_zip', 'poly_index', 'assigned_to_zip', 'centroid_lon', 'centroid_lat', 'area_m2'];
+  const rows = [header];
+  const keys = Object.keys(state.assignments).sort();
+  for (const key of keys) {
+    const [zip, idx] = key.split(':');
+    const v = state.assignments[key];
+    rows.push([
+      zip,
+      idx,
+      v.zip ?? '',
+      v.centroid_lon.toFixed(7),
+      v.centroid_lat.toFixed(7),
+      v.area_m2.toFixed(2),
+    ]);
+  }
+  const csv = rows.map(r => r.join(',')).join('\n') + '\n';
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `mx-mh-assignments-${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(url);
+}
+
+init().catch(err => {
+  document.getElementById('map').innerHTML =
+    `<div class="empty-state"><div>Failed to load.</div>
+     <div>${err.message}</div>
+     <div style="font-size:12px">Did you run <code>python extract.py --zip 890MX</code>
+     and start a local server (e.g. <code>python -m http.server 8765</code>) from
+     <code>scripts/mx-mh-mapping/</code>?</div></div>`;
+  console.error(err);
+});
+</script>
+</body>
+</html>
