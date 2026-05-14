@@ -493,22 +493,37 @@ export function updateLayers(
   })
 }
 
+// MapLibre keys cached tiles by (sourceId, z, x, y) rather than URL, so calling
+// VectorTileSource.setTiles() with a new ?rev= param leaves the in-memory tile
+// cache untouched and never re-fetches. The reliable cure is to drop the source
+// and every layer pointing at it, then rebuild — which is what `refreshTileSources`
+// below does. Keep this list in sync with the passes inside `updateLayers`.
+const DATA_LAYER_SUFFIXES = ["fill", "selection", "outline", "label", "dots"] as const
+
 /**
- * Forces MapLibre to re-fetch all tile data for every data layer source by
- * updating the tile URLs with a cache-busting revision parameter.  Call this
- * after a recompute job completes so the new geometries are shown immediately.
+ * Forces MapLibre to re-fetch all tile data for every data layer source after
+ * a recompute job completes. Removes the source and its associated layers,
+ * then re-adds both with the new tile_version baked into the URL — this is
+ * the only reliable way to invalidate MapLibre's in-memory tile cache.
  */
 export function refreshTileSources(
   map: maplibregl.Map,
   layers: LayerViewOptions,
+  baseMap: BaseMapName,
   tileVersion: number,
 ): void {
   layers.forEach(({ id }) => {
-    const tileUrl = `${config.get("api_base_url")}/tiles/${id.toString()}/{z}/{x}/{y}.pbf?rev=${tileVersion.toString()}`
-    const source = map.getSource(`layer-${id.toString()}`)
-    if (source?.type === "vector")
-      (source as maplibregl.VectorTileSource).setTiles([tileUrl])
+    const idStr = id.toString()
+    DATA_LAYER_SUFFIXES.forEach((suffix) => {
+      const layerId = `layer-${idStr}-${suffix}`
+      if (map.getLayer(layerId)) map.removeLayer(layerId)
+    })
+    const sourceId = `layer-${idStr}`
+    if (map.getSource(sourceId)) map.removeSource(sourceId)
   })
+
+  updateSources(map, layers, tileVersion)
+  updateLayers(map, baseMap, layers)
 }
 
 export function updateSelectedNodeStates(

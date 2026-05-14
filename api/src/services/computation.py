@@ -403,12 +403,9 @@ class ComputationService(BaseService):
         sql = text("""
             WITH zip_unions AS (
                 SELECT za.parent_node_id AS pid,
-                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(gz.geom_z3)), 3)       AS g3,
-                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(gz.geom_z3_merc)), 3)  AS g3_merc,
-                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(gz.geom_z7)), 3)       AS g7,
-                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(gz.geom_z7_merc)), 3)  AS g7_merc,
-                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(gz.geom_z11)), 3)      AS g11,
-                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(gz.geom_z11_merc)), 3) AS g11_merc
+                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(gz.geom_z3_merc)),  3) AS g3,
+                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(gz.geom_z7_merc)),  3) AS g7,
+                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(gz.geom_z11_merc)), 3) AS g11
                 FROM zip_assignments za
                 JOIN geography_zip_codes gz ON gz.zip_code = za.zip_code
                 WHERE za.parent_node_id = ANY(:node_ids)
@@ -417,12 +414,9 @@ class ComputationService(BaseService):
                 SELECT id FROM nodes WHERE id = ANY(:node_ids)
             )
             UPDATE nodes p
-            SET geom_z3      = zu.g3,
-                geom_z3_merc = zu.g3_merc,
-                geom_z7      = zu.g7,
-                geom_z7_merc = zu.g7_merc,
-                geom_z11     = zu.g11,
-                geom_z11_merc = zu.g11_merc
+            SET geom_z3_merc  = zu.g3,
+                geom_z7_merc  = zu.g7,
+                geom_z11_merc = zu.g11
             FROM affected a
             LEFT JOIN zip_unions zu ON zu.pid = a.id
             WHERE p.id = a.id
@@ -440,12 +434,9 @@ class ComputationService(BaseService):
         sql = text("""
             WITH child_unions AS (
                 SELECT c.parent_node_id AS pid,
-                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(c.geom_z3)), 3)       AS g3,
-                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(c.geom_z3_merc)), 3)  AS g3_merc,
-                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(c.geom_z7)), 3)       AS g7,
-                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(c.geom_z7_merc)), 3)  AS g7_merc,
-                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(c.geom_z11)), 3)      AS g11,
-                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(c.geom_z11_merc)), 3) AS g11_merc
+                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(c.geom_z3_merc)),  3) AS g3,
+                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(c.geom_z7_merc)),  3) AS g7,
+                       ST_CollectionExtract(ST_UnaryUnion(ST_Collect(c.geom_z11_merc)), 3) AS g11
                 FROM nodes c
                 WHERE c.parent_node_id = ANY(:node_ids)
                 GROUP BY c.parent_node_id
@@ -453,12 +444,9 @@ class ComputationService(BaseService):
                 SELECT id FROM nodes WHERE id = ANY(:node_ids)
             )
             UPDATE nodes p
-            SET geom_z3       = cu.g3,
-                geom_z3_merc  = cu.g3_merc,
-                geom_z7       = cu.g7,
-                geom_z7_merc  = cu.g7_merc,
-                geom_z11      = cu.g11,
-                geom_z11_merc = cu.g11_merc
+            SET geom_z3_merc  = cu.g3,
+                geom_z7_merc  = cu.g7,
+                geom_z11_merc = cu.g11
             FROM affected a
             LEFT JOIN child_unions cu ON cu.pid = a.id
             WHERE p.id = a.id
@@ -485,32 +473,24 @@ class ComputationService(BaseService):
     def _invalidate_tiles_for_nodes(self, layer_id: int, node_ids: set[int]) -> None:
         """Delete MVT cache tiles for layer_id that cover the bounding box of the given nodes.
 
-        Computes tile (x, y) ranges for z=3..11 from the nodes' updated geometry in a
-        single SQL statement using the standard Mercator tile formula. Uses integer range
-        filters on the cache table — no spatial index needed.
+        Computes tile (x, y) ranges for z=3..11 from the nodes' updated 3857 geometry.
+        Tile coords come straight from the meter offset into the Mercator world square,
+        so no trig or degree math is needed.
         Does not commit — caller owns the transaction.
         """
         sql = text("""
             WITH bbox AS (
-                SELECT ST_Extent(COALESCE(n.geom_z11, n.geom_z7, n.geom_z3)) AS geom
+                SELECT ST_Extent(COALESCE(n.geom_z11_merc, n.geom_z7_merc, n.geom_z3_merc)) AS geom
                 FROM nodes n
                 WHERE n.id = ANY(:node_ids)
             ),
             tile_ranges AS (
                 SELECT
                     z::smallint,
-                    GREATEST(0, FLOOR((ST_XMin(b.geom) + 180.0) / 360.0 * POW(2, z))::int) AS x_min,
-                    FLOOR((ST_XMax(b.geom) + 180.0) / 360.0 * POW(2, z))::int             AS x_max,
-                    GREATEST(0, FLOOR(
-                        (1.0 - LN(TAN(RADIANS(LEAST(ST_YMax(b.geom), 85.051)))
-                               + 1.0 / COS(RADIANS(LEAST(ST_YMax(b.geom), 85.051)))) / PI()
-                        ) / 2.0 * POW(2, z)
-                    )::int) AS y_min,
-                    FLOOR(
-                        (1.0 - LN(TAN(RADIANS(GREATEST(ST_YMin(b.geom), -85.051)))
-                               + 1.0 / COS(RADIANS(GREATEST(ST_YMin(b.geom), -85.051)))) / PI()
-                        ) / 2.0 * POW(2, z)
-                    )::int AS y_max
+                    GREATEST(0, FLOOR((ST_XMin(b.geom) + 20037508.3427892) / 40075016.6855784 * POW(2, z))::int) AS x_min,
+                    FLOOR((ST_XMax(b.geom) + 20037508.3427892) / 40075016.6855784 * POW(2, z))::int             AS x_max,
+                    GREATEST(0, FLOOR((20037508.3427892 - ST_YMax(b.geom)) / 40075016.6855784 * POW(2, z))::int) AS y_min,
+                    FLOOR((20037508.3427892 - ST_YMin(b.geom)) / 40075016.6855784 * POW(2, z))::int             AS y_max
                 FROM bbox b, generate_series(3, 11) z
                 WHERE b.geom IS NOT NULL
             )

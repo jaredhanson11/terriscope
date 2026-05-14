@@ -206,34 +206,43 @@ class PptExportService(BaseService):
     def compute_slide_bbox(self, slide: MapExportSlideModel) -> tuple[float, float, float, float]:
         """Compute and persist the WGS-84 bounding box for a slide via PostGIS ST_Extent.
 
-        Uses geom_z3 (the lowest-resolution geometry, always present when computation
-        has run). Returns (min_lng, min_lat, max_lng, max_lat).
+        Uses geom_z3_merc (the lowest-resolution geometry, always present when computation
+        has run). The extent is taken in 3857 then projected to 4326 for the caller, which
+        expects (min_lng, min_lat, max_lng, max_lat) in degrees.
 
         Raises TerramapsException(422) if no geometry is available for the slide's nodes.
         Does not commit — caller owns the transaction.
         """
         if slide.parent_node_id is None:
             sql = text("""
+                WITH bbox AS (
+                    SELECT ST_Transform(ST_Extent(geom_z3_merc)::geometry, 4326) AS geom
+                    FROM nodes
+                    WHERE layer_id = :layer_id
+                      AND geom_z3_merc IS NOT NULL
+                )
                 SELECT
-                    ST_XMin(ST_Extent(geom_z3)) AS min_lng,
-                    ST_YMin(ST_Extent(geom_z3)) AS min_lat,
-                    ST_XMax(ST_Extent(geom_z3)) AS max_lng,
-                    ST_YMax(ST_Extent(geom_z3)) AS max_lat
-                FROM nodes
-                WHERE layer_id = :layer_id
-                  AND geom_z3 IS NOT NULL
+                    ST_XMin(geom) AS min_lng,
+                    ST_YMin(geom) AS min_lat,
+                    ST_XMax(geom) AS max_lng,
+                    ST_YMax(geom) AS max_lat
+                FROM bbox
             """)
             row = self.db.execute(sql, {"layer_id": slide.layer_id}).one()
         else:
             sql = text("""
+                WITH bbox AS (
+                    SELECT ST_Transform(ST_Extent(geom_z3_merc)::geometry, 4326) AS geom
+                    FROM nodes
+                    WHERE parent_node_id = :parent_node_id
+                      AND geom_z3_merc IS NOT NULL
+                )
                 SELECT
-                    ST_XMin(ST_Extent(geom_z3)) AS min_lng,
-                    ST_YMin(ST_Extent(geom_z3)) AS min_lat,
-                    ST_XMax(ST_Extent(geom_z3)) AS max_lng,
-                    ST_YMax(ST_Extent(geom_z3)) AS max_lat
-                FROM nodes
-                WHERE parent_node_id = :parent_node_id
-                  AND geom_z3 IS NOT NULL
+                    ST_XMin(geom) AS min_lng,
+                    ST_YMin(geom) AS min_lat,
+                    ST_XMax(geom) AS max_lng,
+                    ST_YMax(geom) AS max_lat
+                FROM bbox
             """)
             row = self.db.execute(sql, {"parent_node_id": slide.parent_node_id}).one()
 

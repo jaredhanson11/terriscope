@@ -16,34 +16,13 @@ _SAFE_AGG_RE = re.compile(r"^(sum|avg|min|max)$")
 # Continental US bounding box (lon_min, lat_min, lon_max, lat_max), WGS84
 _US_BBOX = (-124.85, 24.39, -66.88, 49.38)
 
-_MERC_HALF = 20037508.3427892
-
-# Clamp the expanded envelope to the valid Web Mercator world before transforming.
-# Otherwise, tiles near the antimeridian (e.g. Alaska) overshoot ±20037508 in 3857,
-# and ST_Transform renormalizes those into the opposite hemisphere — producing a 4326
-# polygon that wraps the wrong way around the globe and excludes the actual tile area.
-_FILTER_BOUNDS_CTE = f"""
+# Expand the tile envelope ~10% in each direction so label anchors for features
+# whose centroid sits just outside the tile still survive the filter. Storage is
+# already 3857, so this is plain meter arithmetic — no envelope CRS conversion needed.
+_FILTER_BOUNDS_CTE = """
     filter_bounds AS (
-        SELECT ST_Transform(
-            ST_MakeEnvelope(
-                GREATEST(ST_XMin(e.geom), -{_MERC_HALF}),
-                GREATEST(ST_YMin(e.geom), -{_MERC_HALF}),
-                LEAST(ST_XMax(e.geom),  {_MERC_HALF}),
-                LEAST(ST_YMax(e.geom),  {_MERC_HALF}),
-                3857
-            ),
-            4326
-        ) AS geom
-        FROM (
-            SELECT ST_Expand(
-                tb.geom,
-                ST_Distance(
-                    ST_Point(ST_XMin(tb.geom), ST_YMin(tb.geom)),
-                    ST_Point(ST_XMax(tb.geom), ST_YMax(tb.geom))
-                ) * 0.1
-            ) AS geom
-            FROM tile_bounds tb
-        ) e
+        SELECT ST_Expand(geom, (ST_XMax(geom) - ST_XMin(geom)) * 0.1) AS geom
+        FROM tile_bounds
     )"""
 
 
@@ -65,10 +44,10 @@ def extract_data_fields(
 
 def pick_zoom_col(z: int) -> str:
     if z <= 3:
-        return "geom_z3"
+        return "geom_z3_merc"
     if z <= 7:
-        return "geom_z7"
-    return "geom_z11"
+        return "geom_z7_merc"
+    return "geom_z11_merc"
 
 
 _SEP = ",\n                "
@@ -155,7 +134,7 @@ def _node_query(col: str, data_fields: tuple[tuple[str, tuple[str, ...], int], .
                 n.color,
                 n.parent_node_id{extra_numeric},
                 ST_AsMVTGeom(
-                    n.{col}_merc,
+                    n.{col},
                     (SELECT geom FROM tile_bounds),
                     4096, 256, true
                 ) AS geom
@@ -170,7 +149,7 @@ def _node_query(col: str, data_fields: tuple[tuple[str, tuple[str, ...], int], .
                 n.name,
                 n.color,
                 n.parent_node_id{extra_label},
-                ST_PointOnSurface(n.{col}_merc) AS pt
+                ST_PointOnSurface(n.{col}) AS pt
             FROM nodes n
             WHERE n.layer_id = :layer_id
               AND n.{col} IS NOT NULL
@@ -213,7 +192,7 @@ def _zip_query(col: str, data_fields: tuple[tuple[str, tuple[str, ...], int], ..
                 COALESCE(za.color, '#FFFFFF') AS color,
                 za.parent_node_id{extra_numeric},
                 ST_AsMVTGeom(
-                    gz.{col}_merc,
+                    gz.{col},
                     (SELECT geom FROM tile_bounds),
                     4096, 256, true
                 ) AS geom
@@ -229,7 +208,7 @@ def _zip_query(col: str, data_fields: tuple[tuple[str, tuple[str, ...], int], ..
                 gz.zip_code,
                 COALESCE(za.color, '#FFFFFF') AS color,
                 za.parent_node_id{extra_label},
-                ST_PointOnSurface(gz.{col}_merc) AS pt
+                ST_PointOnSurface(gz.{col}) AS pt
             FROM geography_zip_codes gz
             LEFT JOIN zip_assignments za
                 ON za.zip_code = gz.zip_code

@@ -41,15 +41,17 @@ def select_features_in_lasso(
     polygon_geojson = selection.polygon.model_dump_json()
 
     if layer.order == 0:
-        # Zip layer: intersect against geography_zip_codes geometries
+        # Zip layer: intersect against geography_zip_codes geometries.
+        # The lasso polygon arrives as 4326 GeoJSON; project it once into the
+        # storage CRS (3857) so the intersect runs against the indexed column.
         result = db.execute(
             text("""
                 SELECT
                     COUNT(*) AS count,
                     ARRAY_AGG(gz.zip_code ORDER BY gz.zip_code) AS zip_codes
                 FROM geography_zip_codes gz
-                WHERE gz.geom_z11 IS NOT NULL
-                  AND ST_Intersects(gz.geom_z11, ST_GeomFromGeoJSON(:polygon))
+                WHERE gz.geom_z11_merc IS NOT NULL
+                  AND ST_Intersects(gz.geom_z11_merc, ST_Transform(ST_GeomFromGeoJSON(:polygon), 3857))
             """),
             {"polygon": polygon_geojson},
         ).one()
@@ -65,10 +67,10 @@ def select_features_in_lasso(
                 func.array_agg(NodeModel.id).label("ids"),
             ).where(
                 NodeModel.layer_id == selection.layer_id,
-                NodeModel.geom_z11.isnot(None),
+                NodeModel.geom_z11_merc.isnot(None),
                 func.ST_Intersects(
-                    NodeModel.geom_z11,
-                    func.ST_GeomFromGeoJSON(polygon_geojson),
+                    NodeModel.geom_z11_merc,
+                    func.ST_Transform(func.ST_GeomFromGeoJSON(polygon_geojson), 3857),
                 ),
             )
         )

@@ -95,21 +95,45 @@ export const Map = forwardRef<
       updateLayers(map, baseMap, layers)
     }, [baseMap, layers, tileVersion])
 
-    // When tileVersion increments (after a recompute completes), flush MapLibre's
-    // tile cache by updating the source URLs with a new cache-busting parameter.
+    // When tileVersion increments (after a recompute completes), drop the data
+    // sources and their layers so MapLibre's in-memory tile cache is wiped, then
+    // rebuild from the new tile_version. `layersRef` and `baseMapRef` track the
+    // latest values without making them deps of the effect — a basemap theme
+    // switch should not force every data tile to re-fetch.
     const isFirstTileVersionRender = useRef(true)
     const layersRef = useRef(layers)
+    const baseMapRef = useRef(baseMap)
     useEffect(() => {
       layersRef.current = layers
     }, [layers])
+    useEffect(() => {
+      baseMapRef.current = baseMap
+    }, [baseMap])
     useEffect(() => {
       if (isFirstTileVersionRender.current) {
         isFirstTileVersionRender.current = false
         return
       }
       const map = mapRef.current?.getMap()
-      if (!map || !map.isStyleLoaded()) return
-      refreshTileSources(map, layersRef.current, tileVersion)
+      if (!map) return
+
+      // Don't gate on isStyleLoaded() — it returns false whenever a tile or
+      // glyph fetch is in flight, which is the state we're trying to resolve.
+      // remove/add source operations are safe any time after the initial 'load'
+      // event. Fall back to 'idle' only if something throws.
+      const run = () => {
+        refreshTileSources(
+          map,
+          layersRef.current,
+          baseMapRef.current,
+          tileVersion,
+        )
+      }
+      try {
+        run()
+      } catch {
+        map.once("idle", run)
+      }
     }, [tileVersion])
 
     const [isDrawing, setIsDrawing] = useState(false)

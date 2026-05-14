@@ -1,7 +1,7 @@
 """added zip code geography.
 
 Revision ID: bd9a96a540db
-Revises: dc2613846b7f
+Revises: c96f99cd8982
 Create Date: 2025-12-28 09:59:24.701614-08:00
 
 """
@@ -23,7 +23,7 @@ from sqlalchemy import text
 
 # revision identifiers, used by Alembic.
 revision: str = "bd9a96a540db"
-down_revision: str | None = "dc2613846b7f"
+down_revision: str | None = "c96f99cd8982"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
@@ -38,16 +38,13 @@ _GEOM_KWARGS = {
 }
 
 _COPY_SQL = text("""
-    INSERT INTO geography_zip_codes (zip_code, color, geom, geom_z3, geom_z3_merc, geom_z7, geom_z7_merc, geom_z11, geom_z11_merc)
+    INSERT INTO geography_zip_codes (zip_code, color, geom, geom_z3_merc, geom_z7_merc, geom_z11_merc)
     SELECT DISTINCT ON (lpad(zip, 5, '0'))
         lpad(zip, 5, '0'),
         COALESCE(color, '#000000'),
         ST_MakeValid(geom),
-        ST_Transform(ST_MakeValid(ST_SnapToGrid(ST_Transform(geom, 3857), 19568.0)), 4326),
         ST_MakeValid(ST_SnapToGrid(ST_Transform(geom, 3857), 19568.0)),
-        ST_Transform(ST_MakeValid(ST_SnapToGrid(ST_Transform(geom, 3857),  1223.0)), 4326),
         ST_MakeValid(ST_SnapToGrid(ST_Transform(geom, 3857),  1223.0)),
-        ST_Transform(ST_MakeValid(ST_SnapToGrid(ST_Transform(geom, 3857),    76.0)), 4326),
         ST_MakeValid(ST_SnapToGrid(ST_Transform(geom, 3857),    76.0))
     FROM boundary_data
     WHERE zip IS NOT NULL
@@ -78,7 +75,7 @@ def _iter_sql_statements(path: Path):
 
 
 def upgrade() -> None:
-    """Upgrade revisions: dc2613846b7f to bd9a96a540db."""
+    """Upgrade revisions: c96f99cd8982 to bd9a96a540db."""
     connection = op.get_bind()
 
     # Load Boundary_Data from the vendor SQL dump (creates the table + inserts all rows).
@@ -93,5 +90,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Downgrade revisions: bd9a96a540db to dc2613846b7f."""
+    """Downgrade revisions: bd9a96a540db to c96f99cd8982."""
     op.execute("TRUNCATE TABLE geography_zip_codes RESTART IDENTITY CASCADE")

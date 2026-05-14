@@ -21,33 +21,20 @@ class ZipCodeGeography(Base, TimestampMixin):
         nullable=True,
         deferred=True,
     )
-    geom_z3: Mapped[WKBElement | None] = mapped_column(
-        Geometry(srid=4326),
-        nullable=True,
-        deferred=True,
-    )
+    """Full-resolution 4326 master geometry, preserved as source of truth.
+    All rendering and recompute work runs against the 3857 simplified columns below."""
     geom_z3_merc: Mapped[WKBElement | None] = mapped_column(
-        Geometry(srid=3857, spatial_index=False),
-        nullable=True,
-        deferred=True,
-    )
-    geom_z7: Mapped[WKBElement | None] = mapped_column(
-        Geometry(srid=4326),
+        Geometry(srid=3857),
         nullable=True,
         deferred=True,
     )
     geom_z7_merc: Mapped[WKBElement | None] = mapped_column(
-        Geometry(srid=3857, spatial_index=False),
-        nullable=True,
-        deferred=True,
-    )
-    geom_z11: Mapped[WKBElement | None] = mapped_column(
-        Geometry(srid=4326),
+        Geometry(srid=3857),
         nullable=True,
         deferred=True,
     )
     geom_z11_merc: Mapped[WKBElement | None] = mapped_column(
-        Geometry(srid=3857, spatial_index=False),
+        Geometry(srid=3857),
         nullable=True,
         deferred=True,
     )

@@ -4,7 +4,7 @@ import uuid
 from collections.abc import Sequence
 
 from fastapi import APIRouter, HTTPException
-from geoalchemy2.functions import ST_Envelope, ST_XMax, ST_XMin, ST_YMax, ST_YMin
+from geoalchemy2.functions import ST_Envelope, ST_Transform, ST_XMax, ST_XMin, ST_YMax, ST_YMin
 from sqlalchemy import and_, delete, func, select
 from sqlalchemy.orm import undefer
 
@@ -582,9 +582,8 @@ def bulk_reparent_nodes(
     if data.parent_node_id is not None:
         affected_ids.add(data.parent_node_id)
 
-    _nuke_map_tile_cache(db, map_id)
-    _bump_tile_version(db, map_id)
-
+    # No sync tile_version bump: the worker bumps once at the end of recompute.
+    # Bumping here too would refresh tiles against pre-recompute geometry.
     if affected_ids:
         job_id = _enqueue_recompute(db, map_id)
         db.commit()
@@ -650,9 +649,7 @@ def merge_nodes(
     # different region and must be recomputed to shed the stale geometry.
     affected_ids = {new_node.id} | old_parent_ids
 
-    _nuke_map_tile_cache(db, map_id)
-    _bump_tile_version(db, map_id)
-
+    # No sync tile_version bump: the worker bumps once at the end of recompute.
     job_id = _enqueue_recompute(db, map_id)
     db.commit()
     recompute_nodes_task.delay(job_id, map_id, list(affected_ids))
@@ -714,9 +711,7 @@ def bulk_delete_nodes(
         # The reparent target gained new children and needs recomputing too.
         affected_ids.add(data.reparent_node_id)
 
-    _nuke_map_tile_cache(db, map_id)
-    _bump_tile_version(db, map_id)
-
+    # No sync tile_version bump: the worker bumps once at the end of recompute.
     if affected_ids:
         job_id = _enqueue_recompute(db, map_id)
         db.commit()
@@ -881,9 +876,7 @@ def bulk_assign_zips(
     if data.parent_node_id is not None:
         affected_ids.add(data.parent_node_id)
 
-    _nuke_map_tile_cache(db, layer.map_id)
-    _bump_tile_version(db, layer.map_id)
-
+    # No sync tile_version bump: the worker bumps once at the end of recompute.
     if affected_ids:
         job_id = _enqueue_recompute(db, layer.map_id)
         db.commit()
@@ -1078,10 +1071,10 @@ def search_map(
                 NodeModel.layer_id,
                 NodeModel.name,
                 NodeModel.color,
-                ST_XMin(ST_Envelope(NodeModel.geom_z11)).label("bbox_west"),  # type: ignore[arg-type]
-                ST_YMin(ST_Envelope(NodeModel.geom_z11)).label("bbox_south"),  # type: ignore[arg-type]
-                ST_XMax(ST_Envelope(NodeModel.geom_z11)).label("bbox_east"),  # type: ignore[arg-type]
-                ST_YMax(ST_Envelope(NodeModel.geom_z11)).label("bbox_north"),  # type: ignore[arg-type]
+                ST_XMin(ST_Transform(ST_Envelope(NodeModel.geom_z11_merc), 4326)).label("bbox_west"),  # type: ignore[arg-type]
+                ST_YMin(ST_Transform(ST_Envelope(NodeModel.geom_z11_merc), 4326)).label("bbox_south"),  # type: ignore[arg-type]
+                ST_XMax(ST_Transform(ST_Envelope(NodeModel.geom_z11_merc), 4326)).label("bbox_east"),  # type: ignore[arg-type]
+                ST_YMax(ST_Transform(ST_Envelope(NodeModel.geom_z11_merc), 4326)).label("bbox_north"),  # type: ignore[arg-type]
             )
             .where(NodeModel.layer_id.in_(node_layer_ids))
             .where(NodeModel.name.ilike(f"%{q}%"))
